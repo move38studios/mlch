@@ -143,6 +143,8 @@ export interface MulchSummary {
   createdAt: number;
   updatedAt: number;
   nodeCount: number;
+  /** The person's instructions and long work: running, finished unseen, failed unseen. */
+  activity?: { working: number; unseen: number; failed: number };
 }
 
 /** A field set to null is cleared. */

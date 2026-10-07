@@ -38,6 +38,11 @@ interface MulchState {
   /** Items to show (from the agent's focus tool or a search result). */
   focus?: { ids: string[]; page?: number; quote?: string; at: number };
   setFocus(focus: { ids: string[]; page?: number; quote?: string }): void;
+  /** Results to make visible briefly, without moving the view. */
+  pulse?: { ids: string[]; at: number };
+  setPulse(ids: string[]): void;
+  /** Stop, retry, or mark finished jobs seen. */
+  jobAction(action: "cancel" | "retry" | "seen", payload: { jobId?: string; ids?: string[] }): Promise<void>;
   /** A view move from the agent. */
   view?: { action: ViewAction; at: number };
   /** Ids of nodes added by others since the last time the canvas looked (for entrance animation). */
@@ -195,6 +200,20 @@ export const useMulch = create<MulchState>((set, get) => {
       const entry = stack[stack.length - 1];
       if (!entry) return;
       commit(entry.redo, false, { redoStack: stack.slice(0, -1), undoStack: [...get().undoStack, entry] });
+    },
+
+    setPulse(ids) {
+      set({ pulse: { ids, at: Date.now() } });
+    },
+
+    async jobAction(action, payload) {
+      const { id } = get();
+      if (!id) return;
+      const response = await fetch(`/api/mulches/${id}/jobs`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...payload }) });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        set({ notice: { level: "error", message: data.error || `Request failed (${response.status})`, at: Date.now() } });
+      }
     },
 
     setFocus(focus) {

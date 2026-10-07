@@ -110,7 +110,7 @@ export function MulchView({ id }: { id: string }) {
   const loaded = !!mulch;
   useEffect(() => {
     if (!loaded || !focusParam) return;
-    const timer = setTimeout(() => useMulch.getState().setFocus({ ids: [focusParam], ...(pageParam ? { page: Number(pageParam) } : {}) }), 600);
+    const timer = setTimeout(() => useMulch.getState().setFocus({ ids: focusParam.split(","), ...(pageParam ? { page: Number(pageParam) } : {}) }), 600);
     return () => clearTimeout(timer);
   }, [loaded, focusParam, pageParam]);
 

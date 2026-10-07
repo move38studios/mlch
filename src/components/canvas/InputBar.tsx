@@ -57,7 +57,7 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
           rows={1}
           placeholder="Type"
           aria-label="Input"
-          className="flex-1 min-w-0 resize-none bg-transparent outline-none px-1.5 py-2 text-[15.5px] leading-[1.35] max-h-40 field-sizing-content placeholder:text-ink-3"
+          className="flex-1 min-w-0 resize-none bg-transparent outline-none focus-visible:outline-none px-1.5 py-2 text-[15.5px] leading-[1.35] max-h-40 field-sizing-content placeholder:text-ink-3"
         />
         <button
           onClick={() => void send()}

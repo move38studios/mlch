@@ -129,6 +129,8 @@ export type HarnessEvent =
   | { type: "reasoning-end"; id: string }
   /** The model started writing a call to one of our tools (input still streaming). */
   | { type: "tool-pending"; toolName: string }
+  /** mlch: the CLI used one of its own tools (Write, Bash, WebSearch…), for the job's activity line. */
+  | { type: "tool-use"; name: string; input?: Record<string, unknown> }
   | { type: "usage"; inputTokens?: number; outputTokens?: number }
   | { type: "error"; code: AgentErrorCode; message: string };
 

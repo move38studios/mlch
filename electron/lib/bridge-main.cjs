@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const DEFAULT_PICKER_TITLE = 'Choose a folder';
 
-function createServerMessageHandler({ shell, dialog, fs, getWindow, render, log = () => {}, platform = process.platform }) {
+function createServerMessageHandler({ shell, dialog, fs, getWindow, render, notify, activity, thumbnail, log = () => {}, platform = process.platform }) {
   const bin = platform === 'win32' ? 'Recycle Bin' : 'Trash';
   const fail = error => ({ ok: false, error });
 
@@ -69,6 +69,34 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, log 
       }
       case 'choose-directory':
         return { ok: true, value: await chooseDirectory(payload.title) };
+      case 'thumbnail': {
+        // mlch: a Quick Look preview of a deck or document, as PNG (base64).
+        if (!thumbnail) return fail('Previews are not available.');
+        const file = target(payload);
+        if (!file) return fail('A preview needs a full path.');
+        let stat;
+        try { stat = fs.statSync(file); } catch { return fail('That file is no longer on disk.'); }
+        if (!stat.isFile()) return fail('Only a file has a preview.');
+        const size = Number.isInteger(payload.size) ? Math.min(Math.max(payload.size, 64), 1600) : 800;
+        return { ok: true, value: await thumbnail(file, size) };
+      }
+      case 'notify': {
+        // mlch: a finished job (see main.cjs notifyJob).
+        if (!notify) return fail('Notifications are not available.');
+        const text = value => (typeof value === 'string' ? value.slice(0, 200) : '');
+        const mulchId = typeof payload.mulchId === 'string' && /^[a-z0-9-]{1,64}$/i.test(payload.mulchId) ? payload.mulchId : undefined;
+        if (!mulchId) return fail('A notification needs a mulch.');
+        const ids = Array.isArray(payload.ids) ? payload.ids.filter(id => typeof id === 'string' && /^[\w-]{1,64}$/.test(id)).slice(0, 20) : [];
+        notify({ mulchId, ids, title: text(payload.title), body: text(payload.body), failed: payload.failed === true });
+        return { ok: true };
+      }
+      case 'activity': {
+        // mlch: work running and results not yet seen, for the Dock badge and quitting.
+        if (!activity) return fail('Not available.');
+        const count = value => (Number.isInteger(value) && value >= 0 ? Math.min(value, 999) : 0);
+        activity({ working: count(payload.working), unseen: count(payload.unseen) });
+        return { ok: true };
+      }
       default:
         return fail('The desktop app does not handle that request.');
     }
@@ -78,6 +106,7 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, log 
     reveal: 'The file could not be shown in its folder.',
     open: 'The file could not be opened.',
     render: 'The page could not be rendered.',
+    thumbnail: 'No preview could be made for that file.',
     trash: `The file could not be moved to the ${bin}.`,
     'choose-directory': 'The folder picker could not open.',
   };

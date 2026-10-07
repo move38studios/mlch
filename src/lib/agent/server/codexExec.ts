@@ -65,7 +65,13 @@ export async function* runCodexExec(params: HarnessTurnParams): AsyncGenerator<H
   let failed = false;
   try {
     for await (const line of readline.createInterface({ input: child.stdout })) {
-      let event: { type?: string; message?: string; error?: { message?: string }; usage?: { input_tokens?: number; output_tokens?: number } };
+      let event: {
+        type?: string;
+        message?: string;
+        error?: { message?: string };
+        usage?: { input_tokens?: number; output_tokens?: number };
+        item?: { id?: string; type?: string; command?: string; text?: string; query?: string; changes?: Array<{ path?: string }> };
+      };
       try {
         event = JSON.parse(line);
       } catch {
@@ -77,6 +83,17 @@ export async function* runCodexExec(params: HarnessTurnParams): AsyncGenerator<H
         yield { type: "error", code: /usage|limit|quota/i.test(message) ? "usage_limit" : "harness_error", message };
       } else if (event.type === "turn.completed" && event.usage) {
         yield { type: "usage", inputTokens: event.usage.input_tokens, outputTokens: event.usage.output_tokens };
+      } else if (event.item) {
+        // For the job's activity line: what Codex is running, writing or saying.
+        const item = event.item;
+        if (event.type === "item.started" && item.type === "command_execution") yield { type: "tool-use", name: "Bash", input: { command: item.command } };
+        else if (event.type === "item.started" && item.type === "web_search") yield { type: "tool-use", name: "WebSearch", input: { query: item.query } };
+        else if (event.type === "item.completed" && item.type === "file_change") yield { type: "tool-use", name: "Write", input: { file_path: item.changes?.[0]?.path } };
+        else if (event.type === "item.completed" && item.type === "agent_message" && item.text) {
+          const id = item.id ?? "message";
+          yield { type: "text-delta", id, delta: item.text };
+          yield { type: "text-end", id };
+        }
       }
     }
     const code = await exited;

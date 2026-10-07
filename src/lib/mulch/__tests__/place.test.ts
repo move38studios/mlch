@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrangeGroups, GAP, placeNear } from "../place";
+import { arrangeGroups, GAP, holdSpace, placeNear } from "../place";
 import { overlaps, rectOf } from "../sizes";
 import { mulchWith, node } from "./fixtures";
 
@@ -22,6 +22,16 @@ describe("placeNear", () => {
       expect(Math.hypot(p.x, p.y)).toBeLessThan(1500);
       mulch.nodes[`n${i}`] = node(`n${i}`, { ...p, ...size, createdAt: 2 + i });
     }
+  });
+
+  it("keeps clear of space held for a running job until it is released", () => {
+    const mulch = mulchWith();
+    const held = { x: -100, y: -50, w: 200, h: 100 };
+    holdSpace(mulch.id, "job-1", held);
+    const p = placeNear(mulch, { w: 200, h: 100 });
+    expect(overlaps({ ...p, w: 200, h: 100 }, held, GAP - 1)).toBe(false);
+    holdSpace(mulch.id, "job-1", undefined);
+    expect(placeNear(mulch, { w: 200, h: 100 })).toEqual({ x: -100, y: -50 });
   });
 
   it("is deterministic for the same seed", () => {

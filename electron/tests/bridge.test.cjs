@@ -20,7 +20,10 @@ function main({ platform, window } = {}) {
     trashItem: async file => { if (shell.refuse) throw new Error('No trash on this volume'); calls.trashed.push(file); },
   };
   const dialog = { showOpenDialog: async (...args) => { calls.dialogs.push(args); return { canceled: false, filePaths: ['/picked'] }; } };
-  const handle = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, log: error => calls.logged.push(error), platform });
+  calls.notified = []; calls.activity = []; calls.thumbs = [];
+  const handle = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, log: error => calls.logged.push(error), platform,
+    notify: note => calls.notified.push(note), activity: value => calls.activity.push(value),
+    thumbnail: async (file, size) => { calls.thumbs.push([file, size]); return 'cG5n'; } });
   return { handle, shell, dialog, calls };
 }
 
@@ -189,4 +192,20 @@ test('the server client and main agree on the wire protocol', () => withTemp(asy
   assert.deepEqual(calls.trashed, [file]);
   assert.deepEqual(calls.dialogs.map(args => args[1].title), [INGEST_PICKER_TITLE, INGEST_PICKER_TITLE]);
   assert.equal(bridge.pending(), 0);
+}));
+
+test('main shows job notifications, keeps the activity count, and makes previews of existing files', () => withTemp(async temp => {
+  const { handle, calls } = main();
+  const ask = async (type, payload) => (await handle({ type: 'bridge', id: 1, request: { type, payload } })).result;
+  assert.deepEqual(await ask('notify', { mulchId: '20261007-1256-3bd7bd', ids: ['n-1', '../x', 7], title: 'Deck', body: 'Forests' }), { ok: true });
+  assert.deepEqual(calls.notified, [{ mulchId: '20261007-1256-3bd7bd', ids: ['n-1'], title: 'Deck', body: 'Forests', failed: false }]);
+  assert.deepEqual(await ask('notify', { mulchId: '../etc', title: 'x' }), { ok: false, error: 'A notification needs a mulch.' });
+  assert.deepEqual(await ask('activity', { working: 2, unseen: -1 }), { ok: true });
+  assert.deepEqual(calls.activity, [{ working: 2, unseen: 0 }]);
+  const file = path.join(temp, 'deck.pptx');
+  fs.writeFileSync(file, 'pptx');
+  assert.deepEqual(await ask('thumbnail', { path: file, size: 99999 }), { ok: true, value: 'cG5n' });
+  assert.deepEqual(calls.thumbs, [[file, 1600]]);
+  assert.deepEqual(await ask('thumbnail', { path: temp }), { ok: false, error: 'Only a file has a preview.' });
+  assert.deepEqual(await ask('thumbnail', { path: 'deck.pptx' }), { ok: false, error: 'A preview needs a full path.' });
 }));

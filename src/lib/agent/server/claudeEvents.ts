@@ -275,11 +275,17 @@ export class ClaudeEventMapper {
       return [this.error(code, userMessage)];
     }
 
+    // mlch: Claude Code's own tools (making turns), reported for the activity line.
+    const tools: HarnessEvent[] = content
+      .filter((block) => block.type === "tool_use" && block.name && !block.name.startsWith(TOOL_PREFIX))
+      .map((block) => ({ type: "tool-use", name: block.name!, input: (block as { input?: Record<string, unknown> }).input }));
+
     // Content that never streamed (partial messages unavailable for it): emit it whole.
     const id = message.message?.id;
-    if (!text || (id && this.streamedMessageIds.has(id))) return [];
+    if (!text || (id && this.streamedMessageIds.has(id))) return tools;
     const textId = `${id || `assistant-${message.uuid}`}:text`;
     return [
+      ...tools,
       { type: "text-delta", id: textId, delta: text },
       { type: "text-end", id: textId },
     ];

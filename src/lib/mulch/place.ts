@@ -24,10 +24,26 @@ export function jitter(seed: string) {
   };
 }
 
+/**
+ * Space held for results still being made (the server registers it while a
+ * long job runs, so nothing else lands where its result will go). Keyed by
+ * mulch, then job.
+ */
+const held = new Map<string, Map<string, Rect>>();
+
+export function holdSpace(mulchId: string, jobId: string, rect: Rect | undefined): void {
+  const forMulch = held.get(mulchId) ?? new Map<string, Rect>();
+  if (rect) forMulch.set(jobId, rect);
+  else forMulch.delete(jobId);
+  if (forMulch.size) held.set(mulchId, forMulch);
+  else held.delete(mulchId);
+}
+
 function occupied(mulch: Mulch, ignore: ReadonlySet<string> = new Set()): Rect[] {
   const rects = Object.values(mulch.nodes)
     .filter((node) => !ignore.has(node.id))
     .map(rectOf);
+  rects.push(...(held.get(mulch.id)?.values() ?? []));
   // Group boxes are drawn around their members; placing inside one is fine
   // only for a member, so new free-standing nodes treat them as taken.
   for (const group of Object.values(mulch.groups)) rects.push({ x: group.x, y: group.y, w: group.w, h: group.h });

@@ -31,6 +31,45 @@ import { GroupView, type GroupFlowNode } from "./GroupView";
 import { NodeView, type MulchFlowNode } from "./NodeView";
 import { useCanvasUi } from "./ui";
 import { Scribble } from "@/components/brand/Scribble";
+import { Square } from "lucide-react";
+import type { JobStatus } from "@/lib/mulch/events";
+import { elapsed, useNow } from "./JobStatus";
+
+/**
+ * Long work in progress, drawn where its result will land: what it is, what
+ * it is doing now, how long it has run. Clicks pass through to the canvas,
+ * except Stop.
+ */
+function WorkInProgress({ job }: { job: JobStatus }) {
+  const now = useNow(true);
+  const jobAction = useMulch((s) => s.jobAction);
+  const anchor = job.anchor!;
+  return (
+    <div
+      className="absolute rounded-[10px] border border-dashed border-line-2 bg-chrome/80 px-4 py-3 flex flex-col pointer-events-none"
+      style={{ transform: `translate(${anchor.x}px, ${anchor.y}px)`, width: anchor.w, height: anchor.h }}
+      data-testid="work-in-progress"
+    >
+      <div className="flex items-center text-[12px] text-ink-3">
+        <span>{job.retry?.kind === "research" ? "research" : "making"}</span>
+        <button
+          onClick={() => void jobAction("cancel", { jobId: job.id })}
+          className="nodrag pointer-events-auto ml-auto -mr-1.5 -mt-1 p-1.5 rounded-md hover:bg-paper-2 hover:text-ink"
+          title="Stop"
+          aria-label="Stop"
+        >
+          <Square size={11} strokeWidth={2} />
+        </button>
+      </div>
+      <div className="mt-0.5 text-[13.5px] font-semibold leading-[1.3] line-clamp-2">{job.label}</div>
+      <div className="mt-auto flex items-center gap-2 text-[12.5px] text-ink-2">
+        <Scribble which="bottom" mode="loop" strokeWidth={11} className="h-3 w-8 shrink-0 text-ink" />
+        <span className="truncate">{job.activity ?? "Starting"}</span>
+        <span className="ml-auto shrink-0 tabular-nums text-ink-3">{elapsed(job.startedAt, now)}</span>
+      </div>
+    </div>
+  );
+}
 
 type FlowNode = MulchFlowNode | GroupFlowNode;
 
@@ -362,6 +401,43 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     return () => window.removeEventListener("paste", onPaste);
   }, [flow, ingest, readOnly]);
 
+  // Long work shows where its result will land.
+  const jobs = useMulch((s) => s.jobs);
+  const inProgress = Object.values(jobs).filter((job) => job.state === "running" && job.anchor);
+
+  // Finished results the person hasn't seen: once any of them is in view (and
+  // the window is in front), they pulse once and count as seen.
+  const jobAction = useMulch((s) => s.jobAction);
+  const setPulse = useMulch((s) => s.setPulse);
+  const checkSeen = useCallback(() => {
+    if (readOnly || document.visibilityState !== "visible" || !document.hasFocus()) return;
+    const { x, y, zoom } = flow.getViewport();
+    const view = { left: -x / zoom, top: -y / zoom, right: (-x + window.innerWidth) / zoom, bottom: (-y + window.innerHeight) / zoom };
+    const nodes = useMulch.getState().mulch?.nodes ?? {};
+    for (const job of Object.values(useMulch.getState().jobs)) {
+      if (job.state !== "done" || !job.unseen) continue;
+      const results = (job.resultIds ?? []).filter((id) => nodes[id]);
+      const inView = results.some((id) => {
+        const n = nodes[id];
+        return n.x < view.right && n.x + (n.w ?? 300) > view.left && n.y < view.bottom && n.y + 120 > view.top;
+      });
+      if (!inView) continue;
+      setPulse(results);
+      void jobAction("seen", { ids: [job.id] });
+    }
+  }, [flow, jobAction, readOnly, setPulse]);
+  useEffect(() => {
+    // After the view settles (a new mulch fits its view first).
+    const timer = setTimeout(checkSeen, 900);
+    window.addEventListener("focus", checkSeen);
+    document.addEventListener("visibilitychange", checkSeen);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", checkSeen);
+      document.removeEventListener("visibilitychange", checkSeen);
+    };
+  }, [jobs, checkSeen]);
+
   // The agent moves the view.
   const view = useMulch((s) => s.view);
   useEffect(() => {
@@ -373,9 +449,19 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view?.at]);
 
+  // New results pulse where they are; the view stays put.
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
+  const pulse = useMulch((s) => s.pulse);
+  useEffect(() => {
+    if (!pulse) return;
+    setHighlighted(new Set(pulse.ids));
+    const timer = setTimeout(() => setHighlighted(new Set()), 3500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pulse?.at]);
+
   // Show what the agent or a search result points at.
   const focus = useMulch((s) => s.focus);
-  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!focus) return;
     // A group stands for the items in it.
@@ -436,6 +522,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
         event.dataTransfer.dropEffect = "copy";
       }}
       onPaneClick={() => setEditing(undefined)}
+      onMoveEnd={checkSeen}
       connectionMode={ConnectionMode.Loose}
       connectionLineStyle={{ stroke: "var(--ink)", strokeWidth: 1.5, strokeDasharray: "4 5", strokeLinecap: "round" }}
       connectionRadius={40}
@@ -462,6 +549,13 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
         <div className="absolute inset-0 grid place-items-center pointer-events-none z-0">
           <Scribble which="bottom" className="w-[min(420px,50%)] text-ink/[0.07]" strokeWidth={7} />
         </div>
+      )}
+      {inProgress.length > 0 && (
+        <ViewportPortal>
+          {inProgress.map((job) => (
+            <WorkInProgress key={job.id} job={job} />
+          ))}
+        </ViewportPortal>
       )}
       {draft && (
         <ViewportPortal>

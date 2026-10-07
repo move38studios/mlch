@@ -15,17 +15,18 @@
 import { log } from "@/lib/log";
 import { getHarness } from "@/lib/agent/server/harnesses";
 import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/agent/types";
-import type { JobLane, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
+import type { JobLane, JobRetry, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
-import { applyToMulch, emit, getMulch, mulchDir, onAfterApply, setJob } from "@/lib/mulch/store";
+import { applyToMulch, emit, getJobs, getMulch, listMulches, mulchDir, onAfterApply, onJobChanged, setJob } from "@/lib/mulch/store";
+import { desktopRequest } from "@/lib/desktop/server";
 import { modelFor, readSettings, type Lane } from "@/lib/settings";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { adoptArtifact } from "@/lib/artifacts/artifacts";
 import { privateDirs } from "./files";
-import { placeNear } from "@/lib/mulch/place";
+import { holdSpace, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, NODE_WIDTH } from "@/lib/mulch/sizes";
 import { commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
 import { onFinished, type GenerationRecord } from "@/lib/media/generations";
@@ -37,19 +38,38 @@ import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolName } fro
 /** Sources longer than this are read in part; the rest is found by search. */
 const LONG_SOURCE = 60_000;
 
-const TIMEOUT_MS: Record<JobLane, number> = { fast: 120_000, slow: 300_000, command: 900_000, ingest: 600_000 };
+const TIMEOUT_MS: Record<JobLane, number> = { fast: 120_000, slow: 300_000, command: 900_000, ingest: 600_000, long: 1_800_000 };
+/** Long work (making, research) at once: per mulch, and in all (it all runs on one subscription). */
+const LONG_PER_MULCH = 2;
+const LONG_TOTAL = 3;
+/** The space held on the canvas for a long job's result. */
+const RESULT_SIZE = { w: NODE_WIDTH.artifact, h: 220 };
 /** Status is re-read at most this often before a job (a probe costs a CLI start). */
 const STATUS_TTL_MS = 60_000;
 
 interface Work {
   lane: JobLane;
   label: string;
+  /** The person's instructions and long work: kept, and can be started again. */
+  retry?: JobRetry;
+  /** Long work: the items its result belongs near. */
+  near?: string[];
   run(job: JobStatus, signal: AbortSignal): Promise<void>;
 }
 
+interface Queued {
+  work: Work;
+  job: JobStatus;
+}
+
+interface Running {
+  job: JobStatus;
+  controller: AbortController;
+}
+
 interface MulchJobs {
-  queues: Record<JobLane, Work[]>;
-  running: Partial<Record<JobLane, { job: JobStatus; controller: AbortController }>>;
+  queues: Record<JobLane, Queued[]>;
+  running: Record<JobLane, Running[]>;
   /** Fast lane: segments not yet captured. */
   pendingSegments: TranscriptSegment[];
   /** Slow lane: new item ids not yet enriched. */
@@ -70,7 +90,13 @@ function state(): JobsState {
 function jobsFor(mulchId: string): MulchJobs {
   let entry = state().mulches.get(mulchId);
   if (!entry) {
-    entry = { queues: { fast: [], slow: [], command: [], ingest: [] }, running: {}, pendingSegments: [], pendingEnrich: [], paused: false };
+    entry = {
+      queues: { fast: [], slow: [], command: [], ingest: [], long: [] },
+      running: { fast: [], slow: [], command: [], ingest: [], long: [] },
+      pendingSegments: [],
+      pendingEnrich: [],
+      paused: false,
+    };
     state().mulches.set(mulchId, entry);
   }
   return entry;
@@ -91,8 +117,10 @@ interface TurnSpec {
   readRoot?: string;
   origin?: string;
   onHandOff?: (instruction: string) => void;
-  onMake?: (brief: string) => void;
-  onResearch?: (brief: string) => void;
+  onMake?: (brief: string, options: LongOptions) => void;
+  onResearch?: (brief: string, options: LongOptions) => void;
+  /** Where a long job's own result goes, if nothing says otherwise. */
+  anchor?: { x: number; y: number };
   workspace?: AgentWorkspace;
   /** The person's request (kept for review turns). */
   brief?: string;
@@ -112,6 +140,76 @@ async function harnessReady(): Promise<void> {
   if (status.problem) throw new JobError(status.problem);
 }
 
+/** Our tools, as the person would describe what the job is doing. */
+const TOOL_ACTIVITY: Record<string, string> = {
+  web_search: "Searching the web",
+  exa_search: "Searching the web",
+  read_page: "Reading a page",
+  add_nodes: "Adding to the canvas",
+  connect: "Connecting items",
+  arrange: "Arranging",
+  write_doc: "Writing",
+  write_artifact: "Writing a page",
+  preview_artifact: "Checking the page",
+  present_file: "Putting it on the canvas",
+  view_image: "Looking at an image",
+  search_mulch: "Searching this canvas",
+  search_all_mulches: "Searching all canvases",
+  read_source: "Reading a source",
+  read_file: "Reading a file",
+  list_files: "Looking through files",
+  find_files: "Looking through files",
+  media_generate: "Generating media",
+  media_wait: "Waiting for media",
+  make_pptx: "Making a deck",
+};
+
+/** A CLI's own tool use (making turns) as a short line. */
+function describeToolUse(name: string, input: Record<string, unknown> = {}): string | undefined {
+  const file = typeof input.file_path === "string" ? path.basename(input.file_path) : typeof input.path === "string" ? path.basename(input.path) : undefined;
+  const command = typeof input.command === "string" ? input.command.replace(/\s+/g, " ").trim() : undefined;
+  switch (name) {
+    case "Write":
+      return file ? `Writing ${file}` : "Writing a file";
+    case "Edit":
+    case "MultiEdit":
+      return file ? `Editing ${file}` : "Editing a file";
+    case "Read":
+      return file ? `Reading ${file}` : "Reading a file";
+    case "Bash":
+      if (!command) return "Running a command";
+      if (/\b(pip|uv|npm|pnpm|brew) (install|add)\b/.test(command)) return "Installing tools";
+      if (/soffice|libreoffice|pdftoppm|convert\b/.test(command)) return "Rendering a preview";
+      return `Running ${command.split(" ").slice(0, 3).join(" ").slice(0, 40)}`;
+    case "WebSearch":
+      return typeof input.query === "string" ? `Searching: ${input.query}` : "Searching the web";
+    case "WebFetch":
+      return "Reading a page";
+    case "Glob":
+    case "Grep":
+    case "LS":
+      return "Looking through files";
+    default:
+      return undefined;
+  }
+}
+
+function lastSentence(text: string): string | undefined {
+  const sentences = text.replace(/\s+/g, " ").trim().split(/(?<=[.!?:])\s+/).filter((s) => s.length > 3);
+  const last = sentences.at(-1)?.replace(/[:.]$/, "");
+  return last && last.length <= 120 ? last : last ? `${last.slice(0, 117)}…` : undefined;
+}
+
+/** A long job's held place, given up on first use; the canvas stops showing the placeholder. */
+function takeHeld(mulchId: string, job: JobStatus): { x: number; y: number } | undefined {
+  const anchor = job.anchor;
+  if (!anchor) return undefined;
+  holdSpace(mulchId, job.id, undefined);
+  job.anchor = undefined;
+  sendLive(mulchId, job);
+  return { x: anchor.x, y: anchor.y };
+}
+
 /** Runs one turn; returns the ids of nodes it added and the vendor session. */
 async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; sessionId?: string }> {
   await harnessReady();
@@ -125,6 +223,8 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     onHandOff: spec.onHandOff,
     onMake: spec.onMake,
     onResearch: spec.onResearch,
+    takeHeld: () => takeHeld(spec.mulchId, spec.job),
+    onActivity: (text: string) => setActivity(spec.mulchId, spec.job, text),
     origin: spec.origin,
     brief: spec.brief,
     reviewRound: spec.reviewRound,
@@ -143,8 +243,14 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     workspace: spec.workspace,
     signal: spec.signal,
   });
+  // The model's own words, sentence by sentence, are the best "what it is doing now".
+  const said = new Map<string, string>();
   for await (const event of events) {
     if (event.type === "session") ctx.session.id = event.sessionId;
+    if (event.type === "tool-pending") setActivity(spec.mulchId, spec.job, TOOL_ACTIVITY[event.toolName]);
+    if (event.type === "tool-use") setActivity(spec.mulchId, spec.job, describeToolUse(event.name, event.input));
+    if (event.type === "text-delta") said.set(event.id, (said.get(event.id) ?? "") + event.delta);
+    if (event.type === "text-end") setActivity(spec.mulchId, spec.job, lastSentence(said.get(event.id) ?? ""));
     if (event.type === "usage") {
       void recordUsage(settings.harness, spec.lane, event.inputTokens ?? 0, event.outputTokens ?? 0);
       log.info("agent", "turn usage", { mulchId: spec.mulchId, jobId: spec.job.id, harness: settings.harness, lane: spec.lane, model: modelFor(settings, spec.lane), inputTokens: event.inputTokens, outputTokens: event.outputTokens });
@@ -170,41 +276,151 @@ async function update(mulchId: string, job: JobStatus, patch: Partial<JobStatus>
   await setJob(mulchId, { ...job });
 }
 
+/** Activity and results change often; send them at most this often. */
+const LIVE_MS = 700;
+const liveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function sendLive(mulchId: string, job: JobStatus): void {
+  if (liveTimers.has(job.id)) return;
+  liveTimers.set(
+    job.id,
+    setTimeout(() => {
+      liveTimers.delete(job.id);
+      if (job.state === "running") void setJob(mulchId, { ...job }).catch(() => {});
+    }, LIVE_MS),
+  );
+}
+
+function setActivity(mulchId: string, job: JobStatus, activity: string | undefined): void {
+  const text = activity?.replace(/\s+/g, " ").trim();
+  if (!text || text === job.activity) return;
+  job.activity = text.length > 90 ? `${text.slice(0, 87)}…` : text;
+  sendLive(mulchId, job);
+}
+
+function findRunning(mulchId: string, jobId: string): Running | undefined {
+  const entry = state().mulches.get(mulchId);
+  if (!entry) return undefined;
+  for (const list of Object.values(entry.running)) {
+    const found = list.find((running) => running.job.id === jobId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function canStart(mulchId: string, lane: JobLane): boolean {
+  const entry = jobsFor(mulchId);
+  if (lane === "slow" && entry.paused) return false;
+  if (lane !== "long") return entry.running[lane].length === 0;
+  if (entry.running.long.length >= LONG_PER_MULCH) return false;
+  let total = 0;
+  for (const other of state().mulches.values()) total += other.running.long.length;
+  return total < LONG_TOTAL;
+}
+
 function pump(mulchId: string, lane: JobLane): void {
   const entry = jobsFor(mulchId);
-  if (entry.running[lane]) return;
-  if (lane === "slow" && entry.paused) return;
-  const work = entry.queues[lane].shift();
-  if (!work) return;
-  const job: JobStatus = { id: newClientId("j"), lane, state: "running", label: work.label, startedAt: Date.now() };
+  while (entry.queues[lane].length && canStart(mulchId, lane)) start(mulchId, entry.queues[lane].shift()!);
+}
+
+/** A long slot came free: any mulch may use it. */
+function pumpLong(): void {
+  for (const mulchId of state().mulches.keys()) pump(mulchId, "long");
+}
+
+function start(mulchId: string, { work, job }: Queued): void {
+  const entry = jobsFor(mulchId);
+  const lane = work.lane;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error("Timed out")), TIMEOUT_MS[lane]);
-  entry.running[lane] = { job, controller };
+  const running: Running = { job, controller };
+  entry.running[lane].push(running);
   void (async () => {
     try {
-      await setJob(mulchId, { ...job });
+      const patch: Partial<JobStatus> = { state: "running", startedAt: Date.now() };
+      if (lane === "long") {
+        // Hold the space where the result will land, so the canvas can show the work there.
+        const mulch = await getMulch(mulchId);
+        const at = placeNear(mulch, RESULT_SIZE, { anchorIds: work.near, seed: job.id });
+        patch.anchor = { ...at, ...RESULT_SIZE };
+        holdSpace(mulchId, job.id, patch.anchor);
+      }
+      await update(mulchId, job, patch);
       log.info("jobs", "job started", { mulchId, jobId: job.id, lane, label: work.label });
       await work.run(job, controller.signal);
-      log.info("jobs", controller.signal.aborted ? "job cancelled" : "job finished", { mulchId, jobId: job.id, lane, ms: Date.now() - (job.startedAt ?? Date.now()) });
-      await update(mulchId, job, { state: controller.signal.aborted ? "cancelled" : "done", finishedAt: Date.now() });
+      const cancelled = controller.signal.aborted;
+      log.info("jobs", cancelled ? "job cancelled" : "job finished", { mulchId, jobId: job.id, lane, ms: Date.now() - (job.startedAt ?? Date.now()) });
+      await update(mulchId, job, {
+        state: cancelled ? "cancelled" : "done",
+        finishedAt: Date.now(),
+        activity: undefined,
+        anchor: undefined,
+        // The person should know something new landed.
+        unseen: !cancelled && !!work.retry && !!job.resultIds?.length,
+      });
     } catch (error) {
-      const cancelled = controller.signal.aborted && !(controller.signal.reason instanceof Error && controller.signal.reason.message === "Timed out");
+      const timedOut = controller.signal.reason instanceof Error && controller.signal.reason.message === "Timed out";
+      const cancelled = controller.signal.aborted && !timedOut;
       const message = error instanceof Error ? error.message : String(error);
-      await update(mulchId, job, { state: cancelled ? "cancelled" : "failed", error: cancelled ? undefined : message, finishedAt: Date.now() }).catch(() => {});
-      if (!cancelled) await emit(mulchId, { type: "notice", level: "error", message }).catch(() => {});
+      await update(mulchId, job, {
+        state: cancelled ? "cancelled" : "failed",
+        error: cancelled ? undefined : message,
+        finishedAt: Date.now(),
+        activity: undefined,
+        anchor: undefined,
+        unseen: !cancelled && !!work.retry,
+      }).catch(() => {});
+      if (!cancelled && !work.retry) await emit(mulchId, { type: "notice", level: "error", message }).catch(() => {});
       if (!cancelled) log.error("jobs", "job failed", { mulchId, jobId: job.id, lane, label: work.label, ms: Date.now() - (job.startedAt ?? Date.now()), error });
     } finally {
       clearTimeout(timer);
+      clearTimeout(liveTimers.get(job.id));
+      liveTimers.delete(job.id);
+      holdSpace(mulchId, job.id, undefined);
       await checkpoint(mulchId, "job", work.label).catch((error) => log.error("history", "checkpoint failed", { mulchId, error }));
-      entry.running[lane] = undefined;
+      entry.running[lane] = entry.running[lane].filter((r) => r !== running);
       pump(mulchId, lane);
+      if (lane === "long") pumpLong();
     }
   })();
 }
 
-function enqueue(mulchId: string, work: Work): void {
-  jobsFor(mulchId).queues[work.lane].push(work);
+/** Queue work without starting it; returns its job. */
+function queue(mulchId: string, work: Work): JobStatus {
+  const job: JobStatus = { id: newClientId("j"), lane: work.lane, state: "queued", label: work.label, queuedAt: Date.now(), ...(work.retry ? { retry: work.retry } : {}) };
+  jobsFor(mulchId).queues[work.lane].push({ work, job });
+  // Only the person's own requests are worth showing while they wait.
+  if (work.retry) void setJob(mulchId, { ...job }).catch(() => {});
+  return job;
+}
+
+function enqueue(mulchId: string, work: Work): JobStatus {
+  const job = queue(mulchId, work);
   pump(mulchId, work.lane);
+  return job;
+}
+
+// Items a running job adds are its results.
+onAfterApply((mulchId, batch) => {
+  const jobId = batch.origin.split(":")[1];
+  if (!jobId) return;
+  const running = findRunning(mulchId, jobId);
+  if (!running) return;
+  const added = batch.ops.flatMap((op) => (op.op === "addNode" ? [op.node.id] : []));
+  if (!added.length) return;
+  running.job.resultIds = [...(running.job.resultIds ?? []), ...added];
+  sendLive(mulchId, running.job);
+});
+
+/** A long job's short name and the items it is about. */
+export interface LongOptions {
+  title?: string;
+  near?: string[];
+}
+
+function shorten(text: string, max: number): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
 /* ── lanes ─────────────────────────────────────────────────────── */
@@ -266,7 +482,7 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
   const entry = jobsFor(mulchId);
   entry.pendingEnrich.push(...ids);
   if (entry.queues.slow.length) return;
-  entry.queues.slow.push({
+  queue(mulchId, {
     lane: "slow",
     label: "Enriching",
     async run(job, signal) {
@@ -313,10 +529,12 @@ const RESEARCH_TOOLS: ToolName[] = [
  * and a write-up on the canvas. If the turn ends without the table or the
  * write-up, the same session is resumed once with what is missing.
  */
-export function submitResearch(mulchId: string, brief: string): void {
-  enqueue(mulchId, {
-    lane: "command",
-    label: `Researching: ${brief.length > 46 ? `${brief.slice(0, 43)}…` : brief}`,
+export function submitResearch(mulchId: string, brief: string, options: LongOptions = {}): JobStatus {
+  return enqueue(mulchId, {
+    lane: "long",
+    label: options.title || shorten(brief, 50),
+    retry: { kind: "research", input: brief, ...options },
+    near: options.near,
     async run(job, signal) {
       const exa = exaAvailable();
       const spec: TurnSpec = {
@@ -410,8 +628,8 @@ function submitReview(mulchId: string, record: GenerationRecord): void {
         brief: review.brief,
         reviewRound: review.round,
         ...(review.sessionId ? { sessionId: review.sessionId } : {}),
-        onMake: (brief) => submitMake(mulchId, brief),
-        onResearch: (brief) => submitResearch(mulchId, brief),
+        onMake: (brief, options) => submitMake(mulchId, brief, options),
+        onResearch: (brief, options) => submitResearch(mulchId, brief, options),
       });
     },
   });
@@ -463,14 +681,55 @@ onAfterApply((mulchId, batch) => {
   if (batch.ops.some((op) => op.op === "addNode")) nameIfUntitled(mulchId);
 });
 
+/* ── telling the person ─────────────────────────────────────────── */
+
+/** Jobs already announced, so each finish is announced once. */
+const announced = new Set<string>();
+let activityTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * A finished long job, or an instruction that took a while, is announced with
+ * a notification (main shows it only when the person is not looking at that
+ * mulch). The Dock badge counts finished results not yet seen, and main asks
+ * before quitting while work is running.
+ */
+onJobChanged((mulchId, job) => {
+  const finished = job.state === "done" || job.state === "failed";
+  const took = (job.finishedAt ?? 0) - (job.startedAt ?? Date.now());
+  if (finished && job.unseen && !announced.has(job.id) && (job.lane === "long" || took > 20_000)) {
+    announced.add(job.id);
+    void getMulch(mulchId)
+      .then((mulch) =>
+        desktopRequest("notify", {
+          mulchId,
+          ids: job.resultIds ?? [],
+          title: job.label,
+          body: job.state === "failed" ? (job.error ?? "") : mulch.title,
+          failed: job.state === "failed",
+        }),
+      )
+      .catch(() => {});
+  }
+  clearTimeout(activityTimer);
+  activityTimer = setTimeout(() => {
+    void listMulches()
+      .then((all) => {
+        const total = all.reduce((sum, m) => ({ working: sum.working + (m.activity?.working ?? 0), unseen: sum.unseen + (m.activity?.unseen ?? 0) }), { working: 0, unseen: 0 });
+        return desktopRequest("activity", total);
+      })
+      .catch(() => {});
+  }, 500);
+});
+
 onFinished((record) => {
   if (record.review && record.status !== "cancelled") submitReview(record.mulchId, record);
 });
 
-export function submitCommand(mulchId: string, instruction: string): void {
-  enqueue(mulchId, {
+export function submitCommand(mulchId: string, instruction: string): JobStatus {
+  return enqueue(mulchId, {
     lane: "command",
-    label: instruction.length > 60 ? `${instruction.slice(0, 57)}…` : instruction,
+    label: shorten(instruction, 60),
+    retry: { kind: "command", input: instruction },
     async run(job, signal) {
       await getMulch(mulchId); // a missing mulch fails the job here
       await runTurn({
@@ -482,8 +741,8 @@ export function submitCommand(mulchId: string, instruction: string): void {
         prompt: `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
         tools: withKeyTools(COMMAND_TOOLS),
         brief: instruction,
-        onResearch: (brief) => submitResearch(mulchId, brief),
-        onMake: (brief) => submitMake(mulchId, brief),
+        onResearch: (brief, options) => submitResearch(mulchId, brief, options),
+        onMake: (brief, options) => submitMake(mulchId, brief, options),
         webAccess: true,
         allowUserEdits: true,
         // Instructions may read the person's files ("look at my dev/briefbuster folder"), read-only.
@@ -563,10 +822,12 @@ async function newArtifacts(mulchId: string, since: number): Promise<string[]> {
  * Make files with the CLI's own tools in its OS sandbox (python-pptx decks,
  * documents, charts). Whatever it saves in artifacts/ lands on the canvas.
  */
-export function submitMake(mulchId: string, brief: string): void {
-  enqueue(mulchId, {
-    lane: "command",
-    label: `Making: ${brief.length > 50 ? `${brief.slice(0, 47)}…` : brief}`,
+export function submitMake(mulchId: string, brief: string, options: LongOptions = {}): JobStatus {
+  return enqueue(mulchId, {
+    lane: "long",
+    label: options.title || shorten(brief, 50),
+    retry: { kind: "make", input: brief, ...options },
+    near: options.near,
     async run(job, signal) {
       const started = Date.now();
       const workspace = makerWorkspace(mulchId);
@@ -592,16 +853,18 @@ export function submitMake(mulchId: string, brief: string): void {
       const current = await getMulch(mulchId);
       const onMulch = new Set(Object.values(current.nodes).map((node) => node.docPath));
       const fresh = (await newArtifacts(mulchId, started)).filter((docPath) => !onMulch.has(docPath));
-      for (const docPath of fresh) await addArtifactNode(mulchId, job.id, docPath);
+      for (const docPath of fresh) await addArtifactNode(mulchId, job.id, docPath, job);
     },
   });
 }
 
-async function addArtifactNode(mulchId: string, jobId: string, docPath: string): Promise<void> {
+async function addArtifactNode(mulchId: string, jobId: string, docPath: string, job?: JobStatus): Promise<void> {
   const mulch = await getMulch(mulchId);
   const id = newClientId("n");
   const name = path.basename(docPath);
-  const position = placeNear(mulch, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, { seed: id });
+  const size = { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) };
+  const held = job ? takeHeld(mulchId, job) : undefined;
+  const position = placeNear(mulch, size, held ? { fallback: { x: held.x + size.w / 2, y: held.y + size.h / 2 }, seed: id } : { seed: id });
   await applyToMulch(
     mulchId,
     [{ op: "addNode", node: { id, kind: "artifact", x: position.x, y: position.y, title: name.replace(/\.[a-z0-9]+$/, "").replace(/[-_]+/g, " "), text: "", docPath, fileName: name, origin: `agent:${jobId}`, createdAt: Date.now() } }],
@@ -630,10 +893,11 @@ export function submitImage(mulchId: string, nodeId: string, label: string): voi
 }
 
 /** Explore a folder and build items from it. */
-export function submitFolder(mulchId: string, folder: string): void {
-  enqueue(mulchId, {
+export function submitFolder(mulchId: string, folder: string): JobStatus {
+  return enqueue(mulchId, {
     lane: "ingest",
     label: `Exploring ${folder.split("/").pop()}`,
+    retry: { kind: "folder", input: folder },
     async run(job, signal) {
       await runTurn({
         mulchId,
@@ -652,7 +916,7 @@ export function submitFolder(mulchId: string, folder: string): void {
 export function setEnrichmentPaused(mulchId: string, paused: boolean): void {
   const entry = jobsFor(mulchId);
   entry.paused = paused;
-  if (paused) entry.running.slow?.controller.abort();
+  if (paused) for (const running of entry.running.slow) running.controller.abort();
   else pump(mulchId, "slow");
 }
 
@@ -660,6 +924,36 @@ export function cancelJobs(mulchId: string): void {
   const entry = jobsFor(mulchId);
   entry.pendingSegments = [];
   entry.pendingEnrich = [];
-  for (const lane of Object.keys(entry.queues) as JobLane[]) entry.queues[lane] = [];
-  for (const running of Object.values(entry.running)) running?.controller.abort();
+  for (const lane of Object.keys(entry.queues) as JobLane[]) {
+    for (const { job } of entry.queues[lane]) if (job.retry) void setJob(mulchId, { ...job, state: "cancelled", finishedAt: Date.now() });
+    entry.queues[lane] = [];
+  }
+  for (const list of Object.values(entry.running)) for (const running of list) running.controller.abort();
+}
+
+/** Stop one job, queued or running. */
+export function cancelJob(mulchId: string, jobId: string): boolean {
+  const entry = jobsFor(mulchId);
+  for (const lane of Object.keys(entry.queues) as JobLane[]) {
+    const index = entry.queues[lane].findIndex((queued) => queued.job.id === jobId);
+    if (index < 0) continue;
+    const [{ job }] = entry.queues[lane].splice(index, 1);
+    if (job.retry) void setJob(mulchId, { ...job, state: "cancelled", finishedAt: Date.now() });
+    return true;
+  }
+  const running = findRunning(mulchId, jobId);
+  running?.controller.abort();
+  return !!running;
+}
+
+/** Start a failed or stopped job again, as a new job. */
+export async function retryJob(mulchId: string, jobId: string): Promise<JobStatus | undefined> {
+  const old = (await getJobs(mulchId)).find((job) => job.id === jobId);
+  if (!old?.retry || old.state === "queued" || old.state === "running") return undefined;
+  await setJob(mulchId, { ...old, unseen: false });
+  const { kind, input, near, title } = old.retry;
+  if (kind === "make") return submitMake(mulchId, input, { near, title });
+  if (kind === "research") return submitResearch(mulchId, input, { near, title });
+  if (kind === "folder") return submitFolder(mulchId, input);
+  return submitCommand(mulchId, input);
 }

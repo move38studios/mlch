@@ -11,17 +11,51 @@ export interface TranscriptSegment {
   source: "speech" | "typed";
 }
 
-export type JobLane = "fast" | "slow" | "command" | "ingest";
+/** Capture, enrichment, quick instructions, reading drops, and long work (making, research). */
+export type JobLane = "fast" | "slow" | "command" | "ingest" | "long";
+
+/** What a job was asked to do, so it can be started again. */
+export interface JobRetry {
+  kind: "command" | "make" | "research" | "folder";
+  input: string;
+  near?: string[];
+  title?: string;
+}
 
 export interface JobStatus {
   id: string;
   lane: JobLane;
   state: "queued" | "running" | "done" | "failed" | "cancelled";
-  /** One short line ("Adding ideas", "Searching: …"). */
+  /** One short line ("Adding ideas", "Deck: cities and forests"). */
   label: string;
   error?: string;
+  queuedAt?: number;
   startedAt?: number;
   finishedAt?: number;
+  /** What it is doing now ("Writing slides.py"). */
+  activity?: string;
+  /** Items it added. */
+  resultIds?: string[];
+  /** Finished (done or failed) and not yet seen by the person. */
+  unseen?: boolean;
+  /** Set for the person's instructions and long work: these are kept in jobs.json and can be retried. */
+  retry?: JobRetry;
+  /** Long work: the space held on the canvas for its result. */
+  anchor?: { x: number; y: number; w: number; h: number };
+}
+
+/** Kept jobs that count for the mulch list and the Dock badge. */
+export function jobActivity(jobs: Iterable<JobStatus>): { working: number; unseen: number; failed: number } {
+  let working = 0;
+  let unseen = 0;
+  let failed = 0;
+  for (const job of jobs) {
+    if (!job.retry) continue;
+    if (job.state === "queued" || job.state === "running") working++;
+    else if (job.unseen && job.state === "done") unseen++;
+    else if (job.unseen && job.state === "failed") failed++;
+  }
+  return { working, unseen, failed };
 }
 
 export type ServerEvent =

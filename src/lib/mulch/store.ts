@@ -23,7 +23,7 @@ import path from "node:path";
 import { libraryDir } from "@/lib/desktop/server";
 import { newClientId } from "./ids";
 import { applyOps, emptyMulch } from "./ops";
-import type { JobStatus, ServerEvent, TranscriptSegment } from "./events";
+import { jobActivity, type JobStatus, type ServerEvent, type TranscriptSegment } from "./events";
 import type { Mulch, MulchOp, MulchSummary, OpBatch, Origin } from "./types";
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,63}$/;
@@ -38,6 +38,7 @@ interface OpenMulch {
   paused: boolean;
   listeners: Set<Listener>;
   saveTimer?: ReturnType<typeof setTimeout>;
+  jobsTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface StoreState {
@@ -45,12 +46,14 @@ interface StoreState {
   loading: Map<string, Promise<OpenMulch>>;
   /** Called after every applied batch (history.ts hooks checkpoints here). */
   afterApply: Array<(id: string, batch: OpBatch) => void>;
+  /** Called when a kept job changes (the Dock badge and notifications hook here). */
+  jobChanged: Array<(id: string, job: JobStatus) => void>;
 }
 
 const globalState = globalThis as typeof globalThis & { __mlchStore?: StoreState };
 function state(): StoreState {
   if (!globalState.__mlchStore) {
-    globalState.__mlchStore = { open: new Map(), loading: new Map(), afterApply: [] };
+    globalState.__mlchStore = { open: new Map(), loading: new Map(), afterApply: [], jobChanged: [] };
     const flush = () => void flushAll();
     process.once("SIGTERM", flush);
     process.once("beforeExit", flush);
@@ -126,12 +129,14 @@ export async function listMulches(): Promise<MulchSummary[]> {
       const open = state().open.get(id);
       try {
         const mulch = open?.mulch ?? (JSON.parse(await fs.readFile(path.join(root, id, "mulch.json"), "utf8")) as Mulch);
+        const jobs = open ? [...open.jobs.values()] : await readKeptJobs(path.join(root, id));
         return {
           id,
           title: mulch.title,
           createdAt: mulch.createdAt,
           updatedAt: mulch.updatedAt,
           nodeCount: Object.keys(mulch.nodes).length,
+          activity: jobActivity(jobs),
         };
       } catch {
         return undefined;
@@ -182,7 +187,7 @@ export async function openMulch(id: string): Promise<OpenMulch> {
     const entry: OpenMulch = {
       mulch,
       transcript,
-      jobs: new Map(),
+      jobs: new Map((await readKeptJobs(dir)).map((job) => [job.id, job])),
       paused: false,
       listeners: new Set(),
     };
@@ -286,13 +291,69 @@ export async function appendTranscript(id: string, segment: TranscriptSegment): 
   broadcast(entry, { type: "transcript", segment });
 }
 
+/**
+ * The person's instructions and long work (jobs with `retry`) are kept in
+ * jobs.json. One that was queued or running when the app last stopped is
+ * marked failed, so it can be retried.
+ */
+async function readKeptJobs(dir: string): Promise<JobStatus[]> {
+  let jobs: JobStatus[];
+  try {
+    jobs = JSON.parse(await fs.readFile(path.join(dir, "jobs.json"), "utf8")) as JobStatus[];
+  } catch {
+    return [];
+  }
+  return jobs.map((job) =>
+    job.state === "queued" || job.state === "running"
+      ? { ...job, state: "failed", error: "Stopped when mlch quit.", activity: undefined, anchor: undefined, unseen: true, finishedAt: job.finishedAt ?? Date.now() }
+      : job,
+  );
+}
+
+function saveKeptJobs(id: string, entry: OpenMulch): void {
+  clearTimeout(entry.jobsTimer);
+  entry.jobsTimer = setTimeout(() => {
+    const kept = [...entry.jobs.values()].filter((job) => job.retry);
+    void atomicWriteFile(path.join(mulchDir(id), "jobs.json"), JSON.stringify(kept, null, 1)).catch((error) =>
+      log.error("store", "jobs save failed", { mulchId: id, error }),
+    );
+  }, 400);
+}
+
 export async function setJob(id: string, job: JobStatus): Promise<void> {
   const entry = await openMulch(id);
   entry.jobs.set(job.id, job);
-  // Keep the list short: finished jobs older than the last 30 drop off.
+  // Keep the list short: the last 30 finished kept jobs, the last 10 others.
   const finished = [...entry.jobs.values()].filter((j) => j.state !== "queued" && j.state !== "running");
-  for (const old of finished.slice(0, Math.max(0, finished.length - 30))) entry.jobs.delete(old.id);
+  for (const [list, keep] of [[finished.filter((j) => j.retry), 30], [finished.filter((j) => !j.retry), 10]] as const) {
+    for (const old of list.slice(0, Math.max(0, list.length - keep))) entry.jobs.delete(old.id);
+  }
   broadcast(entry, { type: "job", job });
+  if (job.retry) {
+    saveKeptJobs(id, entry);
+    for (const hook of state().jobChanged) hook(id, job);
+  }
+}
+
+export async function getJobs(id: string): Promise<JobStatus[]> {
+  return [...(await openMulch(id)).jobs.values()];
+}
+
+/** The person has seen these finished jobs. */
+export async function markJobsSeen(id: string, jobIds: string[]): Promise<void> {
+  const entry = await openMulch(id);
+  for (const jobId of jobIds) {
+    const job = entry.jobs.get(jobId);
+    if (job?.unseen) await setJob(id, { ...job, unseen: false });
+  }
+}
+
+export function onJobChanged(hook: (id: string, job: JobStatus) => void): void {
+  const hooks = state().jobChanged;
+  const key = hook.toString();
+  const index = hooks.findIndex((h) => h.toString() === key);
+  if (index >= 0) hooks.splice(index, 1);
+  hooks.push(hook);
 }
 
 export async function setPaused(id: string, paused: boolean): Promise<void> {

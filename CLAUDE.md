@@ -14,7 +14,7 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 ## Architecture
 
 - `src/lib/mulch/`: the document. A mulch changes only through ops (`types.ts` MulchOp), applied by the pure `ops.ts` on both sides. `store.ts` (server) holds open mulches, logs batches to `events.jsonl`, saves `mulch.json`, broadcasts over SSE. `client.ts` (browser) mirrors it, applies the user's ops optimistically, keeps undo (inverse ops). `place.ts` is all geometry. `history.ts` checkpoints.
-- `src/lib/agent/`: `server/` is node-banana's harness (Claude Agent SDK, codex app-server, billing guard), kept close to upstream. `tools.ts` = mulch tools; `prompts.ts` = per-lane prompts; `jobs.ts` = per-mulch lanes (fast capture, slow enrichment, command, ingest).
+- `src/lib/agent/`: `server/` is node-banana's harness (Claude Agent SDK, codex app-server, billing guard), kept close to upstream. `tools.ts` = mulch tools; `prompts.ts` = per-lane prompts; `jobs.ts` = per-mulch lanes (fast capture, slow enrichment, quick instructions, ingest) plus long work (making, research: at most 2 per mulch, 3 in all). The person's instructions and long work are kept in `<mulch>/jobs.json` (unseen results, failures, retry; ones running at quit come back failed). A long job holds space on the canvas (`holdSpace` in place.ts) where its result lands and where the canvas draws it in progress. Main shows a notification when one finishes elsewhere, badges the Dock with unseen results, and asks before quitting while work runs.
 - `src/lib/ingest/`: files and links into assets/ (content-addressed, extracted text beside them).
 - `src/lib/artifacts/`: files the AI makes, in the mulch's `artifacts/`. HTML is served with a sandboxing CSP (opaque origin, no network) and shown full-window over the canvas; the agent checks it with `preview_artifact` (main renders it off-screen). `pptx.ts` is the quick template builder; real decks and documents come from the maker lane.
 - Maker lane (`submitMake` in jobs.ts): Claude Code with its own tools inside its OS sandbox (`workspace` in HarnessTurnParams → `sandbox` + permission rules in claudeHarness.ts), or `codex exec` in workspace-write (codexExec.ts). Writes only to `<mulch>/work` and `<mulch>/artifacts`; network only to package registries (Claude). New files in artifacts/ become cards.
@@ -24,6 +24,19 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 - File reading for instructions: read-only, home folder, private places refused (`src/lib/agent/files.ts`).
 - `src/lib/voice/`: browser recorder (pause-cut WAV chunks) and server transcriber (Groq).
 - `electron/`: shell adapted from node-banana. Main injects a per-launch token; keys live in Keychain via safeStorage and reach the server process over parentPort, never through the page.
+
+## Design
+
+Black marker on a clean napkin, with one amber highlighter. Tokens live in `src/app/globals.css` (`:root`, exposed to Tailwind via `@theme`); use them, not raw colours.
+
+- **Type:** Schibsted Grotesk for everything (`--font-ui`). The logo's hand lettering appears only as the wordmark (`public/brand/wordmark.svg`); Barriecito (`--font-scribble`) is loaded for it and used nowhere else. Sentence case, no all-caps labels, no middle dots between items.
+- **Colour:** paper `#FCFCFA` (canvas), chrome white (cards, floating panels), ink pure black at three strengths (`ink`, `ink-2`, `ink-3`), hairlines (`line`, `line-2`). Amber `#FFC000` only as a fill, never text: New, recording, selection, focus pulse, things that need you. Tints for kinds: `amber-soft` the person's post-it notes, `blush` questions, `mist` definitions, `sage` examples. `danger` for errors and failures.
+- **Cards:** the person's own words (origin `user` / `speech:*`, or touched) carry a 1.5px ink outline; AI material sits on a hairline or its tint. Typed notes are tilted yellow post-its. Kind labels are small, lowercase, `ink-3`. Selected: amber outline.
+- **Connections:** soft cubic curves bowing to one side (`FloatingEdge.tsx`); the person's solid, the AI's dotted; labels on paper chips, shown only when they fit.
+- **Chrome:** the canvas is full-bleed; controls float over it in white `.float` panels (hairline, soft shadow, rounded-xl/2xl). Primary buttons black, the one creative action amber.
+- **The scribble** (from the logo, `components/brand/Scribble.tsx`) is the only animated motif: drawn while listening (moves only while you speak), looping wherever the AI is working (job control, placeholder card, mulch list), faint and still on an empty canvas. Nowhere else.
+- **Motion:** only to show a change: cards entering, the focus pulse, the scribble. Respect reduced motion.
+- `scripts/brand-assets.mjs` rebuilds the icon, wordmark and scribbles from `design/mlch-logo.svg`.
 
 ## Rules
 

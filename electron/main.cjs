@@ -4,7 +4,7 @@
 // on it, and answers the few native requests the server and page make
 // (folder picker, reveal in Finder, stored keys). Every request to the local
 // server carries a per-launch token; the server refuses anything without it.
-const { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, session, shell, systemPreferences, utilityProcess, safeStorage, screen } = require('electron');
+const { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, Notification, session, shell, systemPreferences, utilityProcess, safeStorage, screen } = require('electron');
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -100,6 +100,48 @@ async function disconnected(code) {
     buttons: ['Restart Server', 'Open Logs', 'Close'], defaultId: 0, cancelId: 2 });
   if (response === 0) await startWithRetry();
   if (response === 1) await openLogs();
+}
+
+// mlch: work running and finished results (bridge-main 'notify' and 'activity').
+let jobActivity = { working: 0, unseen: 0 };
+let quitConfirmed = false;
+const shownNotifications = new Set();
+
+function lookingAt(mulchId) {
+  if (!window || window.isDestroyed() || !window.isFocused()) return false;
+  try { return new URL(window.webContents.getURL()).pathname === `/n/${mulchId}`; } catch { return false; }
+}
+
+async function showMulch(mulchId, ids) {
+  if (!window) await createWindow();
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  const url = new URL(`/n/${mulchId}`, origin);
+  if (ids.length) url.searchParams.set('focus', ids.join(','));
+  await window.loadURL(url.href);
+}
+
+/** A finished job, unless the person is looking at that mulch. Clicking opens it at the results. */
+function notifyJob({ mulchId, ids, title, body }) {
+  if (lookingAt(mulchId) || !Notification.isSupported()) return;
+  const notification = new Notification({ title: title || 'mlch', body });
+  shownNotifications.add(notification);
+  notification.on('click', () => { shownNotifications.delete(notification); showMulch(mulchId, ids).catch(log); });
+  notification.on('close', () => shownNotifications.delete(notification));
+  notification.show();
+}
+
+/** A Quick Look thumbnail (macOS renders decks, documents and PDFs), as base64 PNG. */
+async function fileThumbnail(file, size) {
+  const image = await nativeImage.createThumbnailFromPath(file, { width: size, height: size });
+  if (image.isEmpty()) throw new Error('Empty preview.');
+  return image.toPNG().toString('base64');
+}
+
+function setJobActivity(next) {
+  jobActivity = next;
+  if (process.platform === 'darwin') app.dock?.setBadge(next.unseen ? String(next.unseen) : '');
 }
 
 async function createWindow() {
@@ -232,7 +274,22 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   registerBridge();
   app.on('second-instance', () => { if (window?.isMinimized()) window.restore(); window?.show(); window?.focus(); });
-  app.on('before-quit', () => { quitting = true; });
+  app.on('before-quit', (event) => {
+    // Running work stops on quit: ask first (scripted test runs skip this).
+    if (!quitConfirmed && jobActivity.working > 0 && window && !window.isDestroyed() && !process.env.MLCH_NO_QUIT_PROMPT) {
+      event.preventDefault();
+      const count = jobActivity.working;
+      const response = dialog.showMessageBoxSync(window, {
+        type: 'question',
+        message: count === 1 ? '1 job is running.' : `${count} jobs are running.`,
+        detail: 'Quitting stops them. They can be retried later.',
+        buttons: ['Quit', 'Cancel'], defaultId: 1, cancelId: 1,
+      });
+      if (response === 0) { quitConfirmed = true; app.quit(); }
+      return;
+    }
+    quitting = true;
+  });
   app.on('will-quit', () => backend?.kill());
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (!window && backend?.online()) createWindow().catch(fail); });
@@ -249,7 +306,7 @@ else {
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
       redactor.add(values); backend?.post({ type: 'secrets', values });
     });
-    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, log });
+    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, notify: notifyJob, activity: setJobActivity, thumbnail: fileThumbnail, log });
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('MLCH_ELECTRON_PORT must be a port number between 1 and 65535.');
     backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
       entry: path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,

@@ -76,9 +76,13 @@ export interface ToolContext {
   /** For hand_off: queue a command job with this instruction. */
   onHandOff?: (instruction: string) => void;
   /** For make: queue a making job with this brief. */
-  onMake?: (brief: string) => void;
+  onMake?: (brief: string, options: { title?: string; near?: string[] }) => void;
   /** For research: queue a research job with this brief. */
-  onResearch?: (brief: string) => void;
+  onResearch?: (brief: string, options: { title?: string; near?: string[] }) => void;
+  /** Long jobs: the place held for this job's result, given up on first use. */
+  takeHeld?: () => { x: number; y: number } | undefined;
+  /** What the job is doing now, for the person. */
+  onActivity?: (text: string) => void;
   /** Ids of nodes this job added, in order. */
   added: string[];
   /** The person's request this job serves (for review turns after generations). */
@@ -154,6 +158,13 @@ const edgeShape = z.object({
   to: z.string().describe("Item id or ref"),
   label: z.string().max(40).optional().describe("How they relate, 1-4 words. Omit when obvious."),
 });
+
+/** Making and research jobs: the brief, a short name the person sees, and what the result belongs near. */
+const LONG_JOB_SHAPE = {
+  brief: z.string().min(10).max(8000),
+  title: z.string().max(60).optional().describe('2-6 words the person sees while it runs, in sentence case ("Deck on forest cities").'),
+  near: z.array(z.string()).max(6).optional().describe("Ids of the items the result belongs near."),
+};
 
 const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   get_mulch: {
@@ -356,7 +367,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     description:
       "Start a research job for anything that needs many searches and reading: competitor or market scans, prior art, literature reviews, landscape overviews. " +
       "It runs for several minutes and puts sources, a comparison table and a write-up on the canvas. Give a complete brief: the question, what to compare, what matters.",
-    inputShape: { brief: z.string().min(10).max(8000) },
+    inputShape: LONG_JOB_SHAPE,
     readOnly: true,
   },
   read_page: {
@@ -430,7 +441,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
       "Start a making job: Claude Code or Codex with its own shell and file tools in a sandbox (Python, python-pptx, node, and so on), for files that need real tools: " +
       "PowerPoint decks, Word or PDF documents, spreadsheets, charts. It saves results in the canvas's artifacts folder and they appear on the canvas. " +
       "Give a complete brief: what to make, for whom, the format, and which mulch items it should draw on.",
-    inputShape: { brief: z.string().min(10).max(8000) },
+    inputShape: LONG_JOB_SHAPE,
     readOnly: true,
   },
   present_file: {
@@ -544,11 +555,17 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
     return ops;
   }
 
+  /** Near the given items; a long job's first result takes the place held for it. */
+  function placeResult(mulch: Mulch, size: { w: number; h: number }, near: string[] | undefined, seed: string) {
+    const held = ctx.takeHeld?.();
+    if (held) return placeNear(mulch, size, { fallback: { x: held.x + size.w / 2, y: held.y + size.h / 2 }, seed });
+    return placeNear(mulch, size, { anchorIds: (near ?? []).filter((key) => mulch.nodes[key]), seed });
+  }
+
   async function addArtifactCard(title: string, description: string, docPath: string, near?: string[]): Promise<string> {
     const mulch = await getMulch(ctx.mulchId);
     const id = newClientId("n");
-    const anchors = (near ?? []).filter((key) => mulch.nodes[key]);
-    const position = placeNear(mulch, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, { anchorIds: anchors, seed: id });
+    const position = placeResult(mulch, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, near, id);
     await commit([
       { op: "addNode", node: { id, kind: "artifact", x: position.x, y: position.y, title, text: description, docPath, fileName: path.basename(docPath), origin, createdAt: Date.now() } },
     ]);
@@ -700,9 +717,8 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const docPath = `docs/${slug}.md`;
       await atomicWriteFile(path.join(mulchDir(ctx.mulchId), docPath), markdown.startsWith("#") ? markdown : `# ${title}\n\n${markdown}`);
       const id = newClientId("n");
-      const anchors = (near ?? []).filter((key) => mulch.nodes[key]);
       const w = NODE_WIDTH.writeup;
-      const position = placeNear(mulch, { w, h: 260 }, { anchorIds: anchors, seed: id });
+      const position = placeResult(mulch, { w, h: 260 }, near, id);
       const ops: MulchOp[] = [
         { op: "addNode", node: { id, kind: "writeup", x: position.x, y: position.y, title, text: markdown, docPath, origin, createdAt: Date.now() } },
       ];
@@ -712,7 +728,9 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
     },
 
     async say(args) {
-      await emit(ctx.mulchId, { type: "say", text: (args as { text: string }).text, jobId: ctx.jobId });
+      const text = (args as { text: string }).text;
+      await emit(ctx.mulchId, { type: "say", text, jobId: ctx.jobId });
+      ctx.onActivity?.(text);
       return ok("Shown.", "Status");
     },
 
@@ -779,7 +797,8 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
 
     async research(args) {
       if (!ctx.onResearch) return fail("Not available here.");
-      ctx.onResearch((args as { brief: string }).brief);
+      const { brief, title, near } = args as { brief: string; title?: string; near?: string[] };
+      ctx.onResearch(brief, { title, near });
       return ok("Research job queued; it will add its results to the canvas.", "Started research");
     },
 
@@ -957,7 +976,8 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
 
     async make(args) {
       if (!ctx.onMake) return fail("Not available here.");
-      ctx.onMake((args as { brief: string }).brief);
+      const { brief, title, near } = args as { brief: string; title?: string; near?: string[] };
+      ctx.onMake(brief, { title, near });
       return ok("Making job queued. Its files will appear on the canvas when done.", "Started making");
     },
 

@@ -33,6 +33,20 @@ export function Home() {
     void load();
   }, [load]);
 
+  // Work keeps running in the background: keep the list current while it does, and when coming back.
+  const working = mulches?.some((m) => m.activity?.working) ?? false;
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    window.addEventListener("focus", refresh);
+    const timer = working ? setInterval(refresh, 3000) : undefined;
+    return () => {
+      window.removeEventListener("focus", refresh);
+      clearInterval(timer);
+    };
+  }, [load, working]);
+
   async function create() {
     setCreating(true);
     try {
@@ -98,6 +112,14 @@ export function Home() {
             <li key={mulch.id} className="group flex items-center rounded-xl hover:bg-paper-2">
               <Link href={`/n/${mulch.id}`} className="flex-1 min-w-0 flex items-baseline gap-4 py-3 px-3">
                 <span className="truncate text-[17px] font-medium tracking-[-0.01em]">{mulch.title}</span>
+                {/* Something running; results not yet seen; a failure. */}
+                {mulch.activity?.working ? (
+                  <span className="shrink-0 self-center" title="Working" aria-label="Working">
+                    <Scribble which="bottom" mode="loop" strokeWidth={11} className="h-3 w-8 text-ink" />
+                  </span>
+                ) : null}
+                {mulch.activity?.unseen ? <span className="h-2 w-2 shrink-0 self-center rounded-full bg-amber" title="New results" aria-label="New results" /> : null}
+                {mulch.activity?.failed ? <span className="h-2 w-2 shrink-0 self-center rounded-full bg-danger" title="Failed" aria-label="Failed" /> : null}
                 <span className="flex-1" />
                 <span className="text-[13px] text-ink-3 shrink-0 tabular-nums">{mulch.nodeCount} items</span>
                 <span className="text-[13px] text-ink-3 shrink-0 tabular-nums w-36 text-right">{formatDateTime(mulch.updatedAt)}</span>
