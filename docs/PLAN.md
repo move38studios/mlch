@@ -1,6 +1,6 @@
 # npkn V1 plan
 
-Status: draft, 2026-10-07.
+Status: M0–M7 built 2026-10-07. Next: real-voice testing, then the post-V1 list.
 
 ## Decisions
 
@@ -12,6 +12,7 @@ Status: draft, 2026-10-07.
 | Voice | Groq Whisper (user's key) behind a `Transcriber` interface. Local Parakeet comes later as a second implementation. |
 | Live mode | Two speeds. Fast lane: key points appear within seconds of a pause. Slow lane: enrichment (search, definitions, examples, questions, connections) arrives after. |
 | Sharing | Deferred past V1. Storage is designed so a snapshot plus its docs can be exported or uploaded later. |
+| Run mode | `npm run app` (production build in Electron). Packaged, signed .app later. |
 | Canvas | React Flow (`@xyflow/react` 12), as both reference projects use. |
 | Web search | Claude's own `WebSearch` / `WebFetch` tools through the subscription. Firecrawl is an optional key for scraping and document parsing. |
 

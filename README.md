@@ -40,11 +40,29 @@ Ideas emerge from the mess and from cross-pollination, and they happen at the in
 - No separate AI subscription. npkn uses your existing Claude Code or Codex subscription.
 - Some features may ask for additional keys (for example Firecrawl for web scraping).
 
+## Running
+
+Needs Node 24, and Claude Code and/or Codex installed and signed in with a subscription.
+
+```sh
+npm install
+npm run app          # build, then open the desktop app
+npm run app:start    # open the last build
+npm run electron:dev # desktop app with live reload
+npm run dev          # browser at http://localhost:3100 (no folder picker or key storage)
+```
+
+Keys: Settings in the app (stored in the macOS Keychain), or `.env.local`:
+
+```
+GROQ_API_KEY=...       # microphone (Groq Whisper)
+FIRECRAWL_API_KEY=...  # optional: better link and document reading
+```
+
+Napkins are folders in `~/Documents/npkn`.
+
 ## Not in V1
 
 - Live collaboration on a napkin.
-
-## Open questions
-
-- Voice transcription: built-in browser speech recognition, a local model (e.g. Parakeet), or a remote Whisper endpoint (e.g. Groq with your own key).
-- Live population while speaking, or after the first braindump is finished.
+- Sharing snapshots as links.
+- Local transcription (Parakeet).

@@ -11,6 +11,9 @@ const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args.spli
 const library = flag('--library');
 // A WAV file to use as the microphone: the page's getUserMedia plays it.
 const fakeMic = flag('--fake-mic');
+// Run the `next build` output instead of the dev server.
+const production = args.includes('--production');
+if (production) args.splice(args.indexOf('--production'), 1);
 const shots = flag('--shots') || os.tmpdir();
 const [script] = args;
 
@@ -18,7 +21,7 @@ const [script] = args;
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'npkn-run-'));
   const app = await electron.launch({
     args: [
-      path.resolve(__dirname, '..'), '--dev',
+      path.resolve(__dirname, '..'), ...(production ? [] : ['--dev']),
     ],
     env: { ...process.env, ...(fakeMic ? { NPKN_FAKE_MIC: '1' } : {}), NPKN_ELECTRON_USER_DATA: profile, NPKN_LIBRARY: library || path.join(profile, 'napkins'), NPKN_ELECTRON_PORT: '47851' },
     timeout: 180_000,

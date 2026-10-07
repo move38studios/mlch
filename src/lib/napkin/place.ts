@@ -95,8 +95,8 @@ export interface ArrangeResult {
   boxes: Array<{ title: string; x: number; y: number; w: number; h: number; nodeIds: string[] }>;
 }
 
-const GROUP_PADDING = 28;
-const GROUP_TITLE = 36;
+export const GROUP_PADDING = 28;
+export const GROUP_TITLE = 36;
 const GROUP_GAP = 120;
 
 /**
@@ -199,4 +199,23 @@ export function boundsOf(rects: Rect[]): Rect | undefined {
     w: Math.max(...rects.map((r) => r.x + r.w)) - x,
     h: Math.max(...rects.map((r) => r.y + r.h)) - y,
   };
+}
+
+/**
+ * The box a group should have around its members, or undefined when it has
+ * none or already fits within a pixel.
+ */
+export function fittedGroupBox(napkin: Napkin, groupId: string): { x: number; y: number; w: number; h: number } | undefined {
+  const group = napkin.groups[groupId];
+  const members = Object.values(napkin.nodes).filter((node) => node.groupId === groupId);
+  const bounds = boundsOf(members.map(rectOf));
+  if (!group || !bounds) return undefined;
+  const box = {
+    x: Math.round(bounds.x - GROUP_PADDING),
+    y: Math.round(bounds.y - GROUP_PADDING - GROUP_TITLE),
+    w: Math.round(Math.max(240, bounds.w + GROUP_PADDING * 2)),
+    h: Math.round(bounds.h + GROUP_PADDING * 2 + GROUP_TITLE),
+  };
+  const same = Math.abs(box.x - group.x) <= 1 && Math.abs(box.y - group.y) <= 1 && Math.abs(box.w - group.w) <= 1 && Math.abs(box.h - group.h) <= 1;
+  return same ? undefined : box;
 }

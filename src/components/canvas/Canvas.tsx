@@ -22,6 +22,8 @@ import {
 import "@xyflow/react/dist/style.css";
 import { newClientId } from "@/lib/napkin/ids";
 import { useNapkin } from "@/lib/napkin/client";
+import { applyOps } from "@/lib/napkin/ops";
+import { fittedGroupBox } from "@/lib/napkin/place";
 import { NODE_WIDTH } from "@/lib/napkin/sizes";
 import type { Napkin, NapkinOp } from "@/lib/napkin/types";
 import { FloatingEdge, type NapkinFlowEdge } from "./FloatingEdge";
@@ -71,6 +73,17 @@ function toFlowNodes(napkin: Napkin, previous: FlowNode[], fresh: Record<string,
   return [...groups, ...nodes];
 }
 
+/** updateGroup ops that refit these groups (not ones the person moved) around their members. */
+function groupFits(napkin: Napkin, groupIds: Iterable<string>): NapkinOp[] {
+  const ops: NapkinOp[] = [];
+  for (const groupId of groupIds) {
+    if (!napkin.groups[groupId] || napkin.groups[groupId].userTouched) continue;
+    const box = fittedGroupBox(napkin, groupId);
+    if (box) ops.push({ op: "updateGroup", id: groupId, patch: box });
+  }
+  return ops;
+}
+
 function toFlowEdges(napkin: Napkin, selected: Set<string>): NapkinFlowEdge[] {
   return Object.values(napkin.edges).map((edge) => ({
     id: edge.id,
@@ -115,15 +128,19 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
     (changes: NodeChange<FlowNode>[]) => {
       setNodes((current) => applyNodeChanges(changes, current));
       const sizes: NapkinOp[] = [];
+      const touchedGroups = new Set<string>();
       for (const change of changes) {
         if (change.type !== "dimensions" || !change.dimensions || change.resizing) continue;
         if (change.id.startsWith(GROUP_PREFIX)) continue;
         const node = napkin.nodes[change.id];
         if (!node) continue;
+        if (node.groupId) touchedGroups.add(node.groupId);
         const h = Math.round(change.dimensions.height);
         if (h > 0 && Math.abs((node.h ?? 0) - h) > 2) sizes.push({ op: "updateNode", id: node.id, patch: { h } });
       }
-      if (sizes.length) apply(sizes, { undoable: false });
+      // Groups the AI laid out follow their members' real sizes.
+      const fits = groupFits(applyOps(napkin, sizes), touchedGroups);
+      if (sizes.length || fits.length) apply([...sizes, ...fits], { undoable: false });
     },
     [apply, napkin],
   );
@@ -195,7 +212,15 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
         }
       }
       dragStart.current = new Map();
-      apply(ops);
+      // Members moved inside (or out of) an AI-laid-out group: refit it.
+      const after = applyOps(napkin, ops);
+      const groups = new Set<string>();
+      for (const op of ops) {
+        if (op.op !== "updateNode") continue;
+        const before = napkin.nodes[op.id]?.groupId;
+        if (before) groups.add(before);
+      }
+      apply([...ops, ...groupFits(after, groups)]);
     },
     [apply, flow, napkin],
   );
