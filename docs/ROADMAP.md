@@ -6,22 +6,12 @@ Order agreed 2026-10-07. The aim: first make mlch good for George to use every d
 
 ## 1. Every day (George)
 
-1. **Drag on empty canvas pans.** Today: two-finger scroll and middle or right drag pan; dragging on empty space draws a selection box. Make drag pan and Shift-drag select (Figma, Miro). Minutes.
-2. **One input, no Thought / Instruction toggle.** Speech is already classified automatically (the capture lane hands instructions to the command lane); typed text in Thought goes through the same classification, so the toggle only forces an instruction. Drop it, show what was understood, keep a way to force an instruction (start with `/` or ⌘↩). Half a day.
-3. **The AI moves the view.** It can already `focus` on items (moves to them and highlights them), so "show me the science part" mostly works. Missing: zoom out, fit everything, zoom in or out by a step. Add a view tool; simple ones ("zoom out") could run without waiting for the model. Half a day.
-4. **Background work.** 2–3 days. The UX needs careful thought: it must be obvious that a long job (a deck, research) is alive and progressing, while the canvas stays fully usable (explore, speak, type, drop, give other instructions).
-   - Today: four lanes per mulch run side by side on the server (capture, enrich, instructions, reading), so speaking during a deck already works and jobs survive going back to the list. Problems: every instruction shares one queue (a quick "summarize" waits behind a 10-minute deck); queued jobs are invisible; Stop stops everything; nothing says when a job finishes; quitting drops running and queued jobs silently.
-   - Jobs become real things with a state (queued, working, done and not yet seen, failed), saved in the mulch folder.
-   - Long jobs (make, research) each get their own slot, at most 2 per mulch and 3 overall; quick instructions get their own lane; capture and enrichment are never blocked.
-   - On the canvas: one activity control instead of the row of pills; its list shows each job's name, time running, what it's doing now (for example "writing slide 4"), stop per job, done jobs linking to their new cards, failed jobs with the reason and Retry. Consider a placeholder card on the canvas where the result will land, showing progress, so the work is visible where it will appear.
-   - On the list: a moving scribble while something works, an amber dot for unseen results, a red mark for failures.
-   - A macOS notification when a long job finishes while you're elsewhere (click opens the mulch at the new cards); Dock badge for unseen results; new cards pulse when you come back.
-   - Quitting with jobs running asks first; after a restart, interrupted jobs show as failed with Retry.
-   - Later: a "needs you" state if the AI ever stops to ask something (herdr's "blocked").
-   - References: herdr (agent states in a sidebar, work continues when you look away), Claude's desktop app (session list, unread dot, notifications). State names and notification text: wording from George.
-5. **Design pass on the remaining screens.** Settings, side panel, search palette and the full-window artifact viewer use the new fonts and colours but haven't been designed. Write the design rules into CLAUDE.md at the same time: tokens, Schibsted Grotesk for the interface and the logo lettering only as the wordmark, scribbles in three places, ink outline for the person's own words, curved edges (solid for the person, dotted for the AI).
-6. **PPTX and DOCX thumbnails.** Cards for decks and documents have no preview; use `nativeImage.createThumbnailFromPath` (Quick Look) in main. Half a day.
-7. **Screenshots to the canvas.** A global shortcut opens macOS's window picker; the capture becomes an image card and gets enriched. No Screen Recording permission. About a day. [research](research/parakeet-and-calls.md#screenshots)
+Shipped 2026-10-07: drag to pan, one input, the AI moves the view, typed notes as post-its, background work, design pass, deck and document previews, screenshots (⌘⇧2). Next, to discuss first:
+
+1. **Home screen.** The full logo on the empty screen (centred, the scribbles and lettering), the small wordmark top-left once there is a list. The empty screen as one clear start (New, or straight into a new mulch with the mic ready, tied to First run). Whether mlch needs a tagline at all (in the app: probably not; on mlch.app: maybe). Wording from George.
+2. **Connections between mulches.** Today each mulch is its own world; enrichment can already find and copy items from other mulches (`search_all_mulches`, `bring_in`). Options from light to heavy: links on cards that open another mulch at an item; a "related mulches" strip; backlinks; one shared graph of everything (Obsidian-like). To discuss.
+3. **Empty mulches.** "Untitled, 0 items" rows pile up when New is pressed and nothing is added. Remove an empty untitled mulch when you leave it.
+4. **Wording to confirm (George).** Placeholders now in the app: "Queued", "Stop", "Stop all", "Show", "Retry", "Dismiss", "Starting", "making", "research", "Stopped when mlch quit.", the quit question ("1 job is running." / "Quitting stops them. They can be retried later."), notifications (title = job name, text = mulch title or the error), "Add Screenshot".
 
 ## 2. Other people can install it
 
