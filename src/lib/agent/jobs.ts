@@ -190,7 +190,7 @@ export function submitInput(napkinId: string, segment: TranscriptSegment): void 
         lane: "fast",
         systemPrompt: fastPrompt(),
         prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 140, maxNodes: 120 })}\n</napkin>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
-        tools: ["add_nodes", "connect", "hand_off"],
+        tools: napkin.title === "Untitled" ? ["add_nodes", "connect", "hand_off", "set_title"] : ["add_nodes", "connect", "hand_off"],
         origin: `speech:${job.id}`,
         onHandOff: (instruction) => submitCommand(napkinId, instruction),
       });
@@ -284,7 +284,7 @@ export function submitFolder(napkinId: string, folder: string): void {
         lane: "command",
         systemPrompt: folderPrompt(),
         prompt: `Folder: ${folder}`,
-        tools: ["list_files", "read_file", "add_nodes", "connect", "arrange", "say"],
+        tools: ["list_files", "read_file", "add_nodes", "connect", "arrange", "say", "set_title"],
         readRoot: folder,
       });
     },

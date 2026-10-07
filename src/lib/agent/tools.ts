@@ -28,6 +28,7 @@ export type ToolName =
   | "write_doc"
   | "say"
   | "hand_off"
+  | "set_title"
   | "list_files"
   | "read_file";
 
@@ -196,6 +197,13 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
       "Pass the instruction on, in the user's words; it runs as a separate job with more tools.",
     inputShape: { instruction: z.string().max(2000) },
     readOnly: true,
+  },
+  set_title: {
+    name: "set_title",
+    title: "Name napkin",
+    description: "Name the napkin: 2-5 plain words for what it is about.",
+    inputShape: { title: z.string().min(1).max(60) },
+    readOnly: false,
   },
   list_files: {
     name: "list_files",
@@ -431,6 +439,15 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
       if (!ctx.onHandOff) return fail("Not available here.");
       ctx.onHandOff(instruction);
       return ok("Queued as a command.", "Handed off");
+    },
+
+    async set_title(args) {
+      const napkin = await getNapkin(ctx.napkinId);
+      // Only names an unnamed napkin; the person's own title stays.
+      if (napkin.title !== "Untitled") return ok("The napkin already has a name.", "Kept name");
+      const ops: NapkinOp[] = [{ op: "setTitle", title: (args as { title: string }).title.trim() }];
+      await commit(ops);
+      return ok("Named.", "Named the napkin", ops);
     },
 
     async list_files(args) {

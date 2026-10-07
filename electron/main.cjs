@@ -161,7 +161,8 @@ function registerBridge() {
   ipcMain.handle('desktop:restart-backend', guarded(() => startWithRetry()));
   ipcMain.handle('desktop:open-logs', guarded(() => openLogs()));
   ipcMain.handle('desktop:microphone-access', guarded(async () => {
-    if (process.platform !== 'darwin') return true;
+    // Automated runs feed a fake microphone and must not raise the system prompt.
+    if (process.platform !== 'darwin' || (!app.isPackaged && process.env.NPKN_FAKE_MIC === '1')) return true;
     if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return true;
     return systemPreferences.askForMediaAccess('microphone');
   }));

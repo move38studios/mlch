@@ -9,14 +9,18 @@ const { _electron: electron } = require('playwright-core');
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : undefined; };
 const library = flag('--library');
+// A WAV file to use as the microphone: the page's getUserMedia plays it.
+const fakeMic = flag('--fake-mic');
 const shots = flag('--shots') || os.tmpdir();
 const [script] = args;
 
 (async () => {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'npkn-run-'));
   const app = await electron.launch({
-    args: [path.resolve(__dirname, '..'), '--dev'],
-    env: { ...process.env, NPKN_ELECTRON_USER_DATA: profile, NPKN_LIBRARY: library || path.join(profile, 'napkins'), NPKN_ELECTRON_PORT: '47851' },
+    args: [
+      path.resolve(__dirname, '..'), '--dev',
+    ],
+    env: { ...process.env, ...(fakeMic ? { NPKN_FAKE_MIC: '1' } : {}), NPKN_ELECTRON_USER_DATA: profile, NPKN_LIBRARY: library || path.join(profile, 'napkins'), NPKN_ELECTRON_PORT: '47851' },
     timeout: 180_000,
   });
   let failed = false;
@@ -26,6 +30,22 @@ const [script] = args;
     page.on('pageerror', (error) => console.log('[pageerror]', error.message));
     await page.waitForLoadState('networkidle', { timeout: 180_000 });
     const base = new URL(page.url()).origin;
+    if (fakeMic) {
+      const audio = fs.readFileSync(fakeMic).toString('base64');
+      await page.evaluate((b64) => {
+        navigator.mediaDevices.getUserMedia = async () => {
+          const ctx = new AudioContext();
+          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          const buffer = await ctx.decodeAudioData(bytes.buffer);
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          const destination = ctx.createMediaStreamDestination();
+          source.connect(destination);
+          source.start();
+          return destination.stream;
+        };
+      }, audio);
+    }
     const shot = async (name) => { const file = path.join(shots, `${name}.png`); await page.screenshot({ path: file }); console.log('shot', file); };
     await require(path.resolve(script))({ app, page, base, shot });
   } catch (error) {

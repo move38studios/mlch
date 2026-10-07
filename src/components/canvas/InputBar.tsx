@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { useNapkin } from "@/lib/napkin/client";
+import { MicButton, TranscriptStrip } from "./Mic";
 
 async function post(path: string, body: unknown): Promise<void> {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -38,7 +39,9 @@ export function InputBar({ napkinId, children }: { napkinId: string; children?: 
 
   return (
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 w-[min(680px,calc(100%-380px))] min-w-[360px]">
+      <TranscriptStrip />
       <div className="flex items-end gap-2 rounded-xl border border-line bg-white/95 backdrop-blur shadow-lg px-2 py-2">
+        <MicButton napkinId={napkinId} />
         {children}
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex gap-1 px-1 pb-1 text-[11px]">

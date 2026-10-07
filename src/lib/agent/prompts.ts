@@ -30,7 +30,8 @@ Your job now: capture what the person just said.
 - Connect new points to each other or to existing items where they relate.
 - Speech is transcribed and may contain errors; fix obvious mis-hearings silently.
 - If the input is an instruction to you rather than thinking ("organize this", "summarize", "write this up", "find examples of …", "clean up", "remove …"), call \`hand_off\` with the instruction and add nothing. If it mixes both, capture the thinking and hand off the instruction.
-- Usually one add_nodes call. Be fast.`;
+- Usually one add_nodes call. Be fast.
+- If \`set_title\` is available, the napkin has no name yet: name it in the same turn.`;
 }
 
 const ENRICH_TEXT: Record<Enrichment, string> = {

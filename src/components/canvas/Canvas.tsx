@@ -308,7 +308,7 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
       selectionOnDrag
       panOnDrag={[1, 2]}
       fitView
-      fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+      fitViewOptions={{ padding: { top: "40px", left: "40px", right: "40px", bottom: "150px" }, maxZoom: 1 }}
       proOptions={{ hideAttribution: true }}
     >
       <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="#d4cfc4" />
