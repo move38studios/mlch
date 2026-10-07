@@ -45,7 +45,8 @@ function FloatingEdgeImpl({ id, source, target, data, selected, markerEnd }: Edg
           strokeDasharray: data?.ai ? "4 4" : undefined,
         }}
       />
-      {data?.label && (
+      {/* A label that would not fit between the cards shows only when the edge is selected. */}
+      {data?.label && (selected || Math.hypot(b.x - a.x, b.y - a.y) > data.label.length * 6.5 + 24) && (
         <EdgeLabelRenderer>
           <div
             className="absolute pointer-events-none text-[11px] text-ink-2 bg-paper/90 px-1.5 py-0.5 rounded"

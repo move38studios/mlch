@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, X } from "lucide-react";
 import { useNapkin } from "@/lib/napkin/client";
 import { Canvas } from "./Canvas";
+import { InputBar } from "./InputBar";
+import { JobStatus } from "./JobStatus";
 import { SidePanel } from "./SidePanel";
 
 function Title() {
@@ -70,6 +72,7 @@ export function NapkinView({ id }: { id: string }) {
         <Title />
         <div className="flex-1" />
         {!connected && napkin && <span className="text-xs text-ink-3">Reconnecting</span>}
+        {napkin && <JobStatus napkinId={id} />}
       </header>
       <div className="relative flex-1 min-h-0 flex">
         <div className="relative flex-1 min-w-0">
@@ -77,7 +80,10 @@ export function NapkinView({ id }: { id: string }) {
           {error ? (
             <p className="p-8 text-sm text-ink-2">{error}</p>
           ) : napkin ? (
-            <Canvas napkin={napkin} />
+            <>
+              <Canvas napkin={napkin} />
+              <InputBar napkinId={id} />
+            </>
           ) : null}
         </div>
         <SidePanel />

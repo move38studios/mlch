@@ -257,9 +257,20 @@ export async function applyToNapkin(
   const batch: OpBatch = { id: newClientId("b"), napkinId: id, ops, origin, ...(clientId ? { clientId } : {}), at: now };
   await fs.appendFile(path.join(napkinDir(id), "events.jsonl"), JSON.stringify(batch) + "\n");
   scheduleSave(id, entry);
+  await syncDocs(id, next, ops);
   broadcast(entry, { type: "ops", batch });
   for (const hook of state().afterApply) hook(id, batch);
   return batch;
+}
+
+/** A write-up edited on the canvas updates its file in docs/. */
+async function syncDocs(id: string, napkin: Napkin, ops: NapkinOp[]): Promise<void> {
+  for (const op of ops) {
+    if (op.op !== "updateNode" || op.patch.text === undefined) continue;
+    const docPath = napkin.nodes[op.id]?.docPath;
+    if (!docPath || !/^docs\/[a-z0-9-]+\.md$/.test(docPath)) continue;
+    await atomicWriteFile(path.join(napkinDir(id), docPath), op.patch.text ?? "");
+  }
 }
 
 export function onAfterApply(hook: (id: string, batch: OpBatch) => void): void {

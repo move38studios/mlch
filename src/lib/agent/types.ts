@@ -151,11 +151,6 @@ export interface HarnessTurnParams {
   effort?: string;
   /** Turn on the harness's own web search and fetch. */
   webAccess?: boolean;
-  /**
-   * Read-only file access (Claude: Read, Glob, Grep) inside these absolute
-   * folders, for folder ingestion. Absent: no file tools.
-   */
-  readRoots?: string[];
   signal: AbortSignal;
 }
 
