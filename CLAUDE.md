@@ -2,6 +2,8 @@
 
 Formerly npkn. In the interface the product is **Mulch** and the thing you create is barely named ("New", titles, "This one / All"); where a noun is needed it is "a mulch". In code the thing is still a **napkin** (types, store, routes, tools); keep that internal term.
 
+Spelling: people see and say **Mulch** (app name, window, menus, `~/Documents/Mulch`). The handle is **mlch**: domain mlch.app, this folder and the repo, the bundle id (`app.mlch.mac` when packaged), social handles. Internal identifiers stay `mulch` (`MULCH_*`, `~/.mulch`).
+
 Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user's own Claude Code / Codex subscription. Product vision: README.md. Plan and status: docs/PLAN.md.
 
 ## Commands
