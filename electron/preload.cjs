@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('mlchDesktop', {
   },
   openLogs: () => ipcRenderer.invoke('desktop:open-logs'),
   microphoneAccess: () => ipcRenderer.invoke('desktop:microphone-access'),
+  showWindow: () => ipcRenderer.invoke('desktop:show-window'),
   credentials: {
     status: () => ipcRenderer.invoke('desktop:credentials:status'),
     write: (value) => ipcRenderer.invoke('desktop:credentials:write', value),

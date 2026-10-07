@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Barriecito, Schibsted_Grotesk } from "next/font/google";
 import "./globals.css";
+import { ScreenshotListener } from "@/components/desktop/Screenshot";
 
 /* Interface: a sturdy, slightly condensed grotesque that sits quietly next
    to the hand-drawn logo. Barriecito (the logo's lettering) is reserved for
@@ -13,7 +14,10 @@ export const metadata: Metadata = { title: "mlch", icons: { icon: "/brand/icon.s
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={`${ui.variable} ${scribble.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ScreenshotListener />
+      </body>
     </html>
   );
 }

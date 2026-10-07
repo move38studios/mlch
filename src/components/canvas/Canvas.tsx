@@ -359,6 +359,18 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     [mulchId],
   );
 
+  // A screenshot (see components/desktop/Screenshot.tsx) lands in the middle of the view.
+  useEffect(() => {
+    if (readOnly) return;
+    const onFile = (event: Event) => {
+      const file = (event as CustomEvent<File>).detail;
+      const at = flow.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      void ingest("files", { x: at.x - 130, y: at.y - 100 }, file);
+    };
+    window.addEventListener("mlch:add-file", onFile);
+    return () => window.removeEventListener("mlch:add-file", onFile);
+  }, [flow, ingest, readOnly]);
+
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();

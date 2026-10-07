@@ -11,6 +11,8 @@ export interface MlchDesktop {
   };
   openLogs(): Promise<void>;
   microphoneAccess(): Promise<boolean>;
+  /** Bring the window to the front (after a screenshot of another app). */
+  showWindow?(): Promise<void>;
   credentials: {
     status(): Promise<Result<Record<string, boolean>>>;
     write(value: Record<string, string | null>): Promise<Result<Record<string, boolean>>>;

@@ -4,7 +4,7 @@
 // on it, and answers the few native requests the server and page make
 // (folder picker, reveal in Finder, stored keys). Every request to the local
 // server carries a per-launch token; the server refuses anything without it.
-const { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, Notification, session, shell, systemPreferences, utilityProcess, safeStorage, screen } = require('electron');
+const { app, BrowserWindow, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, session, shell, systemPreferences, utilityProcess, safeStorage, screen } = require('electron');
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -57,6 +57,8 @@ function openExternal(url) { if (/^https?:\/\//i.test(url)) shell.openExternal(u
 function allowedPermission(contents, permission, requestingURL) {
   if (!contents || contents !== window?.webContents) return false;
   try { if (new URL(requestingURL).origin !== origin) return false; } catch { return false; }
+  // Screen capture only right after the person asked for a screenshot.
+  if (permission === 'display-capture') return Date.now() < captureUntil;
   // `media` is the microphone (the page never asks for the camera).
   return ['clipboard-read', 'clipboard-sanitized-write', 'fullscreen', 'media'].includes(permission);
 }
@@ -142,6 +144,35 @@ async function fileThumbnail(file, size) {
   const { width, height } = nativeImage.createFromBuffer(png).getSize();
   if (width === height && !/\.(xlsx?|numbers)$/i.test(file)) throw new Error('No preview, only the file icon.');
   return png.toString('base64');
+}
+
+// mlch: screenshots onto the canvas. The shortcut or menu opens a short window
+// in which the page may capture; macOS's own picker (macOS 15+) lets the
+// person choose a window, so no Screen Recording permission is needed.
+const SCREENSHOT_SHORTCUT = 'CommandOrControl+Shift+2';
+let captureUntil = 0;
+
+async function screenshotToCanvas() {
+  if (!window) await createWindow();
+  if (!window) return;
+  captureUntil = Date.now() + 60_000;
+  await window.webContents.executeJavaScript("window.dispatchEvent(new Event('mlch:screenshot'))", true).catch(log);
+}
+
+function setupScreenshots() {
+  const testing = process.env.MLCH_TEST_CAPTURE === '1' && !app.isPackaged;
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    // Only without the system picker (older macOS, or automated runs).
+    let fromApp = false;
+    try { fromApp = new URL(request.frame?.url ?? '').origin === origin && !request.frame?.parent; } catch {}
+    if (Date.now() >= captureUntil || !window || !fromApp) { callback(null); return; }
+    captureUntil = 0;
+    if (testing) { callback({ video: window.webContents.mainFrame }); return; }
+    desktopCapturer.getSources({ types: ['screen'] })
+      .then(sources => callback(sources[0] ? { video: sources[0] } : null))
+      .catch(error => { log(error); callback(null); });
+  }, { useSystemPicker: !testing });
+  if (!globalShortcut.register(SCREENSHOT_SHORTCUT, () => void screenshotToCanvas())) log(`Shortcut ${SCREENSHOT_SHORTCUT} is taken by another app.`);
 }
 
 function setJobActivity(next) {
@@ -253,6 +284,7 @@ function registerBridge() {
   ipcMain.handle('desktop:backend-state', guarded(() => backend.online()));
   ipcMain.handle('desktop:restart-backend', guarded(() => startWithRetry()));
   ipcMain.handle('desktop:open-logs', guarded(() => openLogs()));
+  ipcMain.handle('desktop:show-window', guarded(() => { if (window?.isMinimized()) window.restore(); window?.show(); window?.focus(); }));
   ipcMain.handle('desktop:microphone-access', guarded(async () => {
     // Automated runs feed a fake microphone and must not raise the system prompt.
     if (process.platform !== 'darwin' || (!app.isPackaged && process.env.MLCH_FAKE_MIC === '1')) return true;
@@ -264,7 +296,11 @@ function registerBridge() {
 function buildMenu() {
   return Menu.buildFromTemplate([
     { role: 'appMenu' },
-    { label: 'File', submenu: [{ role: 'close' }] },
+    { label: 'File', submenu: [
+      { label: 'Add Screenshot', accelerator: SCREENSHOT_SHORTCUT, registerAccelerator: false, click: () => void screenshotToCanvas() },
+      { type: 'separator' },
+      { role: 'close' },
+    ] },
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
@@ -295,7 +331,7 @@ else {
     }
     quitting = true;
   });
-  app.on('will-quit', () => backend?.kill());
+  app.on('will-quit', () => { globalShortcut.unregisterAll(); backend?.kill(); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (!window && backend?.online()) createWindow().catch(fail); });
   process.on('uncaughtException', error => { void fail(error); });
@@ -335,6 +371,7 @@ else {
     session.defaultSession.setPermissionCheckHandler(allowedPermission);
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowedPermission(contents, permission, details.requestingUrl)));
     Menu.setApplicationMenu(buildMenu());
+    setupScreenshots();
     if (await startWithRetry()) await createWindow();
   }).catch(fail);
 }
