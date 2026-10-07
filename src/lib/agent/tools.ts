@@ -243,7 +243,9 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   set_title: {
     name: "set_title",
     title: "Name mulch",
-    description: "Name the canvas: 2-5 plain words for what it is about.",
+    description:
+      "Name the canvas: 2-5 plain words for what it is about, in sentence case (capital only on the first word and on names), " +
+      "no quotes or full stop. Example: \"Cities learning from forests\", not \"Cities Learning From Forests\".",
     inputShape: { title: z.string().min(1).max(60) },
     readOnly: false,
   },

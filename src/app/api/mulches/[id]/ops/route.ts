@@ -3,6 +3,8 @@ import { handle, jsonError } from "@/lib/http";
 import "@/lib/mulch/history";
 // Registers the search index hook.
 import "@/lib/search";
+// Registers the naming of untitled mulches.
+import "@/lib/agent/jobs";
 import { parseOps } from "@/lib/mulch/schema";
 import { applyToMulch } from "@/lib/mulch/store";
 

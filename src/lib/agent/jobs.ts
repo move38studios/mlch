@@ -18,7 +18,7 @@ import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/age
 import type { JobLane, JobStatus, TranscriptSegment } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
-import { applyToMulch, emit, getMulch, mulchDir, setJob } from "@/lib/mulch/store";
+import { applyToMulch, emit, getMulch, mulchDir, onAfterApply, setJob } from "@/lib/mulch/store";
 import { modelFor, readSettings, type Lane } from "@/lib/settings";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -397,6 +397,52 @@ function submitReview(mulchId: string, record: GenerationRecord): void {
     },
   });
 }
+
+/* ── naming ──────────────────────────────────────────────────── */
+
+/** Mulches already being named in this process, so each is asked once. */
+const naming = new Set<string>();
+
+/**
+ * An untitled mulch with a couple of items gets a name, whatever filled it
+ * (notes typed on the canvas, dropped files, ingest). Capture and folder jobs
+ * name it in their own turn; this covers everything else.
+ */
+export function nameIfUntitled(mulchId: string): void {
+  if (naming.has(mulchId)) return;
+  naming.add(mulchId);
+  // Let the first few changes land first, and give capture a chance to name it itself.
+  setTimeout(() => {
+    void (async () => {
+      const mulch = await getMulch(mulchId).catch(() => undefined);
+      if (!mulch || mulch.title !== "Untitled" || Object.keys(mulch.nodes).length < 2) {
+        naming.delete(mulchId);
+        return;
+      }
+      enqueue(mulchId, {
+        lane: "fast",
+        label: "Naming",
+        async run(job, signal) {
+          const current = await getMulch(mulchId);
+          if (current.title !== "Untitled") return;
+          await runTurn({
+            mulchId,
+            job,
+            signal,
+            lane: "fast",
+            systemPrompt: `You name canvases in mlch. Call set_title once with a name for the canvas in the message, then stop.`,
+            prompt: `<canvas>\n${describeMulch(current, { textLimit: 200, maxNodes: 40 })}\n</canvas>`,
+            tools: ["set_title"],
+          });
+        },
+      });
+    })();
+  }, 8000);
+}
+
+onAfterApply((mulchId, batch) => {
+  if (batch.ops.some((op) => op.op === "addNode")) nameIfUntitled(mulchId);
+});
 
 onFinished((record) => {
   if (record.review && record.status !== "cancelled") submitReview(record.mulchId, record);
