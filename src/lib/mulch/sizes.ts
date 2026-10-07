@@ -32,7 +32,7 @@ const FALLBACK_HEIGHT: Record<NodeKind, number> = {
   writeup: 220,
   artifact: 240,
   media: 300,
-  note: 70,
+  note: 120,
 };
 
 /** Artifact cards with a live preview are taller. */

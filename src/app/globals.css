@@ -15,7 +15,8 @@
   --line: rgba(0, 0, 0, 0.1);
   --line-2: rgba(0, 0, 0, 0.18);
   --amber: #ffc000;
-  --amber-soft: #fff0b3; /* question post-its */
+  --amber-soft: #fff0b3; /* the person's post-it notes */
+  --blush: #f9e8e3; /* questions */
   --mist: #eaf1f6; /* definitions */
   --sage: #edf2e8; /* examples, related ideas */
   --danger: #c4361b;
@@ -34,6 +35,7 @@
   --color-line-2: var(--line-2);
   --color-amber: var(--amber);
   --color-amber-soft: var(--amber-soft);
+  --color-blush: var(--blush);
   --color-mist: var(--mist);
   --color-sage: var(--sage);
   --color-danger: var(--danger);

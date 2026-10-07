@@ -17,7 +17,7 @@ export type MulchFlowNode = Node<{ node: MulchNode; mulchId: string; fresh: bool
 /** The person's own words (said, typed or touched) carry an ink outline; AI material a hairline. */
 function outline(node: MulchNode, tinted?: boolean): string {
   const own = node.origin === "user" || node.origin.startsWith("speech:") || !!node.userTouched;
-  if (node.kind === "note") return "border border-transparent";
+  if (node.kind === "note") return "border border-transparent"; // a post-it: its colour says whose it is
   if (own && (node.kind === "idea" || node.kind === "question")) return "border-[1.5px] border-ink";
   return tinted ? "border border-transparent" : "border border-line";
 }

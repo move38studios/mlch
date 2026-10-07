@@ -464,7 +464,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
                 e.stopPropagation();
                 if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) commitDraft();
               }}
-              className="w-full px-4 py-3 text-[16px] leading-[1.4] bg-chrome border-[1.5px] border-ink rounded-[10px] outline-none resize-none field-sizing-content placeholder:text-ink-3"
+              className="w-full min-h-[120px] px-4 py-3 text-[15.5px] leading-[1.4] bg-amber-soft rounded-[3px] shadow-[0_6px_14px_-8px_rgba(0,0,0,0.35)] outline-none resize-none field-sizing-content placeholder:text-ink-3"
             />
           </div>
         </ViewportPortal>
