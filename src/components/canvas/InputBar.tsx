@@ -14,20 +14,22 @@ async function post(path: string, body: unknown): Promise<void> {
 }
 
 /**
- * Typing into the mulch. "Thought" goes through the fast lane like speech;
- * "Instruction" goes straight to the command lane.
+ * Typing into the mulch. Text goes through the fast lane like speech, which
+ * tells thinking from instructions. ⌘↩, or a leading "/", sends it straight
+ * to the command lane as an instruction.
  */
 export function InputBar({ mulchId, children }: { mulchId: string; children?: React.ReactNode }) {
   const [text, setText] = useState("");
-  const [mode, setMode] = useState<"thought" | "instruction">("thought");
   const [sending, setSending] = useState(false);
 
-  async function send() {
-    const value = text.trim();
+  async function send(forceInstruction = false) {
+    let value = text.trim();
+    const instruction = forceInstruction || value.startsWith("/");
+    if (value.startsWith("/")) value = value.slice(1).trim();
     if (!value || sending) return;
     setSending(true);
     try {
-      if (mode === "instruction") await post(`/api/mulches/${mulchId}/command`, { instruction: value });
+      if (instruction) await post(`/api/mulches/${mulchId}/command`, { instruction: value });
       else await post(`/api/mulches/${mulchId}/input`, { text: value });
       setText("");
     } catch (error) {
@@ -49,28 +51,16 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              void send();
+              void send(e.metaKey || e.ctrlKey);
             }
           }}
           rows={1}
-          placeholder={mode === "thought" ? "Type" : "Instruction"}
+          placeholder="Type"
           aria-label="Input"
           className="flex-1 min-w-0 resize-none bg-transparent outline-none px-1.5 py-2 text-[15.5px] leading-[1.35] max-h-40 field-sizing-content placeholder:text-ink-3"
         />
-        <div className="flex shrink-0 rounded-lg bg-paper-2 p-0.5 text-[12.5px]" role="group" aria-label="Mode">
-          {(["thought", "instruction"] as const).map((value) => (
-            <button
-              key={value}
-              onClick={() => setMode(value)}
-              aria-pressed={mode === value}
-              className={`px-2 py-1 rounded-md ${mode === value ? "bg-chrome text-ink font-medium shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-ink-3 hover:text-ink"}`}
-            >
-              {value === "thought" ? "Thought" : "Instruction"}
-            </button>
-          ))}
-        </div>
         <button
-          onClick={send}
+          onClick={() => void send()}
           disabled={!text.trim() || sending}
           aria-label="Send"
           title="Send"
