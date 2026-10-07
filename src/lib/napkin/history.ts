@@ -14,6 +14,7 @@
  * ops, so a restore can itself be undone or travelled back from.
  */
 
+import { log } from "@/lib/log";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -175,7 +176,7 @@ function scheduleEditCheckpoint(id: string): void {
     id,
     setTimeout(() => {
       s.timers.delete(id);
-      checkpoint(id, "edit").catch((error) => console.error("[history] checkpoint failed", error));
+      checkpoint(id, "edit").catch((error) => log.error("history", "checkpoint failed", { napkinId: id, error }));
     }, delay),
   );
 }

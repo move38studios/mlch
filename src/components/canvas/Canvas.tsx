@@ -361,6 +361,27 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
     return () => window.removeEventListener("paste", onPaste);
   }, [flow, ingest, readOnly]);
 
+  // Show what the agent or a search result points at.
+  const focus = useNapkin((s) => s.focus);
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!focus) return;
+    const ids = focus.ids.filter((id) => napkin.nodes[id]);
+    if (!ids.length) return;
+    void flow.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.35, maxZoom: 1.1, duration: 600 });
+    setNodes((current) => current.map((node) => ({ ...node, selected: ids.includes(node.id) })));
+    setHighlighted(new Set(ids));
+    const one = ids.length === 1 ? napkin.nodes[ids[0]] : undefined;
+    if (one && (focus.page || focus.quote || ["doc", "link", "writeup"].includes(one.kind))) {
+      useCanvasUi.getState().setHighlight({ quote: focus.quote, page: focus.page });
+      useCanvasUi.getState().setOpen(one.id);
+    }
+    const timer = setTimeout(() => setHighlighted(new Set()), 3500);
+    return () => clearTimeout(timer);
+    // Only when a new focus arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.at]);
+
   // Undo / redo, unless typing.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -376,9 +397,14 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo, readOnly]);
 
+  const shownNodes = useMemo(
+    () => (highlighted.size ? nodes.map((node) => (highlighted.has(node.id) ? { ...node, className: "napkin-focused" } : node)) : nodes),
+    [nodes, highlighted],
+  );
+
   return (
     <ReactFlow<FlowNode, Edge>
-      nodes={nodes}
+      nodes={shownNodes}
       edges={edges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}

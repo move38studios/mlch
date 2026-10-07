@@ -1,6 +1,8 @@
 import { handle, jsonError } from "@/lib/http";
 // Registers the checkpoint hook for edits.
 import "@/lib/napkin/history";
+// Registers the search index hook.
+import "@/lib/search";
 import { parseOps } from "@/lib/napkin/schema";
 import { applyToNapkin } from "@/lib/napkin/store";
 

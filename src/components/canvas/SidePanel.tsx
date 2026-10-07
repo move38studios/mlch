@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink, FolderOpen, X } from "lucide-react";
@@ -34,6 +34,30 @@ export function SidePanel() {
     };
   }, [napkinId, textAsset]);
 
+  const highlight = useCanvasUi((s) => s.highlight);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Find the quote (or page marker) in the shown text, highlight and scroll to it.
+  useEffect(() => {
+    const root = contentRef.current;
+    const needle = (highlight?.quote ?? (highlight?.page ? `--- page ${highlight.page} ---` : "")).trim().toLowerCase().slice(0, 80);
+    if (!root || !needle || typeof CSS === "undefined" || !("highlights" in CSS)) return;
+    const timer = setTimeout(() => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        const at = (text.textContent ?? "").toLowerCase().indexOf(needle.slice(0, Math.min(needle.length, 60)));
+        if (at < 0) continue;
+        const range = document.createRange();
+        range.setStart(text, at);
+        range.setEnd(text, Math.min((text.textContent ?? "").length, at + needle.length));
+        (CSS as unknown as { highlights: Map<string, unknown> }).highlights.set("npkn-find", new (window as unknown as { Highlight: new (r: Range) => unknown }).Highlight(range));
+        (text.parentElement ?? root).scrollIntoView({ block: "center", behavior: "smooth" });
+        return;
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [highlight, full, node?.id]);
+
   if (!node) return null;
   const body = full && full.assetId === textAsset ? full.text : node.text;
   const revealable = desktop() && ((node.assetId && node.kind !== "link") || node.docPath);
@@ -64,7 +88,7 @@ export function SidePanel() {
           <X size={15} />
         </button>
       </div>
-      <div className="flex-1 overflow-auto px-6 py-5">
+      <div ref={contentRef} className="flex-1 overflow-auto px-6 py-5">
         {node.kind === "media" && napkinId && (
           <div className="-mx-6 -mt-5 mb-4 bg-paper-2">
             <MediaPlayer node={node} napkinId={napkinId} large />

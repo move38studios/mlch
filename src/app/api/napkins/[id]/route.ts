@@ -1,5 +1,6 @@
 import { handle } from "@/lib/http";
 import { getNapkin, trashNapkin } from "@/lib/napkin/store";
+import { dropNapkin } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   const { id } = await params;
   return handle(async () => {
     await trashNapkin(id);
+    dropNapkin(id);
     return { ok: true };
   });
 }

@@ -15,6 +15,7 @@
  * agent both send ops here, which are applied, logged and broadcast.
  */
 
+import { log } from "@/lib/log";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -220,7 +221,7 @@ async function save(id: string): Promise<void> {
 function scheduleSave(id: string, entry: OpenNapkin): void {
   if (entry.saveTimer) clearTimeout(entry.saveTimer);
   entry.saveTimer = setTimeout(() => {
-    save(id).catch((error) => console.error(`[napkin] save ${id} failed`, error));
+    save(id).catch((error) => log.error("napkin", "save failed", { napkinId: id, error }));
   }, SAVE_DELAY_MS);
 }
 

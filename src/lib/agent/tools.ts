@@ -14,15 +14,17 @@ import { z } from "zod";
 import { newClientId } from "@/lib/napkin/ids";
 import { arrangeGroups, boundsOf, placeNear } from "@/lib/napkin/place";
 import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/napkin/sizes";
-import { applyToNapkin, atomicWriteFile, emit, getNapkin, napkinDir } from "@/lib/napkin/store";
+import { applyToNapkin, atomicWriteFile, emit, getNapkin, listNapkins, napkinDir } from "@/lib/napkin/store";
 import { NODE_KINDS, type Napkin, type NapkinNode, type NapkinOp, type NodeKind } from "@/lib/napkin/types";
-import { assetPath, isImage } from "@/lib/ingest/ingest";
+import { assetPath, isHttpUrl, isImage, readLink } from "@/lib/ingest/ingest";
 import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
 import { desktopRequest } from "@/lib/desktop/server";
 import { modelSchema, searchModels } from "@/lib/media/fal";
 import { startGeneration, waitFor } from "@/lib/media/generations";
 import { viewForModel } from "@/lib/media/inspect";
 import { checkBudget, estimateCost } from "@/lib/media/spend";
+import { readAround, search, type SearchHit } from "@/lib/search";
+import { exaSearch } from "@/lib/search/exa";
 import { buildPptx, slideSchema, type Slide } from "@/lib/artifacts/pptx";
 import { hiddenEntry, imageForModel, resolveReadable } from "./files";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime } from "./types";
@@ -52,7 +54,15 @@ export type ToolName =
   | "media_schema"
   | "media_generate"
   | "media_wait"
-  | "media_view";
+  | "media_view"
+  | "search_napkin"
+  | "search_all_napkins"
+  | "read_source"
+  | "focus"
+  | "bring_in"
+  | "exa_search"
+  | "research"
+  | "read_page";
 
 export interface ToolContext {
   napkinId: string;
@@ -66,6 +76,8 @@ export interface ToolContext {
   onHandOff?: (instruction: string) => void;
   /** For make: queue a making job with this brief. */
   onMake?: (brief: string) => void;
+  /** For research: queue a research job with this brief. */
+  onResearch?: (brief: string) => void;
   /** Ids of nodes this job added, in order. */
   added: string[];
   /** The person's request this job serves (for review turns after generations). */
@@ -274,6 +286,81 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     },
     readOnly: false,
   },
+  search_napkin: {
+    name: "search_napkin",
+    title: "Search napkin",
+    description:
+      "Search everything on this napkin by meaning and by words: items, the full text of documents and links (with page numbers), write-ups, artifacts, captions, media prompts, and what the person said. " +
+      "Use it for \"find that image where…\", \"the quote about…\", and before answering about anything not in the napkin summary. Returns passages with item ids.",
+    inputShape: {
+      query: z.string().min(1).max(500),
+      kinds: z.array(z.string()).max(10).optional().describe("Only these item kinds (idea, doc, link, image, media, writeup, artifact, transcript, …)."),
+      limit: z.number().int().min(1).max(30).optional(),
+    },
+    readOnly: true,
+  },
+  search_all_napkins: {
+    name: "search_all_napkins",
+    title: "Search all napkins",
+    description: "Search every napkin of the person's (same as search_napkin, across all). Results name the napkin. Bring an item over with bring_in.",
+    inputShape: { query: z.string().min(1).max(500), limit: z.number().int().min(1).max(30).optional() },
+    readOnly: true,
+  },
+  read_source: {
+    name: "read_source",
+    title: "Read source",
+    description: "Read the full text of an item's source around a page or character offset from a search hit (documents, links, write-ups, artifacts).",
+    inputShape: { id: z.string(), page: z.number().int().min(1).optional(), offset: z.number().int().min(0).optional() },
+    readOnly: true,
+  },
+  focus: {
+    name: "focus",
+    title: "Show",
+    description: "Show items to the person: the canvas moves to them and highlights them. With one document item and a page or quote, its text opens at that place.",
+    inputShape: {
+      ids: z.array(z.string()).min(1).max(20),
+      page: z.number().int().min(1).optional(),
+      quote: z.string().max(400).optional().describe("Text to highlight in the opened document."),
+    },
+    readOnly: true,
+  },
+  exa_search: {
+    name: "exa_search",
+    title: "Search the web (Exa)",
+    description:
+      "Meaning-based web search with page text. Best for: companies and competitors (category \"company\", describe the product rather than naming one), research papers (\"research paper\"), " +
+      "recent news (\"news\" with start_published_date). Use the built-in web search for general questions.",
+    inputShape: {
+      query: z.string().min(2).max(500),
+      category: z.enum(["company", "research paper", "news", "pdf", "github", "personal site", "financial report"]).optional(),
+      start_published_date: z.string().max(10).optional().describe("YYYY-MM-DD"),
+      num_results: z.number().int().min(1).max(20).optional(),
+    },
+    readOnly: true,
+  },
+  research: {
+    name: "research",
+    title: "Research",
+    description:
+      "Start a research job for anything that needs many searches and reading: competitor or market scans, prior art, literature reviews, landscape overviews. " +
+      "It runs for several minutes and puts sources, a comparison table and a write-up on the napkin. Give a complete brief: the question, what to compare, what matters.",
+    inputShape: { brief: z.string().min(10).max(8000) },
+    readOnly: true,
+  },
+  read_page: {
+    name: "read_page",
+    title: "Read page",
+    description: "The full text of a web page (more reliable than the built-in fetch for long or script-heavy pages).",
+    inputShape: { url: z.string().url().max(2000) },
+    readOnly: true,
+  },
+  bring_in: {
+    name: "bring_in",
+    title: "Bring in",
+    description: "Copy an item from another napkin into this one (with its file), noting where it came from.",
+    inputShape: { napkin_id: z.string(), item_id: z.string(), near: z.array(z.string()).max(6).optional() },
+    readOnly: false,
+  },
   media_search: {
     name: "media_search",
     title: "Find models",
@@ -407,6 +494,10 @@ function slugify(title: string): string {
 
 /** Review turns after a generation, per request. */
 export const MAX_REVIEW_ROUNDS = 3;
+
+function hitLine(hit: SearchHit): string {
+  return `item ${hit.nodeId} [${hit.kind}]${hit.title ? ` "${hit.title}"` : ""}${hit.page ? ` p.${hit.page}` : ""}${hit.offset !== undefined && hit.kind !== "transcript" ? ` @${hit.offset}` : ""}: ${hit.snippet}`;
+}
 
 const READ_LIMIT = 30_000;
 const SKIP_DIRS = new Set(["node_modules", ".git", ".next", "dist", "build", "__pycache__", ".venv"]);
@@ -672,6 +763,96 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
         ...ok(`${value.images.length} screenshot(s) of ${docPath}, in order. ${errors}`, `Looked at ${path.basename(docPath)}`),
         images: value.images.map((data) => ({ data, mimeType: "image/png" })),
       };
+    },
+
+    async research(args) {
+      if (!ctx.onResearch) return fail("Not available here.");
+      ctx.onResearch((args as { brief: string }).brief);
+      return ok("Research job queued; it will add its results to the napkin.", "Started research");
+    },
+
+    async read_page(args) {
+      const { url } = args as { url: string };
+      if (!isHttpUrl(url)) return fail("Not a web link.");
+      const page = await readLink(url);
+      if (!page) return fail("The page could not be read (blocked, empty or not a page).");
+      return ok(`${page.title}\n${url}\n\n${page.text.slice(0, 40_000)}${page.text.length > 40_000 ? "\n…(cut)" : ""}`, `Read ${new URL(url).hostname}`);
+    },
+
+    async exa_search(args) {
+      const { query, category, start_published_date, num_results } = args as { query: string; category?: string; start_published_date?: string; num_results?: number };
+      const results = await exaSearch({ query, category, startPublishedDate: start_published_date, numResults: num_results });
+      if (!results.length) return ok("No results.", "Found nothing");
+      return ok(
+        results.map((r) => `${r.title}\n${r.url}${r.publishedDate ? ` (${r.publishedDate})` : ""}\n${(r.text ?? "").replace(/\s+/g, " ").slice(0, 900)}`).join("\n\n"),
+        `Found ${results.length} pages`,
+      );
+    },
+
+    async search_napkin(args) {
+      const { query, kinds, limit } = args as { query: string; kinds?: string[]; limit?: number };
+      const hits = await search(query, { napkinIds: [ctx.napkinId], kinds, limit: limit ?? 10 });
+      if (!hits.length) return ok("Nothing found.", "Found nothing");
+      return ok(hits.map(hitLine).join("\n\n"), `Found ${hits.length}`);
+    },
+
+    async search_all_napkins(args) {
+      const { query, limit } = args as { query: string; limit?: number };
+      const hits = await search(query, { limit: limit ?? 12 });
+      if (!hits.length) return ok("Nothing found.", "Found nothing");
+      const titles = new Map((await listNapkins()).map((n) => [n.id, n.title]));
+      return ok(hits.map((hit) => `napkin ${hit.napkinId} "${titles.get(hit.napkinId) ?? ""}"${hit.napkinId === ctx.napkinId ? " (this one)" : ""} · ${hitLine(hit)}`).join("\n\n"), `Found ${hits.length}`);
+    },
+
+    async read_source(args) {
+      const { id, page, offset } = args as { id: string; page?: number; offset?: number };
+      const text = await readAround(ctx.napkinId, id, { page, offset });
+      return text ? ok(text, "Read source") : fail(`No item ${id}.`);
+    },
+
+    async focus(args) {
+      const { ids, page, quote } = args as { ids: string[]; page?: number; quote?: string };
+      const napkin = await getNapkin(ctx.napkinId);
+      const found = ids.filter((id) => napkin.nodes[id]);
+      if (!found.length) return fail("None of those items are on this napkin.");
+      await emit(ctx.napkinId, { type: "focus", ids: found, ...(page ? { page } : {}), ...(quote ? { quote } : {}) });
+      return ok(`Showing ${found.length} item(s).`, "Showed items");
+    },
+
+    async bring_in(args) {
+      const { napkin_id, item_id, near } = args as { napkin_id: string; item_id: string; near?: string[] };
+      if (napkin_id === ctx.napkinId) return fail("That item is already on this napkin.");
+      const source = await getNapkin(napkin_id).catch(() => undefined);
+      const node = source?.nodes[item_id];
+      if (!source || !node) return fail(`No item ${item_id} in napkin ${napkin_id}.`);
+      // Files come along, so the copy works on its own.
+      if (node.assetId) {
+        for (const asset of [node.assetId, `${node.assetId.split(".")[0]}.md`]) {
+          await fs.mkdir(path.join(napkinDir(ctx.napkinId), "assets"), { recursive: true });
+          await fs.copyFile(assetPath(napkin_id, asset), assetPath(ctx.napkinId, asset)).catch(() => undefined);
+        }
+      }
+      const napkin = await getNapkin(ctx.napkinId);
+      const id = newClientId("n");
+      const anchors = (near ?? []).filter((key) => napkin.nodes[key]);
+      const position = placeNear(napkin, { w: NODE_WIDTH[node.kind], h: rectOf(node).h }, { anchorIds: anchors, seed: id });
+      const copy: NapkinNode = {
+        ...node,
+        id,
+        x: position.x,
+        y: position.y,
+        groupId: undefined,
+        docPath: undefined,
+        title: node.title ?? undefined,
+        text: `${node.text}\n\n(From napkin "${source.title}")`,
+        origin,
+        userTouched: undefined,
+        createdAt: Date.now(),
+      };
+      const ops: NapkinOp[] = [{ op: "addNode", node: JSON.parse(JSON.stringify(copy)) }];
+      await commit(ops);
+      ctx.added.push(id);
+      return ok(`Brought in as ${id}.`, "Brought in an item", ops);
     },
 
     async media_search(args) {

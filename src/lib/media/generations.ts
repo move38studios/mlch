@@ -10,6 +10,7 @@
  * for review turns).
  */
 
+import { log } from "@/lib/log";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { saveAsset } from "@/lib/ingest/ingest";
@@ -209,6 +210,7 @@ export async function startGeneration(options: StartOptions): Promise<Generation
     record.input = (await resolveInputs(options.napkinId, options.input)) as Record<string, unknown>;
     record.handle = await fal.submit(options.endpoint, record.input);
     if (record.cost) await recordSpend(record.cost);
+    log.info("media", "generation submitted", { napkinId: record.napkinId, generationId: record.id, endpoint: record.endpoint, cost: record.cost });
     await persist(options.napkinId);
     poll(record);
   } catch (error) {
@@ -268,7 +270,7 @@ function poll(record: GenerationRecord): void {
         await sleep(Date.now() - record.createdAt > 60_000 ? 4000 : 1500);
       }
     } catch (error) {
-      console.error("[generations] poll failed", error);
+      log.error("media", "poll failed", { napkinId: record.napkinId, generationId: record.id, error });
       await finish(record, "failed", error instanceof Error ? error.message : String(error)).catch(() => {});
     } finally {
       s.polling.delete(record.id);
@@ -311,7 +313,7 @@ async function complete(record: GenerationRecord): Promise<void> {
       const fileName = `${record.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "media"}${ext}`;
       saved.push({ assetId: await saveAsset(record.napkinId, bytes, fileName), mime, fileName });
     } catch (error) {
-      console.error("[generations] download failed", error);
+      log.error("media", "download failed", { napkinId: record.napkinId, generationId: record.id, error });
     }
   }
   if (!saved.length) {
@@ -337,6 +339,7 @@ async function complete(record: GenerationRecord): Promise<void> {
 
 async function finish(record: GenerationRecord, status: GenerationRecord["status"], error?: string): Promise<void> {
   const wasCharged = !!record.handle && record.cost !== undefined;
+  log[status === "failed" ? "warn" : "info"]("media", `generation ${status}`, { napkinId: record.napkinId, generationId: record.id, endpoint: record.endpoint, ms: Date.now() - record.createdAt, ...(error ? { error } : {}) });
   record.status = status;
   record.finishedAt = Date.now();
   if (error) record.error = error;
@@ -351,7 +354,7 @@ async function finish(record: GenerationRecord, status: GenerationRecord["status
     try {
       hook(record);
     } catch (hookError) {
-      console.error("[generations] finished hook failed", hookError);
+      log.error("media", "finished hook failed", { generationId: record.id, error: hookError });
     }
   }
 }

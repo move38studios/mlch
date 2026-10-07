@@ -1,5 +1,6 @@
 /** Small helpers for route handlers. */
 
+import { log } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { checkSameOrigin } from "@/lib/agent/server/sameOrigin";
 import { NapkinNotFoundError } from "@/lib/napkin/store";
@@ -15,7 +16,7 @@ export async function handle<T>(work: () => Promise<T>): Promise<NextResponse> {
     return result instanceof NextResponse ? result : NextResponse.json(result ?? { ok: true });
   } catch (error) {
     if (error instanceof NapkinNotFoundError) return jsonError(404, error.message);
-    console.error(error);
+    log.error("api", "request failed", { error });
     return jsonError(500, error instanceof Error ? error.message : String(error));
   }
 }

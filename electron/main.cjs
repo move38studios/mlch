@@ -4,7 +4,7 @@
 // on it, and answers the few native requests the server and page make
 // (folder picker, reveal in Finder, stored keys). Every request to the local
 // server carries a per-launch token; the server refuses anything without it.
-const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, systemPreferences, utilityProcess, safeStorage, screen } = require('electron');
+const { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, session, shell, systemPreferences, utilityProcess, safeStorage, screen } = require('electron');
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -28,6 +28,10 @@ redactor.add([token]);
 
 app.setName('npkn');
 app.setPath('userData', process.env.NPKN_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'npkn'));
+// Test profiles keep their logs to themselves.
+if (process.env.NPKN_ELECTRON_USER_DATA) app.setAppLogsPath(path.join(app.getPath('userData'), 'logs'));
+// Crash dumps stay on this machine (in the app's crashDumps folder); nothing is uploaded.
+crashReporter.start({ uploadToServer: false });
 
 function validCaller(event) {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;
@@ -132,7 +136,7 @@ async function createWindow() {
     event.preventDefault();
   });
   current.webContents.on('render-process-gone', async (_event, details) => {
-    log(`Renderer stopped: ${details.reason}`);
+    log(`Renderer stopped: ${details.reason} (exit ${details.exitCode})`);
     if (quitting) return;
     const { response } = await message({ type: 'error', title: 'npkn window stopped', message: 'The window stopped unexpectedly. Napkins are saved on disk.', buttons: ['Reload', 'Open Logs', 'Quit'], cancelId: 2 });
     if (response === 1) { await openLogs(); return; }
@@ -233,6 +237,10 @@ else {
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (!window && backend?.online()) createWindow().catch(fail); });
   process.on('uncaughtException', error => { void fail(error); });
+  // Any process of the app that ends abnormally (server, GPU, renderer, helpers) is recorded.
+  app.on('child-process-gone', (_event, details) => {
+    if (details.reason !== 'clean-exit') log(`Process gone: ${JSON.stringify(details)}`);
+  });
   process.on('unhandledRejection', log);
   app.whenReady().then(async () => {
     diagnostics = createDiagnostics(app.getPath('logs'), redactor);
@@ -248,6 +256,7 @@ else {
         NODE_ENV: dev ? 'development' : 'production', NPKN_ELECTRON: '1',
         NPKN_ELECTRON_PORT: String(port), NPKN_ELECTRON_TOKEN: token,
         NPKN_LIBRARY: libraryDir(),
+        NPKN_LOGS_DIR: app.getPath('logs'),
       } }),
       onMessage: async (msg, child) => {
         const reply = await serverMessage(msg);

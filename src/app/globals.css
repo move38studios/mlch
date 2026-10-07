@@ -164,3 +164,15 @@ body {
   border: 1px solid var(--line);
   padding: 0.25em 0.5em;
 }
+
+/* Items the agent or a search points at. */
+@keyframes napkin-focus {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(210, 73, 31, 0); }
+  30% { box-shadow: 0 0 0 6px rgba(210, 73, 31, 0.35); }
+}
+.napkin-focused .napkin-node {
+  animation: napkin-focus 1.2s ease-in-out 2;
+}
+::highlight(npkn-find) {
+  background-color: rgba(248, 229, 140, 0.9);
+}

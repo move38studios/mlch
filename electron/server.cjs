@@ -30,6 +30,11 @@ const AGENT_LOCAL_HEADER = 'x-npkn-agent-local';
 const agentLocalSecret = randomBytes(32).toString('hex');
 process.env.NPKN_AGENT_LOCAL_SECRET = agentLocalSecret;
 
+// A stray rejection or exception in route code is logged, not fatal: the
+// window and running jobs keep going. (desktop.log keeps stderr.)
+process.on('unhandledRejection', (reason) => console.error('[server] unhandled rejection', reason));
+process.on('uncaughtException', (error) => console.error('[server] uncaught exception', error));
+
 process.parentPort.on('message', ({ data }) => {
   if (data?.type === 'secrets') { redactor.add(data.values); return; }
   if (data?.type === 'credentials') { globalThis.__npknCredentials = data.values && typeof data.values === 'object' ? data.values : {}; return; }

@@ -9,12 +9,13 @@
 import os from "node:os";
 import path from "node:path";
 
-export type CredentialName = "groq" | "firecrawl" | "fal";
+export type CredentialName = "groq" | "firecrawl" | "fal" | "exa";
 
 const ENV_NAMES: Record<CredentialName, string> = {
   groq: "GROQ_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
   fal: "FAL_KEY",
+  exa: "EXA_API_KEY",
 };
 
 type DesktopGlobals = typeof globalThis & {

@@ -15,7 +15,7 @@ interface SettingsData {
 }
 interface SettingsView {
   settings: SettingsData;
-  keys: { groq: boolean; firecrawl: boolean; fal: boolean };
+  keys: { groq: boolean; firecrawl: boolean; fal: boolean; exa: boolean };
   spentToday: number;
   usageToday: Record<string, { turns: number; inputTokens: number; outputTokens: number }>;
   desktop: boolean;
@@ -33,11 +33,13 @@ const ENRICH: Array<{ id: string; label: string }> = [
   { id: "examples", label: "Examples" },
   { id: "related", label: "Related ideas" },
   { id: "questions", label: "Questions" },
+  { id: "napkins", label: "Links to other napkins" },
 ];
-const KEYS: Array<{ id: "groq" | "firecrawl" | "fal"; label: string }> = [
+const KEYS: Array<{ id: "groq" | "firecrawl" | "fal" | "exa"; label: string }> = [
   { id: "groq", label: "Groq API key" },
   { id: "firecrawl", label: "Firecrawl API key" },
   { id: "fal", label: "fal API key" },
+  { id: "exa", label: "Exa API key" },
 ];
 
 const WINDOW_NAMES: Record<string, string> = {
@@ -138,6 +140,7 @@ export function Settings() {
   const [harnesses, setHarnesses] = useState<AgentHarnessStatus[]>();
   const [saved, setSaved] = useState(false);
   const [stored, setStored] = useState<Record<string, boolean>>({});
+  const [report, setReport] = useState<string>();
 
   const loadSettings = useCallback(async () => {
     setView((await (await fetch("/api/settings")).json()) as SettingsView);
@@ -287,6 +290,26 @@ export function Settings() {
             <UsageTable usage={view.usageToday} />
           </Section>
         )}
+        <Section title="Diagnostics">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                const response = await fetch("/api/diagnostics", { method: "POST" });
+                const body = (await response.json()) as { file?: string; error?: string };
+                setReport(body.file ?? body.error);
+              }}
+              className="text-sm px-2.5 py-1 rounded-md bg-ink text-paper"
+            >
+              Save diagnostic report
+            </button>
+            {desktop() && (
+              <button onClick={() => void desktop()?.openLogs()} className="text-sm px-2.5 py-1 rounded-md text-ink-2 hover:bg-paper-2">
+                Open logs folder
+              </button>
+            )}
+          </div>
+          {report && <p className="text-xs text-ink-3 mt-2 break-all">{report}</p>}
+        </Section>
         {view && (
           <Section title="Keys">
             {KEYS.map((key) => (

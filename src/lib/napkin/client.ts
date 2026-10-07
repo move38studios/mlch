@@ -35,6 +35,9 @@ interface NapkinState {
   error?: string;
   undoStack: UndoEntry[];
   redoStack: UndoEntry[];
+  /** Items to show (from the agent's focus tool or a search result). */
+  focus?: { ids: string[]; page?: number; quote?: string; at: number };
+  setFocus(focus: { ids: string[]; page?: number; quote?: string }): void;
   /** Ids of nodes added by others since the last time the canvas looked (for entrance animation). */
   fresh: Record<string, number>;
 
@@ -105,6 +108,9 @@ export const useNapkin = create<NapkinState>((set, get) => {
         return;
       case "notice":
         set({ notice: { level: event.level, message: event.message, at: Date.now() } });
+        return;
+      case "focus":
+        set({ focus: { ids: event.ids, page: event.page, quote: event.quote, at: Date.now() } });
         return;
     }
   }
@@ -184,6 +190,10 @@ export const useNapkin = create<NapkinState>((set, get) => {
       const entry = stack[stack.length - 1];
       if (!entry) return;
       commit(entry.redo, false, { redoStack: stack.slice(0, -1), undoStack: [...get().undoStack, entry] });
+    },
+
+    setFocus(focus) {
+      set({ focus: { ...focus, at: Date.now() } });
     },
 
     dismissNotice() {

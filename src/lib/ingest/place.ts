@@ -1,5 +1,6 @@
 /** Adding dropped things to a napkin and reading them in the background. Server-only. */
 
+import { log } from "@/lib/log";
 import path from "node:path";
 import { submitImage, submitIngest } from "@/lib/agent/jobs";
 import { newClientId } from "@/lib/napkin/ids";
@@ -51,7 +52,7 @@ export async function addFile(napkinId: string, bytes: Buffer, fileName: string,
     await applyToNapkin(napkinId, [{ op: "updateNode", id: node.id, patch: { text: excerpt(text) } }], "ingest");
     submitIngest(napkinId, node.id, `Reading ${name}`, `File: ${name}\n\n${text}`);
   })().catch((error) => {
-    console.error("[ingest] file", error);
+    log.error("ingest", "file could not be read", { napkinId, fileName, error });
     failed(napkinId, node.id, "No text could be read from this file.");
   });
   return node;
@@ -63,6 +64,7 @@ export async function addLink(napkinId: string, url: string, at: { x: number; y:
   void (async () => {
     const page = await readLink(url);
     if (!page) {
+      log.warn("ingest", "page unreadable", { napkinId, url });
       failed(napkinId, node.id, "The page could not be read.");
       await emit(napkinId, { type: "notice", level: "info", message: `Could not read ${host}. The link is kept.` });
       return;
@@ -71,7 +73,7 @@ export async function addLink(napkinId: string, url: string, at: { x: number; y:
     await applyToNapkin(napkinId, [{ op: "updateNode", id: node.id, patch: { title: page.title || host, text: page.summary, assetId } }], "ingest");
     submitIngest(napkinId, node.id, `Reading ${host}`, `Page: ${page.title}\nURL: ${url}\n\n${page.text}`);
   })().catch((error) => {
-    console.error("[ingest] link", error);
+    log.error("ingest", "link could not be read", { napkinId, url, error });
     failed(napkinId, node.id, "The page could not be read.");
   });
   return node;

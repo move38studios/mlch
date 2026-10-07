@@ -34,4 +34,6 @@ export type ServerEvent =
   | { type: "paused"; paused: boolean }
   /** A short status line from the agent (its `reply` tool). */
   | { type: "say"; text: string; jobId: string }
-  | { type: "notice"; level: "error" | "info"; message: string };
+  | { type: "notice"; level: "error" | "info"; message: string }
+  /** The agent shows items: pan to them, highlight; open a document at a page or quote. */
+  | { type: "focus"; ids: string[]; page?: number; quote?: string };

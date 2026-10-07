@@ -9,7 +9,7 @@ import type { AgentHarnessId } from "@/lib/agent/types";
 import { libraryDir } from "@/lib/desktop/server";
 import { atomicWriteFile } from "@/lib/napkin/store";
 
-export const ENRICHMENTS = ["search", "definitions", "examples", "related", "questions"] as const;
+export const ENRICHMENTS = ["search", "definitions", "examples", "related", "questions", "napkins"] as const;
 export type Enrichment = (typeof ENRICHMENTS)[number];
 
 const lanes = z.object({

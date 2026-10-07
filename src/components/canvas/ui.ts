@@ -7,6 +7,9 @@ interface CanvasUi {
   editingId?: string;
   /** Node whose full content is open in the side panel. */
   openId?: string;
+  /** Text to find and highlight in the side panel. */
+  highlight?: { quote?: string; page?: number };
+  setHighlight(highlight?: { quote?: string; page?: number }): void;
   /** Artifact shown full-window over the canvas. */
   viewerId?: string;
   setViewer(id?: string): void;
@@ -21,4 +24,5 @@ export const useCanvasUi = create<CanvasUi>((set) => ({
   setEditing: (editingId) => set({ editingId }),
   setOpen: (openId) => set({ openId }),
   setViewer: (viewerId) => set({ viewerId }),
+  setHighlight: (highlight) => set({ highlight }),
 }));

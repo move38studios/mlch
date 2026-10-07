@@ -12,6 +12,7 @@
  * not stop them. State lives on globalThis so a dev reload keeps it.
  */
 
+import { log } from "@/lib/log";
 import { getHarness } from "@/lib/agent/server/harnesses";
 import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/agent/types";
 import type { JobLane, JobStatus, TranscriptSegment } from "@/lib/napkin/events";
@@ -26,10 +27,15 @@ import { adoptArtifact } from "@/lib/artifacts/artifacts";
 import { privateDirs } from "./files";
 import { placeNear } from "@/lib/napkin/place";
 import { artifactHeight, NODE_WIDTH } from "@/lib/napkin/sizes";
-import { commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, slowPrompt } from "./prompts";
+import { commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
 import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
+import { search } from "@/lib/search";
+import { exaAvailable } from "@/lib/search/exa";
 import { createNapkinTools, describeNapkin, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
+
+/** Sources longer than this are read in part; the rest is found by search. */
+const LONG_SOURCE = 60_000;
 
 const TIMEOUT_MS: Record<JobLane, number> = { fast: 120_000, slow: 300_000, command: 900_000, ingest: 600_000 };
 /** Status is re-read at most this often before a job (a probe costs a CLI start). */
@@ -86,6 +92,7 @@ interface TurnSpec {
   origin?: string;
   onHandOff?: (instruction: string) => void;
   onMake?: (brief: string) => void;
+  onResearch?: (brief: string) => void;
   workspace?: AgentWorkspace;
   /** The person's request (kept for review turns). */
   brief?: string;
@@ -105,8 +112,8 @@ async function harnessReady(): Promise<void> {
   if (status.problem) throw new JobError(status.problem);
 }
 
-/** Runs one turn; returns the ids of nodes it added. */
-async function runTurn(spec: TurnSpec): Promise<string[]> {
+/** Runs one turn; returns the ids of nodes it added and the vendor session. */
+async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; sessionId?: string }> {
   await harnessReady();
   const settings = await readSettings();
   const ctx = {
@@ -117,6 +124,7 @@ async function runTurn(spec: TurnSpec): Promise<string[]> {
     readRoot: spec.readRoot,
     onHandOff: spec.onHandOff,
     onMake: spec.onMake,
+    onResearch: spec.onResearch,
     origin: spec.origin,
     brief: spec.brief,
     reviewRound: spec.reviewRound,
@@ -137,14 +145,22 @@ async function runTurn(spec: TurnSpec): Promise<string[]> {
   });
   for await (const event of events) {
     if (event.type === "session") ctx.session.id = event.sessionId;
-    if (event.type === "usage") void recordUsage(settings.harness, spec.lane, event.inputTokens ?? 0, event.outputTokens ?? 0);
+    if (event.type === "usage") {
+      void recordUsage(settings.harness, spec.lane, event.inputTokens ?? 0, event.outputTokens ?? 0);
+      log.info("agent", "turn usage", { napkinId: spec.napkinId, jobId: spec.job.id, harness: settings.harness, lane: spec.lane, model: modelFor(settings, spec.lane), inputTokens: event.inputTokens, outputTokens: event.outputTokens });
+    }
     if (event.type === "error") {
+      log.warn("agent", "turn error", { napkinId: spec.napkinId, jobId: spec.job.id, harness: settings.harness, code: event.code, message: event.message });
       // A refused or failed turn invalidates the cached status.
       state().status = undefined;
       throw new JobError(event.message);
     }
   }
-  return ctx.added;
+  return { added: ctx.added, sessionId: ctx.session.id };
+}
+
+async function runTurn(spec: TurnSpec): Promise<string[]> {
+  return (await runTurnWithSession(spec)).added;
 }
 
 /* ── the queue ─────────────────────────────────────────────────── */
@@ -167,17 +183,19 @@ function pump(napkinId: string, lane: JobLane): void {
   void (async () => {
     try {
       await setJob(napkinId, { ...job });
+      log.info("jobs", "job started", { napkinId, jobId: job.id, lane, label: work.label });
       await work.run(job, controller.signal);
+      log.info("jobs", controller.signal.aborted ? "job cancelled" : "job finished", { napkinId, jobId: job.id, lane, ms: Date.now() - (job.startedAt ?? Date.now()) });
       await update(napkinId, job, { state: controller.signal.aborted ? "cancelled" : "done", finishedAt: Date.now() });
     } catch (error) {
       const cancelled = controller.signal.aborted && !(controller.signal.reason instanceof Error && controller.signal.reason.message === "Timed out");
       const message = error instanceof Error ? error.message : String(error);
       await update(napkinId, job, { state: cancelled ? "cancelled" : "failed", error: cancelled ? undefined : message, finishedAt: Date.now() }).catch(() => {});
       if (!cancelled) await emit(napkinId, { type: "notice", level: "error", message }).catch(() => {});
-      if (!(error instanceof JobError) && !cancelled) console.error(`[jobs] ${lane} job failed`, error);
+      if (!cancelled) log.error("jobs", "job failed", { napkinId, jobId: job.id, lane, label: work.label, ms: Date.now() - (job.startedAt ?? Date.now()), error });
     } finally {
       clearTimeout(timer);
-      await checkpoint(napkinId, "job", work.label).catch((error) => console.error("[jobs] checkpoint failed", error));
+      await checkpoint(napkinId, "job", work.label).catch((error) => log.error("history", "checkpoint failed", { napkinId, error }));
       entry.running[lane] = undefined;
       pump(napkinId, lane);
     }
@@ -215,7 +233,7 @@ export function submitInput(napkinId: string, segment: TranscriptSegment): void 
         signal,
         lane: "fast",
         systemPrompt: fastPrompt(),
-        prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 140, maxNodes: 120 })}\n</napkin>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
+        prompt: `<napkin>\n${await napkinContext(napkinId, text, 140)}\n</napkin>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
         tools: napkin.title === "Untitled" ? ["add_nodes", "connect", "hand_off", "set_title"] : ["add_nodes", "connect", "hand_off"],
         origin: `speech:${job.id}`,
         onHandOff: (instruction) => submitCommand(napkinId, instruction),
@@ -240,14 +258,19 @@ export function requestEnrichment(napkinId: string, ids: string[]): void {
       const settings = await readSettings();
       if (!settings.enrich.length) return;
       const web = settings.enrich.includes("search");
+      const about = items.map((n) => `${n.title ?? ""} ${n.text}`).join(" ").slice(0, 1000);
       await runTurn({
         napkinId,
         job,
         signal,
         lane: "slow",
         systemPrompt: slowPrompt(settings.enrich, web),
-        prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 160, maxNodes: 150 })}\n</napkin>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>`,
-        tools: ["add_nodes", "connect", "say"],
+        prompt: `<napkin>\n${await napkinContext(napkinId, about, 160)}\n</napkin>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>`,
+        tools: [
+          "add_nodes", "connect", "say",
+          ...(settings.enrich.includes("napkins") ? (["search_all_napkins", "bring_in"] as ToolName[]) : []),
+          ...(web && exaAvailable() ? (["exa_search"] as ToolName[]) : []),
+        ],
         webAccess: web,
       });
     },
@@ -259,7 +282,83 @@ const COMMAND_TOOLS: ToolName[] = [
   "get_napkin", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
+  "search_napkin", "search_all_napkins", "read_source", "focus", "bring_in", "research", "read_page",
 ];
+
+const RESEARCH_TOOLS: ToolName[] = [
+  "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "get_napkin", "search_napkin",
+];
+
+/**
+ * A research job: many searches and reading, then sources, a comparison table
+ * and a write-up on the napkin. If the turn ends without the table or the
+ * write-up, the same session is resumed once with what is missing.
+ */
+export function submitResearch(napkinId: string, brief: string): void {
+  enqueue(napkinId, {
+    lane: "command",
+    label: `Researching: ${brief.length > 46 ? `${brief.slice(0, 43)}…` : brief}`,
+    async run(job, signal) {
+      const exa = exaAvailable();
+      const spec: TurnSpec = {
+        napkinId,
+        job,
+        signal,
+        lane: "command",
+        systemPrompt: researchPrompt(exa),
+        prompt: `<napkin>\n${await napkinContext(napkinId, brief, 300)}\n</napkin>\n\n<brief>\n${brief}\n</brief>`,
+        tools: exa ? [...RESEARCH_TOOLS, "exa_search"] : RESEARCH_TOOLS,
+        webAccess: true,
+        brief,
+      };
+      const first = await runTurnWithSession(spec);
+      const made = async () => {
+        const napkin = await getNapkin(napkinId);
+        const mine = Object.values(napkin.nodes).filter((n) => n.origin === `agent:${job.id}`);
+        return {
+          sources: mine.filter((n) => n.kind === "search").length,
+          table: mine.some((n) => n.kind === "artifact"),
+          writeup: mine.some((n) => n.kind === "writeup"),
+        };
+      };
+      const outcome = await made();
+      if ((outcome.table && outcome.writeup && outcome.sources >= 5) || signal.aborted || !first.sessionId) return;
+      const missing = [
+        outcome.sources < 5 ? `more sources (${outcome.sources} so far; aim for 8-15 real ones, read their pages)` : "",
+        outcome.table ? "" : "the comparison table (write_artifact, html)",
+        outcome.writeup ? "" : "the write-up (write_doc)",
+      ].filter(Boolean);
+      log.info("jobs", "research incomplete, continuing", { napkinId, jobId: job.id, missing });
+      await runTurnWithSession({
+        ...spec,
+        sessionId: first.sessionId,
+        prompt: `You are not finished. Still missing: ${missing.join("; ")}. Do these now, then say one line.`,
+      });
+    },
+  });
+}
+
+/** Tools that need a key the person may not have set. */
+function withKeyTools(tools: ToolName[]): ToolName[] {
+  return exaAvailable() ? [...tools, "exa_search"] : tools;
+}
+
+/**
+ * The napkin as the agent sees it in a prompt: everything when it is small;
+ * when it is big, the newest items plus the ones that match what this turn
+ * is about (the agent can search for more).
+ */
+async function napkinContext(napkinId: string, about: string, textLimit: number): Promise<string> {
+  const napkin = await getNapkin(napkinId);
+  const count = Object.keys(napkin.nodes).length;
+  if (count <= 150) return describeNapkin(napkin, { textLimit });
+  const recent = describeNapkin(napkin, { textLimit, maxNodes: 80 });
+  const hits = about.trim() ? await search(about, { napkinIds: [napkinId], limit: 25 }).catch(() => []) : [];
+  const relevant = hits.length
+    ? `\n\nOlder items related to this turn (from search; use search_napkin for more):\n${hits.map((h) => `${h.nodeId} [${h.kind}]${h.title ? ` "${h.title}"` : ""}${h.page ? ` p.${h.page}` : ""}: ${h.snippet}`).join("\n")}`
+    : "";
+  return recent + relevant;
+}
 
 /** A long generation finished that its turn asked to review: resume that session to check it. */
 function submitReview(napkinId: string, record: GenerationRecord): void {
@@ -285,7 +384,7 @@ function submitReview(napkinId: string, record: GenerationRecord): void {
           `It was for: ${review.brief}\n\n` +
           `Check it against what was asked. If it clearly misses (wrong content, artefacts, wrong length or style), generate again with a better prompt or model, ` +
           `with review: true (this was round ${review.round} of ${MAX_REVIEW_ROUNDS}). If it is good, say so in one short line. Do not regenerate for small taste differences.`,
-        tools: COMMAND_TOOLS,
+        tools: withKeyTools(COMMAND_TOOLS),
         webAccess: true,
         allowUserEdits: true,
         readRoot: os.homedir(),
@@ -293,6 +392,7 @@ function submitReview(napkinId: string, record: GenerationRecord): void {
         reviewRound: review.round,
         ...(review.sessionId ? { sessionId: review.sessionId } : {}),
         onMake: (brief) => submitMake(napkinId, brief),
+        onResearch: (brief) => submitResearch(napkinId, brief),
       });
     },
   });
@@ -307,16 +407,17 @@ export function submitCommand(napkinId: string, instruction: string): void {
     lane: "command",
     label: instruction.length > 60 ? `${instruction.slice(0, 57)}…` : instruction,
     async run(job, signal) {
-      const napkin = await getNapkin(napkinId);
+      await getNapkin(napkinId); // a missing napkin fails the job here
       await runTurn({
         napkinId,
         job,
         signal,
         lane: "command",
         systemPrompt: commandPrompt(),
-        prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 400 })}\n</napkin>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
-        tools: COMMAND_TOOLS,
+        prompt: `<napkin>\n${await napkinContext(napkinId, instruction, 400)}\n</napkin>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
+        tools: withKeyTools(COMMAND_TOOLS),
         brief: instruction,
+        onResearch: (brief) => submitResearch(napkinId, brief),
         onMake: (brief) => submitMake(napkinId, brief),
         webAccess: true,
         allowUserEdits: true,
@@ -333,15 +434,20 @@ export function submitIngest(napkinId: string, sourceId: string, label: string, 
     lane: "ingest",
     label,
     async run(job, signal) {
-      const napkin = await getNapkin(napkinId);
+      await getNapkin(napkinId); // a missing napkin fails the job here
       const added = await runTurn({
         napkinId,
         job,
         signal,
         lane: "slow",
         systemPrompt: ingestPrompt(),
-        prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 140, maxNodes: 120 })}\n</napkin>\n\n<source id="${sourceId}">\n${content.slice(0, 150_000)}\n</source>`,
-        tools: ["add_nodes", "connect"],
+        prompt:
+          `<napkin>\n${await napkinContext(napkinId, content.slice(0, 1000), 140)}\n</napkin>\n\n` +
+          (content.length > LONG_SOURCE
+            ? `This source is long (${Math.round(content.length / 1000)}k characters; the opening is below). Add at most 8 items: what it is, its main argument or structure, and the parts most relevant to this napkin. Its full text is searchable with search_napkin and read_source, so do not summarise it all.\n\n`
+            : "") +
+          `<source id="${sourceId}">\n${content.slice(0, LONG_SOURCE)}\n</source>`,
+        tools: ["add_nodes", "connect", "search_napkin", "read_source"],
       });
       if (added.length) requestEnrichment(napkinId, added.slice(0, 6));
     },

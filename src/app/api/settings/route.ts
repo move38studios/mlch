@@ -10,7 +10,7 @@ async function view() {
   return {
     settings: await readSettings(),
     // Whether a key is available (stored in the app or in .env.local); never the key.
-    keys: { groq: !!getCredential("groq"), firecrawl: !!getCredential("firecrawl"), fal: !!getCredential("fal") },
+    keys: { groq: !!getCredential("groq"), firecrawl: !!getCredential("firecrawl"), fal: !!getCredential("fal"), exa: !!getCredential("exa") },
     spentToday: await spentToday(),
     usageToday: await usageToday(),
     desktop: isDesktop(),

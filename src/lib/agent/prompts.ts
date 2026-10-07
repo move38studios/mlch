@@ -29,7 +29,7 @@ Your job now: capture what the person just said.
 - Skip what is already on the napkin. If a point builds on an existing item, put it near that item and connect them.
 - Connect new points to each other or to existing items where they relate.
 - Speech is transcribed and may contain errors; fix obvious mis-hearings silently.
-- If the input is an instruction to you rather than thinking ("organize this", "summarize", "write this up", "find examples of …", "clean up", "remove …", "look at my … folder", "make slides / a deck / a page"), call \`hand_off\` with the instruction and add nothing. If it mixes both, capture the thinking and hand off the instruction.
+- If the input is an instruction to you rather than thinking ("organize this", "summarize", "write this up", "find examples of …", "clean up", "remove …", "look at my … folder", "make slides / a deck / a page", "find that image where…", "do you remember…", "make an image / a video / music"), call \`hand_off\` with the instruction and add nothing. If it mixes both, capture the thinking and hand off the instruction.
 - Usually one add_nodes call. Be fast.
 - If \`set_title\` is available, the napkin has no name yet: name it in the same turn.`;
 }
@@ -39,6 +39,7 @@ const ENRICH_TEXT: Record<Enrichment, string> = {
   definitions: "`definition`: for terms that are technical, ambiguous or central to the idea. Not for common words. Title = the term.",
   examples: "`example`: concrete real-world cases that show the idea at work.",
   related: "`idea` (related): adjacent ideas from other fields, analogies, counterpoints, tensions. Label the connection (\"analogy\", \"counterpoint\", \"see also\").",
+  napkins: "Links to the person's other napkins: search_all_napkins with the new ideas; when another napkin has something closely related (not merely the same topic word), bring_in that one item near the new idea and connect them. At most one per batch.",
   questions: "`question`: open questions that would push the thinking further. Short, specific, provocative.",
 };
 
@@ -59,7 +60,9 @@ Your job now: carry out the person's instruction, given in the message. You may 
 - Organize / group / tidy: call \`arrange\` with meaningful group titles; every item worth keeping in some group.
 - Clean up: merge duplicates (update one, remove the rest), fix transcription errors, remove noise. Keep the person's wording.
 - Summary, write-up, outline, essay, plan: call \`write_doc\` with well-structured markdown grounded in what is on the napkin (cite source URLs from search items where used). Put it near the items it draws on.
-- Look things up: use the web tools and add \`search\` items.
+- Look things up: use the web tools and add \`search\` items. For companies or competitors, research papers and recent news use exa_search if you have it (category company / research paper / news); otherwise the built-in web search.
+- Competitor or market scans, prior art, literature reviews, landscape overviews: call \`research\` with a complete brief and say that it is running. Do not do these yourself in one go.
+- Finding things on this napkin ("find that image where…", "the quote about…", "what did I say about…"): search_napkin, read_source to check, then focus on what you found (with the quote) and say one line. Across the person's napkins: search_all_napkins, and bring_in if they want it here.
 - Files on this computer ("look at my dev/briefbuster folder"): find and read them with find_files / list_files / read_file (read-only). Put what you learn on the napkin as items (ideas, structure, open questions), not the files themselves; mention paths where useful. Read broadly enough to be right.
 - Images: view_image to see an image item; read_file shows image files.
 - Slides, deck, presentation (no format named): an HTML deck via \`write_artifact\` (extension html), designed like a good keynote, not plain markup: one self-contained file; 16:9 slides scaled to fit the window; arrow keys, space and click to move; slide counter; a strong type scale (large headlines, few words per slide), a restrained palette with one accent, generous whitespace, varied layouts (title, big statement, two columns, quote, key number). One idea per slide; detail goes in speaker-notes-style small print only where needed. Keep the script simple and robust. Then check it: preview_artifact with several slides, read any script errors, fix with write_artifact \`replace\`, and look again until it is right.
@@ -114,4 +117,22 @@ Save finished files directly in the artifacts folder (not in a subfolder), with 
       ? " Then call present_file for each, with a clear title and one-line description, near the items it draws on. Finish with say: one short line."
       : " Finish with one short line saying what you made."
   }`;
+}
+
+export function researchPrompt(exa: boolean): string {
+  return `${BASE}
+
+Your job now: a research job on the brief in the message. This is several minutes of work, not one search.
+
+Method:
+1. Search from several angles (at least 4 searches): ${exa ? "exa_search (category company with a plain description of the product, or research paper / news as fits), " : ""}the built-in web search for well-known names and "alternatives to …" lists, and follow promising leads.
+2. Read the strongest candidates' own pages (read_page) rather than relying on directories or listicles. Keep only real, current products or sources; prefer primary sources.
+3. Keep 8-15 results for a scan (fewer, deeper ones for a literature question).
+
+Required output, all of it, before you finish:
+- One \`search\` item per result, near the idea it relates to: title = the name, text = what it is, how close it is to the person's idea, pricing or status where known; url = its own site.
+- A comparison table via write_artifact (html): one row per result, columns that matter for this brief, a short "how close" column. Check it with preview_artifact if available.
+- A write_doc: what is crowded, what is open, where the person's idea sits, and 3-5 open questions. Cite sources by URL.
+- arrange the result items into a labelled group if they are scattered.
+- say: one line with what you found.`;
 }

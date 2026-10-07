@@ -8,6 +8,8 @@ import { HistoryBar } from "./History";
 import { useCanvasUi } from "./ui";
 import { desktop } from "@/lib/desktop/client";
 import { useNapkin } from "@/lib/napkin/client";
+import { useSearchParams } from "next/navigation";
+import { SearchPalette } from "@/components/search/SearchPalette";
 import { ArtifactViewer } from "./ArtifactViewer";
 import { Canvas } from "./Canvas";
 import { InputBar } from "./InputBar";
@@ -101,6 +103,17 @@ export function NapkinView({ id }: { id: string }) {
   }, [preview]);
   const shown = preview ?? napkin;
 
+  // Arriving from a search result in another napkin: show that item once loaded.
+  const params = useSearchParams();
+  const focusParam = params.get("focus");
+  const pageParam = params.get("page");
+  const loaded = !!napkin;
+  useEffect(() => {
+    if (!loaded || !focusParam) return;
+    const timer = setTimeout(() => useNapkin.getState().setFocus({ ids: [focusParam], ...(pageParam ? { page: Number(pageParam) } : {}) }), 600);
+    return () => clearTimeout(timer);
+  }, [loaded, focusParam, pageParam]);
+
   return (
     <main className="h-full flex flex-col">
       <header className="drag h-12 shrink-0 pl-20 pr-3 flex items-center gap-2 border-b border-line bg-paper z-10">
@@ -134,6 +147,7 @@ export function NapkinView({ id }: { id: string }) {
               <Canvas napkin={shown} />
               {!preview && <InputBar napkinId={id} />}
               <ArtifactViewer />
+              <SearchPalette napkinId={id} onFocus={(hit) => useNapkin.getState().setFocus({ ids: [hit.nodeId], ...(hit.page ? { page: hit.page } : {}), quote: hit.snippet.replace(/^…|…$/g, "").slice(0, 80) })} />
             </>
           ) : null}
         </div>

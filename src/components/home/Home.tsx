@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { ResultList, useSearch } from "@/components/search/SearchPalette";
 import { formatDateTime } from "@/lib/format";
 import type { NapkinSummary } from "@/lib/napkin/types";
 
@@ -13,6 +14,8 @@ export function Home() {
   const [error, setError] = useState<string>();
   const [confirming, setConfirming] = useState<string>();
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
+  const { results } = useSearch(query);
 
   const load = useCallback(async () => {
     try {
@@ -69,6 +72,18 @@ export function Home() {
             <Plus size={15} /> New napkin
           </button>
         </div>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search all napkins"
+          aria-label="Search all napkins"
+          className="w-full mb-6 rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-ink/40"
+        />
+        {results && (
+          <div className="mb-8 rounded-lg border border-line bg-white overflow-hidden">
+            <ResultList results={results} showNapkin onPick={(hit) => router.push(`/n/${hit.napkinId}?focus=${hit.nodeId}${hit.page ? `&page=${hit.page}` : ""}`)} />
+          </div>
+        )}
         {error && <p className="text-sm text-accent mb-4">{error}</p>}
         {napkins && napkins.length === 0 && <p className="text-sm text-ink-3">No napkins yet.</p>}
         <ul className="divide-y divide-line border-y border-line">

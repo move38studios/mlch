@@ -17,7 +17,13 @@ if (production) args.splice(args.indexOf('--production'), 1);
 const shots = flag('--shots') || os.tmpdir();
 const [script] = args;
 
+// macOS writes a crash report for every crashed process; a test run that
+// leaves a new one behind fails, even if its own checks passed.
+const reports = path.join(os.homedir(), 'Library', 'Logs', 'DiagnosticReports');
+const crashReports = () => new Set((fs.existsSync(reports) ? fs.readdirSync(reports) : []).filter((name) => /^Electron/.test(name)));
+
 (async () => {
+  const crashesBefore = crashReports();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'npkn-run-'));
   const app = await electron.launch({
     args: [
@@ -56,6 +62,11 @@ const [script] = args;
     console.error(error);
   } finally {
     await app.close();
+  }
+  const crashed = [...crashReports()].filter((name) => !crashesBefore.has(name));
+  if (crashed.length) {
+    failed = true;
+    console.error(`CRASH: new crash report(s) in ${reports}: ${crashed.join(', ')}`);
   }
   process.exit(failed ? 1 : 0);
 })();

@@ -7,7 +7,7 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 - `npm run check`: typecheck, lint, vitest, electron tests. Run before committing.
 - `npm run dev`: browser dev server on :3100. Set `NPKN_LIBRARY=<dir>` to keep test napkins out of `~/Documents/npkn`.
 - `npm run electron:dev` / `npm run app`: desktop app (dev / production build).
-- `node scripts/electron-run.cjs <test.cjs> [--library dir] [--shots dir] [--fake-mic file.wav] [--production]`: drive the real app with Playwright (throwaway profile). `scripts/electron-shot.cjs <out.png> [route]` for a screenshot.
+- `node scripts/electron-run.cjs <test.cjs> [--library dir] [--shots dir] [--fake-mic file.wav] [--production]`: drive the real app with Playwright (throwaway profile). `scripts/electron-shot.cjs <out.png> [route]` for a screenshot. electron-run fails if a new Electron crash report appears in ~/Library/Logs/DiagnosticReports.
 
 ## Architecture
 
@@ -16,6 +16,9 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 - `src/lib/ingest/`: files and links into assets/ (content-addressed, extracted text beside them).
 - `src/lib/artifacts/`: files the AI makes, in the napkin's `artifacts/`. HTML is served with a sandboxing CSP (opaque origin, no network) and shown full-window over the canvas; the agent checks it with `preview_artifact` (main renders it off-screen). `pptx.ts` is the quick template builder; real decks and documents come from the maker lane.
 - Maker lane (`submitMake` in jobs.ts): Claude Code with its own tools inside its OS sandbox (`workspace` in HarnessTurnParams → `sandbox` + permission rules in claudeHarness.ts), or `codex exec` in workspace-write (codexExec.ts). Writes only to `<napkin>/work` and `<napkin>/artifacts`; network only to package registries (Claude). New files in artifacts/ become cards.
+- `src/lib/search/`: one SQLite index for the library (`<library>/.index.sqlite`, `node:sqlite` with FTS5) plus local embeddings (multilingual-e5-small) in a WebAssembly worker thread (`scripts/embed-worker.mjs`, onnxruntime-web). Search merges keyword and vector rankings, never waits more than 8s on the model, and works keyword-only without it. `exa.ts` is the optional Exa web search.
+- Research lane (`submitResearch` in jobs.ts): many searches and page reads, then sources, a comparison table and a write-up; resumes the session once if outputs are missing.
+- Logging: `src/lib/log.ts` writes JSON lines to `<logs>/npkn.jsonl` (redacted, rotated); main writes `desktop.log` and records process crashes; crash dumps stay local. Settings → Diagnostics saves a support report to ~/Downloads.
 - File reading for instructions: read-only, home folder, private places refused (`src/lib/agent/files.ts`).
 - `src/lib/voice/`: browser recorder (pause-cut WAV chunks) and server transcriber (Groq).
 - `electron/`: shell adapted from node-banana. Main injects a per-launch token; keys live in Keychain via safeStorage and reach the server process over parentPort, never through the page.
@@ -28,6 +31,8 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 - Tool errors returned to the model say what is allowed, not just what failed.
 - Every napkin change goes through ops so it is logged, undoable and in history.
 - Dates shown with a time.
+- No native ML runtimes inside Electron processes (onnxruntime-node crashes them with EXC_BREAKPOINT); use WebAssembly. Built-ins the bundler does not know (`node:sqlite`, `node:worker_threads` with a file) are loaded with `process.getBuiltinModule`.
+- Log with `log.info/warn/error(area, msg, { napkinId, jobId, … })`, not console.
 - Never give the agent an unsandboxed shell. Native tools only through `workspace` (OS sandbox).
 - Anything the AI generates and the app renders (HTML artifacts) is untrusted: sandboxed origin, no network, no navigation. The desktop server refuses API requests from foreign pages.
 - Code adapted from node-banana keeps its MIT notice (THIRD_PARTY_NOTICES.md and file headers).
