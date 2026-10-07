@@ -36,4 +36,8 @@ export type ServerEvent =
   | { type: "say"; text: string; jobId: string }
   | { type: "notice"; level: "error" | "info"; message: string }
   /** The agent shows items: pan to them, highlight; open a document at a page or quote. */
-  | { type: "focus"; ids: string[]; page?: number; quote?: string };
+  | { type: "focus"; ids: string[]; page?: number; quote?: string }
+  /** The agent moves the view: show everything, or zoom a step in or out. */
+  | { type: "view"; action: ViewAction };
+
+export type ViewAction = "fit" | "in" | "out";

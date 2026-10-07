@@ -362,12 +362,24 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     return () => window.removeEventListener("paste", onPaste);
   }, [flow, ingest, readOnly]);
 
+  // The agent moves the view.
+  const view = useMulch((s) => s.view);
+  useEffect(() => {
+    if (!view) return;
+    if (view.action === "fit") void flow.fitView({ padding: { top: "60px", left: "40px", right: "40px", bottom: "150px" }, maxZoom: 1, duration: 600 });
+    else if (view.action === "in") void flow.zoomIn({ duration: 400 });
+    else void flow.zoomOut({ duration: 400 });
+    // Only when a new move arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view?.at]);
+
   // Show what the agent or a search result points at.
   const focus = useMulch((s) => s.focus);
   const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!focus) return;
-    const ids = focus.ids.filter((id) => mulch.nodes[id]);
+    // A group stands for the items in it.
+    const ids = [...new Set(focus.ids.flatMap((id) => (mulch.groups[id] ? Object.values(mulch.nodes).filter((n) => n.groupId === id).map((n) => n.id) : [id])))].filter((id) => mulch.nodes[id]);
     if (!ids.length) return;
     void flow.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.35, maxZoom: 1.1, duration: 600 });
     setNodes((current) => current.map((node) => ({ ...node, selected: ids.includes(node.id) })));

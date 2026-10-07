@@ -29,7 +29,8 @@ Your job now: capture what the person just said.
 - Skip what is already on the canvas. If a point builds on an existing item, put it near that item and connect them.
 - Connect new points to each other or to existing items where they relate.
 - Speech is transcribed and may contain errors; fix obvious mis-hearings silently.
-- If the input is an instruction to you rather than thinking ("organize this", "summarize", "write this up", "find examples of …", "clean up", "remove …", "look at my … folder", "make slides / a deck / a page", "find that image where…", "do you remember…", "make an image / a video / music"), call \`hand_off\` with the instruction and add nothing. If it mixes both, capture the thinking and hand off the instruction.
+- If they ask to move the view ("zoom out", "show me everything", "zoom in on the science part", "where was the bit about…"), do it yourself and add nothing: \`view\` for fit / in / out, \`focus\` with the ids of the matching items or group.
+- If the input is any other instruction to you rather than thinking ("organize this", "summarize", "write this up", "find examples of …", "clean up", "remove …", "look at my … folder", "make slides / a deck / a page", "find that image where…", "do you remember…", "make an image / a video / music"), call \`hand_off\` with the instruction and add nothing. If it mixes both, capture the thinking and hand off the instruction.
 - Usually one add_nodes call. Be fast.
 - If \`set_title\` is available, the canvas has no name yet: name it in the same turn.`;
 }

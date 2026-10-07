@@ -59,6 +59,7 @@ export type ToolName =
   | "search_all_mulches"
   | "read_source"
   | "focus"
+  | "view"
   | "bring_in"
   | "exa_search"
   | "research"
@@ -318,12 +319,21 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   focus: {
     name: "focus",
     title: "Show",
-    description: "Show items to the person: the canvas moves to them and highlights them. With one document item and a page or quote, its text opens at that place.",
+    description:
+      "Show items to the person: the canvas moves to them and highlights them. Use it for \"show me …\" or \"zoom in on …\": pass the ids of the items (or a group id for a whole group). With one document item and a page or quote, its text opens at that place.",
     inputShape: {
-      ids: z.array(z.string()).min(1).max(20),
+      ids: z.array(z.string()).min(1).max(40),
       page: z.number().int().min(1).optional(),
       quote: z.string().max(400).optional().describe("Text to highlight in the opened document."),
     },
+    readOnly: true,
+  },
+  view: {
+    name: "view",
+    title: "Move view",
+    description:
+      "Move the person's view of the canvas: \"fit\" shows everything, \"in\" and \"out\" zoom one step. To show particular items or a part of the canvas, use focus instead.",
+    inputShape: { action: z.enum(["fit", "in", "out"]) },
     readOnly: true,
   },
   exa_search: {
@@ -815,10 +825,16 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
     async focus(args) {
       const { ids, page, quote } = args as { ids: string[]; page?: number; quote?: string };
       const mulch = await getMulch(ctx.mulchId);
-      const found = ids.filter((id) => mulch.nodes[id]);
-      if (!found.length) return fail("None of those items are on this canvas.");
+      const found = ids.filter((id) => mulch.nodes[id] || mulch.groups[id]);
+      if (!found.length) return fail("None of those ids are items or groups on this canvas. Use ids from the canvas description.");
       await emit(ctx.mulchId, { type: "focus", ids: found, ...(page ? { page } : {}), ...(quote ? { quote } : {}) });
       return ok(`Showing ${found.length} item(s).`, "Showed items");
+    },
+
+    async view(args) {
+      const { action } = args as { action: "fit" | "in" | "out" };
+      await emit(ctx.mulchId, { type: "view", action });
+      return ok(action === "fit" ? "Showing everything." : `Zoomed ${action}.`, "Moved view");
     },
 
     async bring_in(args) {

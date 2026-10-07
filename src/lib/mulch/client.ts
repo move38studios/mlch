@@ -10,7 +10,7 @@
 
 import { create } from "zustand";
 import { applyOps, invertOps } from "./ops";
-import type { JobStatus, ServerEvent, TranscriptSegment } from "./events";
+import type { JobStatus, ServerEvent, TranscriptSegment, ViewAction } from "./events";
 import type { Mulch, MulchOp, OpBatch } from "./types";
 
 const UNDO_LIMIT = 200;
@@ -38,6 +38,8 @@ interface MulchState {
   /** Items to show (from the agent's focus tool or a search result). */
   focus?: { ids: string[]; page?: number; quote?: string; at: number };
   setFocus(focus: { ids: string[]; page?: number; quote?: string }): void;
+  /** A view move from the agent. */
+  view?: { action: ViewAction; at: number };
   /** Ids of nodes added by others since the last time the canvas looked (for entrance animation). */
   fresh: Record<string, number>;
 
@@ -111,6 +113,9 @@ export const useMulch = create<MulchState>((set, get) => {
         return;
       case "focus":
         set({ focus: { ids: event.ids, page: event.page, quote: event.quote, at: Date.now() } });
+        return;
+      case "view":
+        set({ view: { action: event.action, at: Date.now() } });
         return;
     }
   }

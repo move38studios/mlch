@@ -15,7 +15,7 @@
 import { log } from "@/lib/log";
 import { getHarness } from "@/lib/agent/server/harnesses";
 import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/agent/types";
-import type { JobLane, JobStatus, TranscriptSegment } from "@/lib/mulch/events";
+import type { JobLane, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
 import { applyToMulch, emit, getMulch, mulchDir, onAfterApply, setJob } from "@/lib/mulch/store";
@@ -213,8 +213,27 @@ function inputBlock(segments: TranscriptSegment[]): string {
   return segments.map((segment) => segment.text.trim()).filter(Boolean).join("\n");
 }
 
+const CAPTURE_TOOLS: ToolName[] = ["add_nodes", "connect", "hand_off", "focus", "view"];
+
 /** New input from the person: capture it (fast lane), then enrich (slow lane). */
+/** Plain view commands, acted on without a model turn. Anything else goes through capture. */
+const VIEW_COMMANDS: [RegExp, ViewAction][] = [
+  [/^(please )?zoom out( a bit| more)?( please)?$/, "out"],
+  [/^(please )?zoom in( a bit| more)?( please)?$/, "in"],
+  [/^(please )?(show (me )?(everything|it all|the whole (thing|canvas))|fit( to screen| everything)?|see everything)( please)?$/, "fit"],
+];
+
+function viewCommand(text: string): ViewAction | undefined {
+  const plain = text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
+  return VIEW_COMMANDS.find(([pattern]) => pattern.test(plain))?.[1];
+}
+
 export function submitInput(mulchId: string, segment: TranscriptSegment): void {
+  const action = viewCommand(segment.text);
+  if (action) {
+    void emit(mulchId, { type: "view", action });
+    return;
+  }
   const entry = jobsFor(mulchId);
   entry.pendingSegments.push(segment);
   // One queued fast job drains everything pending when it starts.
@@ -234,7 +253,7 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
         lane: "fast",
         systemPrompt: fastPrompt(),
         prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
-        tools: mulch.title === "Untitled" ? ["add_nodes", "connect", "hand_off", "set_title"] : ["add_nodes", "connect", "hand_off"],
+        tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
         origin: `speech:${job.id}`,
         onHandOff: (instruction) => submitCommand(mulchId, instruction),
       });
@@ -282,7 +301,7 @@ const COMMAND_TOOLS: ToolName[] = [
   "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
-  "search_mulch", "search_all_mulches", "read_source", "focus", "bring_in", "research", "read_page",
+  "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "research", "read_page",
 ];
 
 const RESEARCH_TOOLS: ToolName[] = [
