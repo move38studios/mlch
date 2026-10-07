@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, FolderPlus, X } from "lucide-react";
+import { desktop } from "@/lib/desktop/client";
 import { useNapkin } from "@/lib/napkin/client";
 import { Canvas } from "./Canvas";
 import { InputBar } from "./InputBar";
@@ -33,6 +34,27 @@ function Title() {
       aria-label="Title"
       className="min-w-0 w-80 bg-transparent font-semibold outline-none rounded px-1.5 py-0.5 hover:bg-paper-2 focus:bg-white"
     />
+  );
+}
+
+function notify(message: string, level: "error" | "info" = "error") {
+  useNapkin.setState({ notice: { level, message, at: Date.now() } });
+}
+
+/** Pick a folder for the agent to explore into this napkin. */
+function AddFolder({ napkinId }: { napkinId: string }) {
+  async function choose() {
+    if (!desktop()) return notify("Adding a folder needs the desktop app.");
+    const picked = (await (await fetch("/api/browse-directory?purpose=ingest")).json()) as { success?: boolean; cancelled?: boolean; path?: string | null; error?: string };
+    if (!picked.success) return notify(picked.error || "The folder picker could not open.");
+    if (picked.cancelled || !picked.path) return;
+    const response = await fetch(`/api/napkins/${napkinId}/folder`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: picked.path }) });
+    if (!response.ok) notify(((await response.json().catch(() => ({}))) as { error?: string }).error || "Could not add the folder.");
+  }
+  return (
+    <button onClick={choose} className="p-1.5 rounded-md text-ink-2 hover:bg-paper-2" title="Add folder" aria-label="Add folder">
+      <FolderPlus size={16} />
+    </button>
   );
 }
 
@@ -73,6 +95,7 @@ export function NapkinView({ id }: { id: string }) {
         <div className="flex-1" />
         {!connected && napkin && <span className="text-xs text-ink-3">Reconnecting</span>}
         {napkin && <JobStatus napkinId={id} />}
+        {napkin && <AddFolder napkinId={id} />}
       </header>
       <div className="relative flex-1 min-h-0 flex">
         <div className="relative flex-1 min-w-0">

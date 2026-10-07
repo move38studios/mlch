@@ -77,8 +77,9 @@ export function folderPrompt(): string {
   return `${BASE}
 
 Your job now: explore the folder with list_files and read_file and build a napkin from it.
-- Start with list_files(""), read what matters (READMEs, notes, docs, key sources); skip generated or vendored files.
+- Start with list_files(""), then read broadly enough to cover the folder's main themes (typically 8-20 files: READMEs, notes, docs, key sources); skip generated or vendored files.
 - Add the key ideas, claims, open questions and the structure you find as items, connected where they relate. Add a \`doc\` is not available; mention file paths in item text where useful.
 - Aim for a rich but readable napkin: 15-40 items. Then call \`arrange\` into meaningful groups.
+- If \`set_title\` is available, name the napkin after the folder's subject.
 - Finish with \`say\`: one short line on what you built.`;
 }

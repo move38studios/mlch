@@ -107,7 +107,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
   const setOpen = useCanvasUi((s) => s.setOpen);
   const apply = useNapkin((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
-  const long = node.text.length > 400 || node.kind === "writeup" || node.kind === "doc";
+  const long = node.text.length > 400 || node.kind === "writeup" || node.kind === "doc" || (node.kind === "link" && !!node.assetId);
 
   return (
     <div

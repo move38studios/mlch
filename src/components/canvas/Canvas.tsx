@@ -268,6 +268,71 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
     setDraft(undefined);
   }, [apply, draft]);
 
+  // Files, links and text dropped or pasted onto the canvas.
+  const napkinId = napkin.id;
+  const ingest = useCallback(
+    async (kind: "files" | "links" | "paste", at: { x: number; y: number }, payload: File | string) => {
+      try {
+        const response =
+          kind === "files"
+            ? await fetch(`/api/napkins/${napkinId}/files?name=${encodeURIComponent((payload as File).name)}&x=${Math.round(at.x)}&y=${Math.round(at.y)}`, {
+                method: "POST",
+                body: payload as File,
+              })
+            : await fetch(`/api/napkins/${napkinId}/${kind}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...(kind === "links" ? { url: payload } : { text: payload }), x: at.x, y: at.y }),
+              });
+        if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error || `Failed (${response.status})`);
+      } catch (error) {
+        useNapkin.setState({ notice: { level: "error", message: (error as Error).message, at: Date.now() } });
+      }
+    },
+    [napkinId],
+  );
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const at = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const files = Array.from(event.dataTransfer.files);
+      if (files.length) {
+        files.forEach((file, i) => void ingest("files", { x: at.x + i * 40, y: at.y + i * 40 }, file));
+        return;
+      }
+      const uri = event.dataTransfer.getData("text/uri-list").split("\n").find((line) => line && !line.startsWith("#"));
+      const text = uri || event.dataTransfer.getData("text/plain");
+      if (!text.trim()) return;
+      void ingest(/^https?:\/\/\S+$/.test(text.trim()) ? "links" : "paste", at, text.trim());
+    },
+    [flow, ingest],
+  );
+
+  // Paste onto the canvas (not into a text field): files, links or text land in the middle of the view.
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable)) return;
+      const data = event.clipboardData;
+      if (!data) return;
+      const rect = document.querySelector(".react-flow")?.getBoundingClientRect();
+      const at = flow.screenToFlowPosition({ x: (rect?.left ?? 0) + (rect?.width ?? 800) / 2, y: (rect?.top ?? 0) + (rect?.height ?? 600) / 2 });
+      const files = Array.from(data.files);
+      if (files.length) {
+        event.preventDefault();
+        files.forEach((file, i) => void ingest("files", { x: at.x + i * 40, y: at.y + i * 40 }, file.name ? file : new File([file], `pasted.${file.type.split("/")[1] || "bin"}`)));
+        return;
+      }
+      const text = data.getData("text/plain").trim();
+      if (!text) return;
+      event.preventDefault();
+      void ingest(/^https?:\/\/\S+$/.test(text) ? "links" : "paste", at, text);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [flow, ingest]);
+
   // Undo / redo, unless typing.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -297,6 +362,11 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
       onDelete={onDelete}
       onSelectionChange={onSelectionChange}
       onDoubleClick={onPaneDoubleClick}
+      onDrop={onDrop}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
       onPaneClick={() => setEditing(undefined)}
       connectionMode={ConnectionMode.Loose}
       connectionRadius={40}
