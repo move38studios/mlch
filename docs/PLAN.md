@@ -1,6 +1,6 @@
 # npkn V1 plan
 
-Status: M0–M7 built 2026-10-07. Next: real-voice testing, then the post-V1 list.
+Status 2026-10-07: M0–M7 built, plus images, artifacts and the maker lane, media generation, search and research, logging. Next: George tests with real voice and real napkins.
 
 ## Decisions
 
@@ -148,7 +148,7 @@ Each milestone ends with something usable and tested (Vitest for logic; Playwrig
 
 Added after M7: the AI looks at images (view_image, dropped images are captioned); instructions can read files on the machine (read-only, private places refused); artifacts: HTML pages and decks shown over the canvas and checked by the agent with off-screen screenshots, and a maker lane that runs Claude Code or Codex with their own tools in their OS sandbox for PowerPoint, Word, PDF, spreadsheets and charts.
 
-After V1: local Parakeet transcriber (Swift helper using FluidAudio, streaming over stdio), share snapshots (checkpoint + referenced assets + markdown index for AIs, hosted), signed build with auto-update, web version (needs hosted AI, since a subscription can't be used server-side), live collaboration.
+Next candidates, after testing: packaged signed app (non-technical users), opt-in connectors (your MCP servers, read-only by default, approval cards for actions), share snapshots, PPTX/DOCX thumbnails, local Parakeet transcriber (Swift helper using FluidAudio, streaming over stdio), share snapshots (checkpoint + referenced assets + markdown index for AIs, hosted), signed build with auto-update, web version (needs hosted AI, since a subscription can't be used server-side), live collaboration.
 
 ## Risks and open items
 
