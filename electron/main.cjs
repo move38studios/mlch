@@ -136,7 +136,12 @@ function notifyJob({ mulchId, ids, title, body }) {
 async function fileThumbnail(file, size) {
   const image = await nativeImage.createThumbnailFromPath(file, { width: size, height: size });
   if (image.isEmpty()) throw new Error('Empty preview.');
-  return image.toPNG().toString('base64');
+  // When Quick Look cannot render a file it returns the app's square icon; decks and pages are never square.
+  // (getSize reports the requested box; the PNG has the real shape.)
+  const png = image.toPNG();
+  const { width, height } = nativeImage.createFromBuffer(png).getSize();
+  if (width === height && !/\.(xlsx?|numbers)$/i.test(file)) throw new Error('No preview, only the file icon.');
+  return png.toString('base64');
 }
 
 function setJobActivity(next) {

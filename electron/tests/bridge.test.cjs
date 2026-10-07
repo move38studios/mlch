@@ -209,3 +209,15 @@ test('main shows job notifications, keeps the activity count, and makes previews
   assert.deepEqual(await ask('thumbnail', { path: temp }), { ok: false, error: 'Only a file has a preview.' });
   assert.deepEqual(await ask('thumbnail', { path: 'deck.pptx' }), { ok: false, error: 'A preview needs a full path.' });
 }));
+
+test('thumbnail, notify and activity requests reach main with their fields', async () => {
+  const { bridge, posted } = client();
+  void bridge.request('notify', { mulchId: 'm1', ids: ['a', 3], title: 'Deck', body: 'Forests', failed: false, extra: 1 });
+  void bridge.request('activity', { working: 1, unseen: 2 });
+  void bridge.request('thumbnail', { path: '/a.pptx', size: 800 });
+  assert.deepEqual(posted.map(m => m.request), [
+    { type: 'notify', payload: { mulchId: 'm1', ids: ['a'], title: 'Deck', body: 'Forests', failed: false } },
+    { type: 'activity', payload: { working: 1, unseen: 2 } },
+    { type: 'thumbnail', payload: { path: '/a.pptx', size: 800 } },
+  ]);
+});

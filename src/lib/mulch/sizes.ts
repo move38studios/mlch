@@ -1,3 +1,4 @@
+import { hasThumbnail } from "@/lib/artifacts/thumbnails";
 /**
  * Node footprints in flow units. Fallbacks only: a node the canvas has
  * rendered stores its measured w/h, and rectOf prefers that.
@@ -37,7 +38,7 @@ const FALLBACK_HEIGHT: Record<NodeKind, number> = {
 
 /** Artifact cards with a live preview are taller. */
 export function artifactHeight(docPath?: string): number {
-  return docPath && /\.(html|svg|png|jpg)$/.test(docPath) ? 400 : 200;
+  return docPath && (/\.(html|svg|png|jpg)$/.test(docPath) || hasThumbnail(docPath)) ? 400 : 200;
 }
 
 export interface Rect {

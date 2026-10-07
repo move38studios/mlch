@@ -8,6 +8,7 @@ import { ExternalLink, FileText, Maximize2 } from "lucide-react";
 import { useMulch } from "@/lib/mulch/client";
 import { jitter } from "@/lib/mulch/place";
 import type { MulchNode } from "@/lib/mulch/types";
+import { hasThumbnail } from "@/lib/artifacts/thumbnails";
 import { KIND_STYLES } from "./kinds";
 import { MediaBody } from "./MediaBody";
 import { useCanvasUi } from "./ui";
@@ -73,6 +74,9 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   const ext = node.docPath?.split(".").pop() ?? "";
   const viewable = ext === "html" || ext === "svg";
   const src = node.docPath ? `/api/mulches/${mulchId}/${node.docPath}` : undefined;
+  // Decks and documents: a Quick Look preview of the first page (desktop app only).
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const thumb = node.docPath && hasThumbnail(node.docPath) && !thumbFailed ? `/api/mulches/${mulchId}/thumbnail?doc=${encodeURIComponent(node.docPath)}&v=${node.updatedAt ?? node.createdAt}` : undefined;
   const label = ext === "pptx" ? "PowerPoint" : ext.toUpperCase();
   return (
     <div>
@@ -87,6 +91,12 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
             className="pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-white"
             style={{ width: 1280, height: 720, transform: `scale(${(node.w ?? 320) / 1280})` }}
           />
+        </div>
+      )}
+      {thumb && (
+        <div className="h-[180px] overflow-hidden rounded-t-[inherit] border-b border-line bg-paper-2 grid place-items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={thumb} alt="" draggable={false} onError={() => setThumbFailed(true)} className="max-h-full max-w-full object-contain shadow-[0_1px_3px_rgba(0,0,0,0.12)]" />
         </div>
       )}
       <div className="px-3.5 py-3">
