@@ -1,15 +1,13 @@
-# Mulch
+# mlch
 
-In the interface the product is **Mulch** and the thing you create is barely named ("New", titles, "This one / All"); where a noun is needed it is "a mulch". In code it is a `Mulch` (types, store, routes, tools); the agent calls it "the canvas".
-
-Spelling: people see and say **Mulch** (app name, window, menus, `~/Documents/Mulch`). The handle is **mlch**: domain mlch.app, this folder and the repo, the bundle id (`app.mlch.mac` when packaged), social handles. Internal identifiers stay `mulch` (`MULCH_*`, `~/.mulch`).
+**mlch is the app; mulch is the thing.** Everywhere the app's name shows (app and window name, menus, dialogs, folders like `~/Documents/mlch`, the domain mlch.app, the repo, `MLCH_*` env vars, `~/.mlch`, globals, headers, CSS class prefixes, the agent's MCP server) it is lowercase **mlch**, said "mulch". The thing you create is barely named in the interface ("New", titles, "This one / All"); in code it is a `Mulch` (`mulchId`, `/api/mulches`, `search_mulch`), and the agent calls it "the canvas".
 
 Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user's own Claude Code / Codex subscription. Product vision: README.md. Plan and status: docs/PLAN.md.
 
 ## Commands
 
 - `npm run check`: typecheck, lint, vitest, electron tests. Run before committing.
-- `npm run dev`: browser dev server on :3100. Set `MULCH_LIBRARY=<dir>` to keep test data out of `~/Documents/Mulch`.
+- `npm run dev`: browser dev server on :3100. Set `MLCH_LIBRARY=<dir>` to keep test data out of `~/Documents/mlch`.
 - `npm run electron:dev` / `npm run app`: desktop app (dev / production build).
 - `node scripts/electron-run.cjs <test.cjs> [--library dir] [--shots dir] [--fake-mic file.wav] [--production]`: drive the real app with Playwright (throwaway profile). `scripts/electron-shot.cjs <out.png> [route]` for a screenshot. electron-run fails if a new Electron crash report appears in ~/Library/Logs/DiagnosticReports.
 

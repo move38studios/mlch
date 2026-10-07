@@ -71,14 +71,14 @@ describe("codexAppServerArgs", () => {
 });
 
 describe("CodexAppServer", () => {
-  it("initializes as Mulch with the experimental API, then reads the user's MCP servers", async () => {
+  it("initializes as mlch with the experimental API, then reads the user's MCP servers", async () => {
     const { server, spawn, children } = serverWith();
     await server.start();
     expect(spawn).toHaveBeenCalledWith("/opt/codex", codexAppServerArgs(), { env: { HOME: "/Users/user" } });
     const [child] = children;
     expect(child.received.map((line) => line.method)).toEqual(["initialize", "initialized", "config/read"]);
     expect(child.received[0].params).toEqual({
-      clientInfo: { name: "mulch", title: "Mulch", version: expect.stringMatching(/^\d+\.\d+\.\d+/) },
+      clientInfo: { name: "mlch", title: "mlch", version: expect.stringMatching(/^\d+\.\d+\.\d+/) },
       capabilities: { experimentalApi: true, requestAttestation: false },
     });
     expect(server.info).toMatchObject({ version: "0.157.0", codexHome: "/Users/user/.codex" });
@@ -220,7 +220,7 @@ describe("CodexAppServer", () => {
 
 describe("parseCodexVersion", () => {
   it("reads Codex's version from the user agent", () => {
-    expect(parseCodexVersion("mulch/0.157.0 (Mac OS 26.6.0; arm64) unknown (Mulch; 1.10.0)")).toBe("0.157.0");
+    expect(parseCodexVersion("mulch/0.157.0 (Mac OS 26.6.0; arm64) unknown (mlch; 1.10.0)")).toBe("0.157.0");
     expect(parseCodexVersion("garbage")).toBeUndefined();
   });
 });

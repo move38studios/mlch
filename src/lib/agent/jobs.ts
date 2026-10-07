@@ -62,9 +62,9 @@ interface JobsState {
   status?: { at: number; value: AgentHarnessStatus };
 }
 
-const globalState = globalThis as typeof globalThis & { __mulchJobs?: JobsState };
+const globalState = globalThis as typeof globalThis & { __mlchJobs?: JobsState };
 function state(): JobsState {
-  return (globalState.__mulchJobs ??= { mulches: new Map() });
+  return (globalState.__mlchJobs ??= { mulches: new Map() });
 }
 
 function jobsFor(mulchId: string): MulchJobs {
@@ -518,7 +518,7 @@ export function submitMake(mulchId: string, brief: string): void {
         prompt:
           `<mulch>\n${describeMulch(mulch, { textLimit: 2000 })}\n</mulch>\n\n` +
           `Working folder (scratch): ${workspace.cwd}\nSave finished files in: ${workspace.writable[0]}\n` +
-          `Mulch files (images, documents) are in: ${path.join(mulchDir(mulchId), "assets")}\n\n<brief>\n${brief}\n</brief>`,
+          `Canvas files (images, documents) are in: ${path.join(mulchDir(mulchId), "assets")}\n\n<brief>\n${brief}\n</brief>`,
         tools: ["get_mulch", "view_image", "present_file", "preview_artifact", "say"],
         workspace,
         webAccess: true,

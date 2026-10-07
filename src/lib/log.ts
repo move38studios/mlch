@@ -1,5 +1,5 @@
 /**
- * Structured logging for the Mulch server. Server-only.
+ * Structured logging for the mlch server. Server-only.
  *
  *   log.info("jobs", "job finished", { mulchId, jobId, ms: 5200 })
  *
@@ -28,7 +28,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP = 4;
 
 export function logsDir(): string {
-  return process.env.MULCH_LOGS_DIR || path.join(os.homedir(), "Library", "Logs", "Mulch");
+  return process.env.MLCH_LOGS_DIR || path.join(os.homedir(), "Library", "Logs", "mlch");
 }
 
 export function logFile(): string {
@@ -36,8 +36,8 @@ export function logFile(): string {
 }
 
 type Globals = typeof globalThis & {
-  __mulchRedact?: (value: string) => string;
-  __mulchCredentials?: Record<string, string | null | undefined>;
+  __mlchRedact?: (value: string) => string;
+  __mlchCredentials?: Record<string, string | null | undefined>;
 };
 
 const SECRET_FIELD = /(key|token|secret|password|authorization)/i;
@@ -45,9 +45,9 @@ const SECRET_FIELD = /(key|token|secret|password|authorization)/i;
 /** Remove anything that looks like a secret, including the keys the app holds. */
 export function redact(text: string): string {
   const globals = globalThis as Globals;
-  let out = globals.__mulchRedact ? globals.__mulchRedact(text) : text;
+  let out = globals.__mlchRedact ? globals.__mlchRedact(text) : text;
   const known = [
-    ...Object.values(globals.__mulchCredentials ?? {}),
+    ...Object.values(globals.__mlchCredentials ?? {}),
     ...["GROQ_API_KEY", "FIRECRAWL_API_KEY", "FAL_KEY", "EXA_API_KEY"].map((name) => process.env[name]),
   ].filter((value): value is string => typeof value === "string" && value.length >= 8);
   for (const secret of known) out = out.split(secret).join("[REDACTED]");
@@ -104,7 +104,7 @@ function write(level: LogLevel, area: string, msg: string, data?: Record<string,
 
 export const log = {
   debug: (area: string, msg: string, data?: Record<string, unknown>) => {
-    if (process.env.MULCH_DEBUG) write("debug", area, msg, data);
+    if (process.env.MLCH_DEBUG) write("debug", area, msg, data);
   },
   info: (area: string, msg: string, data?: Record<string, unknown>) => write("info", area, msg, data),
   warn: (area: string, msg: string, data?: Record<string, unknown>) => write("warn", area, msg, data),

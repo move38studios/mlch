@@ -24,7 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import type { Readable, Writable } from "node:stream";
-import { MULCH_VERSION } from "./env";
+import { MLCH_VERSION } from "./env";
 
 /** `-c key=value` overrides applied to the app-server process. */
 export const CODEX_LOCKDOWN_CONFIG: readonly string[] = [
@@ -223,7 +223,7 @@ export class CodexAppServer {
 
     try {
       const init = (await this.requestOn(child, "initialize", {
-        clientInfo: { name: "mulch", title: "Mulch", version: MULCH_VERSION },
+        clientInfo: { name: "mlch", title: "mlch", version: MLCH_VERSION },
         capabilities: { experimentalApi: true, requestAttestation: false },
       })) as { userAgent?: string; codexHome?: string };
       this.info = {
@@ -390,7 +390,7 @@ export class CodexAppServer {
     if (!child) return;
     const handler = this.requestHandlers.get(method);
     if (!handler) {
-      this.write(child, { id, error: { code: -32601, message: `Mulch doesn't support "${method}".` } });
+      this.write(child, { id, error: { code: -32601, message: `mlch doesn't support "${method}".` } });
       return;
     }
     try {
@@ -404,17 +404,17 @@ export class CodexAppServer {
 
 /* ── the shared instance ───────────────────────────────────────── */
 
-const globalState = globalThis as typeof globalThis & { __mulchCodexAppServer?: CodexAppServer };
+const globalState = globalThis as typeof globalThis & { __mlchCodexAppServer?: CodexAppServer };
 
 /**
  * The process-wide app-server for this binary. A different binary (e.g.
- * MULCH_CODEX_BIN changed) replaces it.
+ * MLCH_CODEX_BIN changed) replaces it.
  */
 export function getCodexAppServer(bin: string, env: Record<string, string>): CodexAppServer {
-  const current = globalState.__mulchCodexAppServer;
+  const current = globalState.__mlchCodexAppServer;
   if (current && current.bin === bin) return current;
   current?.stop();
   const server = new CodexAppServer({ bin, env });
-  globalState.__mulchCodexAppServer = server;
+  globalState.__mlchCodexAppServer = server;
   return server;
 }

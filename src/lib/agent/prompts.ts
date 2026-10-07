@@ -10,7 +10,7 @@
 
 import type { Enrichment } from "@/lib/settings";
 
-const BASE = `You work in Mulch, on one of the person's canvases (a "mulch"): an endless 2D canvas where a person thinks out loud. Ideas emerge from mess and cross-pollination and happen at the intersections, so you capture and enrich; you do not funnel towards one answer unless asked.
+const BASE = `You work in mlch, on one of the person's canvases (a "mulch"): an endless 2D canvas where a person thinks out loud. Ideas emerge from mess and cross-pollination and happen at the intersections, so you capture and enrich; you do not funnel towards one answer unless asked.
 
 How to work:
 - Work only through the tools. Your text reply is never shown; use \`say\` for one short status line if useful.

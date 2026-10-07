@@ -1,5 +1,5 @@
 /**
- * Mulch agent: shared contracts.
+ * mlch agent: shared contracts.
  *
  * Adapted from node-banana's agent (MIT, © William Falloon). Each turn runs on
  * the user's own Claude Code or Codex login through the official CLI, never on
@@ -87,7 +87,7 @@ export interface AgentHarnessStatus {
   };
   /** The terminal command that signs in with the vendor's own flow. */
   signInCommand: string;
-  /** Mulch: the plan's usage windows at the last check (percent used), when the vendor reports them. */
+  /** mlch: the plan's usage windows at the last check (percent used), when the vendor reports them. */
   planUsage?: Array<{ name: string; percent: number; resetsAt?: number; at: number }>;
 }
 
@@ -210,7 +210,7 @@ export interface AgentToolResult {
   text: string;
   /** One short line for the chat UI, e.g. "Added 4 nodes and 3 connections". */
   summary: string;
-  /** Mulch changes the tool made, in order. Empty for read-only tools and failures. */
+  /** mlch changes the tool made, in order. Empty for read-only tools and failures. */
   ops: MulchOp[];
   /** Images returned to the model with the text (base64, no data: prefix). */
   images?: Array<{ data: string; mimeType: string }>;

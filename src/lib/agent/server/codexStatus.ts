@@ -262,7 +262,7 @@ function codexEfforts(model: ListedModel, preferred: string | undefined): Pick<A
     }
   }
   if (efforts.length === 0) return {};
-  // Mulch runs Codex at its own level (MULCH_CODEX_EFFORT, else medium) unless the user picks one.
+  // mlch runs Codex at its own level (MLCH_CODEX_EFFORT, else medium) unless the user picks one.
   const serverDefault = typeof model.defaultReasoningEffort === "string" ? model.defaultReasoningEffort : undefined;
   const defaultEffort = [preferred, serverDefault].find((level) => level && efforts.includes(level)) ?? efforts[0];
   return { efforts, defaultEffort };

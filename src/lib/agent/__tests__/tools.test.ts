@@ -8,8 +8,8 @@ import { overlaps, rectOf } from "@/lib/mulch/sizes";
 let library: string;
 beforeEach(() => {
   library = fs.mkdtempSync(path.join(os.tmpdir(), "mulch-tools-"));
-  process.env.MULCH_LIBRARY = library;
-  delete (globalThis as { __mulchStore?: unknown }).__mulchStore;
+  process.env.MLCH_LIBRARY = library;
+  delete (globalThis as { __mlchStore?: unknown }).__mlchStore;
 });
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 

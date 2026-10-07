@@ -25,8 +25,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk/core";
 import { WEB_TOOL_PENDING, type AgentErrorCode, type HarnessEvent } from "../types";
 
-/** The in-process MCP server's name; tools reach the model as `mcp__mulch__<tool>`. */
-export const CLAUDE_MCP_SERVER_NAME = "mulch";
+/** The in-process MCP server's name; tools reach the model as `mcp__mlch__<tool>`. */
+export const CLAUDE_MCP_SERVER_NAME = "mlch";
 
 const TOOL_PREFIX = `mcp__${CLAUDE_MCP_SERVER_NAME}__`;
 
@@ -197,7 +197,7 @@ export class ClaudeEventMapper {
       events.push(
         this.error(
           "harness_error",
-          `Mulch's tools failed to load in Claude Code (missing: ${missing.join(", ")}). ` +
+          `mlch's tools failed to load in Claude Code (missing: ${missing.join(", ")}). ` +
             "The turn was stopped before the model could act without them.",
         ),
       );

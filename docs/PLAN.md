@@ -1,4 +1,4 @@
-# Mulch V1 plan
+# mlch V1 plan
 
 Status 2026-10-07: M0–M7 built, plus images, artifacts and the maker lane, media generation, search and research, logging. Next: George tests with real voice and real mulches.
 
@@ -138,7 +138,7 @@ Each milestone ends with something usable and tested (Vitest for logic; Playwrig
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | Scaffold: Next 16 + Electron shell from node-banana, renamed, mic permission, `THIRD_PARTY_NOTICES.md`, Vitest, lint, `npm run dev` / `npm run electron:dev` | App window opens on an empty home screen |
-| M1 | Mulch list + canvas + storage: create/open/rename/delete mulches, React Flow canvas with node kinds, manual add/edit/move/connect, autosave to folder, undo | A hand-made mulch survives a restart |
+| M1 | mlch list + canvas + storage: create/open/rename/delete mulches, React Flow canvas with node kinds, manual add/edit/move/connect, autosave to folder, undo | A hand-made mulch survives a restart |
 | M2 | Agent harness: port Claude and Codex harnesses, settings screen, text box that sends input to the fast lane, graph ops streamed onto the canvas | Typing a paragraph produces idea nodes and connections live |
 | M3 | Voice: `Transcriber` interface, Groq implementation, chunking, live transcript strip | Speaking produces the same result as typing |
 | M4 | Slow lane enrichment: search, definitions, examples, questions, cross-links; pause control; per-mulch budget | Enrichment arrives after the fast lane without moving user items |

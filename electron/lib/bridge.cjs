@@ -2,7 +2,7 @@
 // The Next server's side of the desktop bridge. The server runs in a utility
 // process without Electron's APIs, so it asks main for native actions over
 // parentPort and waits for the reply carrying the same id. electron/server.cjs
-// exposes request() to route code as globalThis.__mulchDesktop
+// exposes request() to route code as globalThis.__mlchDesktop
 // (src/lib/desktop/server.ts); lib/bridge-main.cjs answers.
 const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render']);
 const INGEST_PICKER_TITLE = 'Choose a folder';

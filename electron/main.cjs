@@ -20,16 +20,16 @@ const root = path.resolve(__dirname, '..');
 let backend, window, credentialStore, diagnostics;
 let quitting = false, starting;
 const dev = !app.isPackaged && process.argv.includes('--dev');
-const port = Number(process.env.MULCH_ELECTRON_PORT || 47841);
+const port = Number(process.env.MLCH_ELECTRON_PORT || 47841);
 const origin = `http://127.0.0.1:${port}`;
 const token = randomBytes(32).toString('hex');
 const redactor = createRedactor();
 redactor.add([token]);
 
-app.setName('Mulch');
-app.setPath('userData', process.env.MULCH_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'Mulch'));
+app.setName('mlch');
+app.setPath('userData', process.env.MLCH_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'mlch'));
 // Test profiles keep their logs to themselves.
-if (process.env.MULCH_ELECTRON_USER_DATA) app.setAppLogsPath(path.join(app.getPath('userData'), 'logs'));
+if (process.env.MLCH_ELECTRON_USER_DATA) app.setAppLogsPath(path.join(app.getPath('userData'), 'logs'));
 // Crash dumps stay on this machine (in the app's crashDumps folder); nothing is uploaded.
 crashReporter.start({ uploadToServer: false });
 
@@ -43,15 +43,15 @@ function message(options) { return window ? dialog.showMessageBox(window, option
 async function fail(error) {
   if (quitting) return;
   log(error);
-  const { response } = await message({ type: 'error', title: 'Mulch could not start', message: redactor.redact(error.message || error), buttons: ['Open Logs', 'Quit'], cancelId: 1 });
+  const { response } = await message({ type: 'error', title: 'mlch could not start', message: redactor.redact(error.message || error), buttons: ['Open Logs', 'Quit'], cancelId: 1 });
   if (response === 0) await openLogs();
   app.quit();
 }
 function documentsDir() { try { return app.getPath('documents'); } catch { return path.join(os.homedir(), 'Documents'); } }
 function libraryDir() {
-  if (process.env.MULCH_LIBRARY) return path.resolve(process.env.MULCH_LIBRARY);
-  if (process.env.MULCH_ELECTRON_USER_DATA) return path.join(app.getPath('userData'), 'mulches');
-  return path.join(documentsDir(), 'Mulch');
+  if (process.env.MLCH_LIBRARY) return path.resolve(process.env.MLCH_LIBRARY);
+  if (process.env.MLCH_ELECTRON_USER_DATA) return path.join(app.getPath('userData'), 'mulches');
+  return path.join(documentsDir(), 'mlch');
 }
 function openExternal(url) { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(log); }
 function allowedPermission(contents, permission, requestingURL) {
@@ -79,7 +79,7 @@ async function startWithRetry() {
       } catch (error) {
         log(error); sendStatus();
         const occupied = error.code === 'EADDRINUSE';
-        const { response } = await message({ type: 'error', title: 'Mulch local server',
+        const { response } = await message({ type: 'error', title: 'mlch local server',
           message: occupied ? `Port ${port} is in use by another process.` : 'The local server could not start.',
           detail: occupied ? 'Close the other app using this port, then choose Retry.' : redactor.redact(error.message),
           buttons: ['Retry', 'Open Logs', 'Quit'], defaultId: 0, cancelId: 2 });
@@ -95,7 +95,7 @@ async function startWithRetry() {
 async function disconnected(code) {
   sendStatus(); log(`Backend exited ${code}`);
   if (quitting || !window) return;
-  const { response } = await message({ type: 'warning', title: 'Mulch server stopped',
+  const { response } = await message({ type: 'warning', title: 'mlch server stopped',
     message: 'The local server stopped.',
     buttons: ['Restart Server', 'Open Logs', 'Close'], defaultId: 0, cancelId: 2 });
   if (response === 0) await startWithRetry();
@@ -108,7 +108,7 @@ async function createWindow() {
   let saved;
   try { saved = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
   const bounds = visibleBounds(saved?.bounds, screen.getAllDisplays(), screen.getPrimaryDisplay());
-  window = new BrowserWindow({ title: 'Mulch', ...bounds,
+  window = new BrowserWindow({ title: 'mlch', ...bounds,
     minWidth: Math.min(800, bounds.width), minHeight: Math.min(560, bounds.height), backgroundColor: '#f6f4ef', show: false,
     titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
@@ -138,7 +138,7 @@ async function createWindow() {
   current.webContents.on('render-process-gone', async (_event, details) => {
     log(`Renderer stopped: ${details.reason} (exit ${details.exitCode})`);
     if (quitting) return;
-    const { response } = await message({ type: 'error', title: 'Mulch window stopped', message: 'The window stopped unexpectedly. Your work is saved on disk.', buttons: ['Reload', 'Open Logs', 'Quit'], cancelId: 2 });
+    const { response } = await message({ type: 'error', title: 'mlch window stopped', message: 'The window stopped unexpectedly. Your work is saved on disk.', buttons: ['Reload', 'Open Logs', 'Quit'], cancelId: 2 });
     if (response === 1) { await openLogs(); return; }
     if (response === 2) { app.quit(); return; }
     if (!backend.online() && !await startWithRetry()) return;
@@ -150,7 +150,7 @@ async function createWindow() {
   await current.loadURL(origin);
 }
 
-// Mulch: the agent's eyes on an HTML artifact. Loads it in a hidden window (the
+// mlch: the agent's eyes on an HTML artifact. Loads it in a hidden window (the
 // server sends the same sandboxing CSP), captures the first slides, pressing
 // ArrowRight between them, and reports script errors.
 const ARTIFACT_URL = /^\/api\/mulches\/[a-z0-9-]+\/(artifacts\/[a-z0-9][a-z0-9._-]*\.(html|svg)|model-view\/[a-f0-9]{64}\.(glb|gltf))$/;
@@ -208,7 +208,7 @@ function registerBridge() {
   ipcMain.handle('desktop:open-logs', guarded(() => openLogs()));
   ipcMain.handle('desktop:microphone-access', guarded(async () => {
     // Automated runs feed a fake microphone and must not raise the system prompt.
-    if (process.platform !== 'darwin' || (!app.isPackaged && process.env.MULCH_FAKE_MIC === '1')) return true;
+    if (process.platform !== 'darwin' || (!app.isPackaged && process.env.MLCH_FAKE_MIC === '1')) return true;
     if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return true;
     return systemPreferences.askForMediaAccess('microphone');
   }));
@@ -248,15 +248,15 @@ else {
       redactor.add(values); backend?.post({ type: 'secrets', values });
     });
     const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, log });
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('MULCH_ELECTRON_PORT must be a port number between 1 and 65535.');
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('MLCH_ELECTRON_PORT must be a port number between 1 and 65535.');
     backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
       entry: path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,
-      options: () => ({ cwd: root, serviceName: 'Mulch Server', stdio: 'pipe', env: {
+      options: () => ({ cwd: root, serviceName: 'mlch Server', stdio: 'pipe', env: {
         ...process.env,
-        NODE_ENV: dev ? 'development' : 'production', MULCH_ELECTRON: '1',
-        MULCH_ELECTRON_PORT: String(port), MULCH_ELECTRON_TOKEN: token,
-        MULCH_LIBRARY: libraryDir(),
-        MULCH_LOGS_DIR: app.getPath('logs'),
+        NODE_ENV: dev ? 'development' : 'production', MLCH_ELECTRON: '1',
+        MLCH_ELECTRON_PORT: String(port), MLCH_ELECTRON_TOKEN: token,
+        MLCH_LIBRARY: libraryDir(),
+        MLCH_LOGS_DIR: app.getPath('logs'),
       } }),
       onMessage: async (msg, child) => {
         const reply = await serverMessage(msg);
@@ -266,7 +266,7 @@ else {
     });
     const localURLs = [`${origin}/*`, `${origin.replace('http:', 'ws:')}/*`];
     session.defaultSession.webRequest.onBeforeSendHeaders({ urls: localURLs }, (details, callback) => {
-      callback({ requestHeaders: { ...details.requestHeaders, 'X-Mulch-Desktop': token } });
+      callback({ requestHeaders: { ...details.requestHeaders, 'X-Mlch-Desktop': token } });
     });
     session.defaultSession.setPermissionCheckHandler(allowedPermission);
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowedPermission(contents, permission, details.requestingUrl)));

@@ -15,7 +15,7 @@ describe("resolveReadable", () => {
   });
 
   it("refuses escapes and private places", () => {
-    for (const p of ["../etc/passwd", "/etc/passwd", ".ssh/id_rsa", ".aws/credentials", "Library/Keychains/login.keychain-db", "dev/app/.env", "dev/app/.env.local", "dev/certs/server.pem", ".mulch/agent/x"]) {
+    for (const p of ["../etc/passwd", "/etc/passwd", ".ssh/id_rsa", ".aws/credentials", "Library/Keychains/login.keychain-db", "dev/app/.env", "dev/app/.env.local", "dev/certs/server.pem", ".mlch/agent/x"]) {
       expect(resolveReadable(home, p), p).toBeUndefined();
     }
   });

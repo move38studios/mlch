@@ -147,9 +147,9 @@ function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
         </div>
       )}
       {node.title && <div className="font-semibold mb-1 leading-snug">{node.title}</div>}
-      <div className="mulch-text overflow-hidden" style={{ maxHeight: `${style.clamp * 1.45}em` }}>
+      <div className="mlch-text overflow-hidden" style={{ maxHeight: `${style.clamp * 1.45}em` }}>
         {style.markdown ? (
-          <div className="mulch-md">
+          <div className="mlch-md">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{node.text}</ReactMarkdown>
           </div>
         ) : (
@@ -173,14 +173,14 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
 
   return (
     <div
-      className={`mulch-node group relative rounded-[6px] text-ink ${style.card} ${selected ? "ring-2 ring-accent/70" : ""} ${fresh ? "node-enter" : ""} ${isAiMade(node) ? "mulch-ai" : ""}`}
+      className={`mlch-node group relative rounded-[6px] text-ink ${style.card} ${selected ? "ring-2 ring-accent/70" : ""} ${fresh ? "node-enter" : ""} ${isAiMade(node) ? "mlch-ai" : ""}`}
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
       }}
     >
-      <Handle type="target" position={Position.Left} className="mulch-handle-target" isConnectableStart={false} />
+      <Handle type="target" position={Position.Left} className="mlch-handle-target" isConnectableStart={false} />
       {editing ? (
         <div className="px-3.5 py-3">
           <Editor node={node} onDone={() => setEditing(undefined)} />
@@ -198,7 +198,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
           <Maximize2 size={12} />
         </button>
       )}
-      <Handle type="source" position={Position.Right} className="mulch-handle" />
+      <Handle type="source" position={Position.Right} className="mlch-handle" />
       {selected && !editing && !readOnly && (
         <NodeResizeControl
           position="right"
@@ -206,7 +206,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
           resizeDirection="horizontal"
           minWidth={140}
           maxWidth={900}
-          className="mulch-resize"
+          className="mlch-resize"
           onResizeEnd={(_event, params) =>
             apply([{ op: "updateNode", id: node.id, patch: { w: Math.round(params.width), x: Math.round(params.x), userTouched: true } }])
           }

@@ -38,7 +38,7 @@ class Tap extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor("mulch-tap", Tap);
+registerProcessor("mlch-tap", Tap);
 `;
 
 function encodeWav(samples: Float32Array, rate: number): Blob {
@@ -141,7 +141,7 @@ export class Recorder {
       URL.revokeObjectURL(url);
     }
     const source = this.context.createMediaStreamSource(this.stream);
-    this.node = new AudioWorkletNode(this.context, "mulch-tap");
+    this.node = new AudioWorkletNode(this.context, "mlch-tap");
     this.node.port.onmessage = (event: MessageEvent<Float32Array>) => this.receive(event.data);
     source.connect(this.node);
     this.chunkStartedAt = Date.now();

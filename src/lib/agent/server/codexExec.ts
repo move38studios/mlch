@@ -1,5 +1,5 @@
 /**
- * Mulch: Codex making turns. Server-only.
+ * mlch: Codex making turns. Server-only.
  *
  * The app-server that runs ordinary turns has its shell switched off for the
  * whole process (CODEX_LOCKDOWN_CONFIG), so a turn that needs Codex's own

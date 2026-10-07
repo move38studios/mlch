@@ -111,7 +111,7 @@ export function describeMulch(mulch: Mulch, options: { textLimit?: number; maxNo
   const textLimit = options.textLimit ?? 220;
   const nodes = Object.values(mulch.nodes).sort((a, b) => a.createdAt - b.createdAt);
   const shown = options.maxNodes && nodes.length > options.maxNodes ? nodes.slice(-options.maxNodes) : nodes;
-  const lines = [`Mulch "${mulch.title}" — ${nodes.length} items, ${Object.keys(mulch.edges).length} connections.`];
+  const lines = [`Canvas "${mulch.title}" — ${nodes.length} items, ${Object.keys(mulch.edges).length} connections.`];
   if (shown.length < nodes.length) lines.push(`(Showing the newest ${shown.length}; call get_mulch for all.)`);
   const bounds = boundsOf(nodes.map(rectOf));
   if (bounds) lines.push(`Bounds: ${Math.round(bounds.x)},${Math.round(bounds.y)} to ${Math.round(bounds.x + bounds.w)},${Math.round(bounds.y + bounds.h)}`);
@@ -252,7 +252,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     title: "Make file",
     description:
       "Save a file you wrote (an HTML page or slide deck, SVG, markdown, CSV, JSON, text) in the canvas's artifacts folder and put a card for it on the canvas. " +
-      "HTML opens full-window inside Mulch and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
+      "HTML opens full-window inside mlch and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
       "images only as data: URIs. It cannot fetch anything at runtime and cannot open other pages.",
     inputShape: {
       title: z.string().max(120),

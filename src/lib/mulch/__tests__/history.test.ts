@@ -9,9 +9,9 @@ import { mulchWith, node } from "./fixtures";
 let library: string;
 beforeEach(() => {
   library = fs.mkdtempSync(path.join(os.tmpdir(), "mulch-history-"));
-  process.env.MULCH_LIBRARY = library;
-  delete (globalThis as { __mulchStore?: unknown }).__mulchStore;
-  delete (globalThis as { __mulchHistory?: unknown }).__mulchHistory;
+  process.env.MLCH_LIBRARY = library;
+  delete (globalThis as { __mlchStore?: unknown }).__mlchStore;
+  delete (globalThis as { __mlchHistory?: unknown }).__mlchHistory;
 });
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 

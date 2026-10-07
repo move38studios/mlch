@@ -1,4 +1,6 @@
-# Mulch
+# mlch
+
+*Say "mulch".*
 
 An app for non-linear thinkers.
 
@@ -24,7 +26,7 @@ Ideas emerge from the mess and from cross-pollination, and they happen at the in
 
 **Speak again.** Click the mic to add more, or to ask the AI to act on it: organize it, clean it up, or produce a linear summary or write-up. Write-ups are produced as markdown documents and dropped onto the canvas.
 
-**Folders and files.** Point Mulch at a folder and the AI explores it and builds a mulch out of its contents. You can also just ask ("look at my dev/briefbuster folder and describe its key ideas"); it reads files on your machine read-only and never looks into credentials or app data.
+**Folders and files.** Point mlch at a folder and the AI explores it and builds a mulch out of its contents. You can also just ask ("look at my dev/briefbuster folder and describe its key ideas"); it reads files on your machine read-only and never looks into credentials or app data.
 
 **Images.** The AI sees images: dropped images are captioned and their content joins the canvas.
 
@@ -45,7 +47,7 @@ Ideas emerge from the mess and from cross-pollination, and they happen at the in
 
 ## AI
 
-- No separate AI subscription. Mulch uses your existing Claude Code or Codex subscription.
+- No separate AI subscription. mlch uses your existing Claude Code or Codex subscription.
 - Some features use your own keys, entered in Settings: Groq (microphone), fal (media generation), Exa (research search), Firecrawl (reading pages and documents, optional).
 
 ## Running
@@ -69,12 +71,12 @@ EXA_API_KEY=...        # research search
 FIRECRAWL_API_KEY=...  # optional: better link and document reading
 ```
 
-Each mulch is a folder in `~/Documents/Mulch`. Logs are in `~/Library/Logs/Mulch`; Settings → Diagnostics saves a report for support.
+Each mulch is a folder in `~/Documents/mlch`. Logs are in `~/Library/Logs/mlch`; Settings → Diagnostics saves a report for support.
 
 ## Not built yet
 
 - Sharing snapshots as links.
 - A packaged, signed Mac app (today it runs from this repo).
-- Using your own Claude Code / Codex connectors (MCP) inside Mulch.
+- Using your own Claude Code / Codex connectors (MCP) inside mlch.
 - Local transcription (Parakeet).
 - Live collaboration.

@@ -8,7 +8,7 @@
  *
  * - Claude: `process.env` minus every Anthropic/cloud-provider credential, the
  *   app's own provider keys, anything else that looks like a secret, and the
- *   nested-session variables Mulch inherits when it is itself started
+ *   nested-session variables mlch inherits when it is itself started
  *   from a Claude Code terminal. The config dir (where the login lives) stays.
  * - Codex: an allowlist. Nothing reaches the child that isn't needed to find
  *   the home directory, the login, the network (proxies, custom CAs) and the
@@ -17,7 +17,7 @@
 
 import packageJson from "../../../../package.json";
 
-export const MULCH_VERSION: string = packageJson.version;
+export const MLCH_VERSION: string = packageJson.version;
 
 type SourceEnv = Record<string, string | undefined>;
 
@@ -38,7 +38,7 @@ const CLAUDE_STRIP_PREFIXES = [
   // Enterprise gateway credentials.
   "CLAUDE_CODE_GATEWAY_",
   "AWS_BEARER_TOKEN_BEDROCK",
-  // The parent Claude Code session, when Mulch runs inside one.
+  // The parent Claude Code session, when mlch runs inside one.
   "CLAUDE_CODE_SESSION_",
   "CLAUDE_CODE_MESSAGING_",
   "CLAUDE_CODE_BRIDGE_",
@@ -61,7 +61,7 @@ const CLAUDE_STRIP_EXACT = new Set([
   "CLAUDE_ENV_FILE",
   // server.js's per-process loopback stamp (sameOrigin.ts). SECRET_NAME
   // catches it too; named so the intent survives a change to the pattern.
-  "MULCH_AGENT_LOCAL_SECRET",
+  "MLCH_AGENT_LOCAL_SECRET",
 ]);
 
 /**
@@ -127,7 +127,7 @@ export function buildClaudeEnv(source: SourceEnv = process.env): Record<string, 
     env[name] = value;
   }
   // Identify the app honestly in Claude Code's User-Agent.
-  env.CLAUDE_AGENT_SDK_CLIENT_APP = `mulch/${MULCH_VERSION}`;
+  env.CLAUDE_AGENT_SDK_CLIENT_APP = `mulch/${MLCH_VERSION}`;
   // Agent chats should not read or write the user's Claude memory files.
   env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   // Print the sign-in URL as plain text, never wrapped in an OSC-8 link.

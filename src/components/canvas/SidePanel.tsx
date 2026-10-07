@@ -50,7 +50,7 @@ export function SidePanel() {
         const range = document.createRange();
         range.setStart(text, at);
         range.setEnd(text, Math.min((text.textContent ?? "").length, at + needle.length));
-        (CSS as unknown as { highlights: Map<string, unknown> }).highlights.set("mulch-find", new (window as unknown as { Highlight: new (r: Range) => unknown }).Highlight(range));
+        (CSS as unknown as { highlights: Map<string, unknown> }).highlights.set("mlch-find", new (window as unknown as { Highlight: new (r: Range) => unknown }).Highlight(range));
         (text.parentElement ?? root).scrollIntoView({ block: "center", behavior: "smooth" });
         return;
       }
@@ -102,7 +102,7 @@ export function SidePanel() {
             {node.gen.error && ` · ${node.gen.error}`}
           </p>
         )}
-        <div className="mulch-md mulch-md-full text-[14px] leading-relaxed">
+        <div className="mlch-md mlch-md-full text-[14px] leading-relaxed">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
         </div>
       </div>

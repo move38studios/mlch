@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 let library: string;
 beforeEach(() => {
   library = fs.mkdtempSync(path.join(os.tmpdir(), "mulch-store-"));
-  process.env.MULCH_LIBRARY = library;
-  delete (globalThis as { __mulchStore?: unknown }).__mulchStore;
+  process.env.MLCH_LIBRARY = library;
+  delete (globalThis as { __mlchStore?: unknown }).__mlchStore;
 });
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 
@@ -35,7 +35,7 @@ describe("mulch store", () => {
     expect(fs.readFileSync(path.join(dir, "events.jsonl"), "utf8").trim().split("\n")).toHaveLength(1);
 
     // A fresh process reads it back from disk.
-    delete (globalThis as { __mulchStore?: unknown }).__mulchStore;
+    delete (globalThis as { __mlchStore?: unknown }).__mlchStore;
     expect((await store.getMulch(mulch.id)).nodes.a.text).toBe("hi");
     expect((await store.listMulches()).map((s) => [s.title, s.nodeCount])).toEqual([["One", 1]]);
 

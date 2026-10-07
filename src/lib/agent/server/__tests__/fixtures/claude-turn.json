@@ -2,14 +2,14 @@
  {
   "type": "system",
   "subtype": "init",
-  "cwd": "/Users/user/.mulch/agent",
+  "cwd": "/Users/user/.mlch/agent",
   "session_id": "42aeca93-6672-48dd-897c-3b62f633dd55",
   "tools": [
-   "mcp__mulch__add_numbers"
+   "mcp__mlch__add_numbers"
   ],
   "mcp_servers": [
    {
-    "name": "mulch",
+    "name": "mlch",
     "status": "connected",
     "source": "sdk"
    }
@@ -338,7 +338,7 @@
    "content_block": {
     "type": "tool_use",
     "id": "toolu_01BzVxDNQiKFdPMUYXk6XtmX",
-    "name": "mcp__mulch__add_numbers",
+    "name": "mcp__mlch__add_numbers",
     "input": {},
     "caller": {
      "type": "direct"
@@ -416,7 +416,7 @@
     {
      "type": "tool_use",
      "id": "toolu_01BzVxDNQiKFdPMUYXk6XtmX",
-     "name": "mcp__mulch__add_numbers",
+     "name": "mcp__mlch__add_numbers",
      "input": {
       "a": 2,
       "b": 3
@@ -461,7 +461,7 @@
    {
     "id": "toolu_01BzVxDNQiKFdPMUYXk6XtmX",
     "display_name": "Add Numbers",
-    "server_display_name": "mulch"
+    "server_display_name": "mlch"
    }
   ]
  },

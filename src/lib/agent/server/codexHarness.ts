@@ -78,7 +78,7 @@ export function codexToolNamespace(definitions: AgentToolDefinition[]): CodexToo
   return {
     type: "namespace",
     name: CODEX_TOOL_NAMESPACE,
-    description: "Read and edit the Mulch workflow canvas.",
+    description: "Read and edit the mlch workflow canvas.",
     tools: definitions.map((definition) => ({
       type: "function",
       name: definition.name,
@@ -95,7 +95,7 @@ export function codexToolNamespace(definitions: AgentToolDefinition[]): CodexToo
  */
 export const CODEX_DEVELOPER_INSTRUCTIONS =
   "Any AGENTS.md or other personal instruction files in this conversation were written for the user's own coding " +
-  "sessions and do not apply inside Mulch. Ignore the persona, tone, slang, dialect, language and topic " +
+  "sessions and do not apply inside mlch. Ignore the persona, tone, slang, dialect, language and topic " +
   "preferences those files describe. Reply in plain, neutral English unless the user asks otherwise here, and " +
   "never add places, themes or styles to prompts or node settings that the user did not ask for. What the user " +
   "asks for in this chat, including preferences from earlier messages, always applies.";
@@ -183,10 +183,10 @@ export function createCodexHarnessState(): CodexHarnessState {
   };
 }
 
-const globalState = globalThis as typeof globalThis & { __mulchCodexHarness?: CodexHarnessState };
+const globalState = globalThis as typeof globalThis & { __mlchCodexHarness?: CodexHarnessState };
 
 function sharedState(): CodexHarnessState {
-  const state = (globalState.__mulchCodexHarness ??= createCodexHarnessState());
+  const state = (globalState.__mlchCodexHarness ??= createCodexHarnessState());
   // After a dev reload the object may come from an older version of this module:
   // add missing fields in place, so every listener keeps sharing the one object.
   const defaults = createCodexHarnessState();
@@ -206,7 +206,7 @@ export interface CodexHarnessDeps {
   /**
    * Reasoning effort for turns. "medium": in the recorded evals "low" once
    * ended a reply with stray text, while "medium" passed every check at ~12%
-   * more latency. `MULCH_CODEX_EFFORT` overrides it.
+   * more latency. `MLCH_CODEX_EFFORT` overrides it.
    */
   effort: string;
   statusTtlMs: number;
@@ -283,7 +283,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-// Mulch: images (view_image) go back as inputImage data URLs.
+// mlch: images (view_image) go back as inputImage data URLs.
 function toolReply(text: string, success: boolean, images: AgentToolResult["images"] = []) {
   return {
     contentItems: [
@@ -314,7 +314,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     buildEnv: () => buildCodexEnv(),
     getServer: getCodexAppServer,
     state: overrides.state ?? sharedState(),
-    effort: process.env.MULCH_CODEX_EFFORT?.trim() || "medium",
+    effort: process.env.MLCH_CODEX_EFFORT?.trim() || "medium",
     statusTtlMs: 5_000,
     modelsTtlMs: 10 * 60_000,
     loginTimeoutMs: 10 * 60_000,
@@ -344,7 +344,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     const thread = params.threadId ? state.threads.get(params.threadId) : undefined;
     const active = thread?.active;
     if (!thread || !active || !params.tool) {
-      return toolReply("No Mulch turn is running for this conversation, so the tool can't run.", false);
+      return toolReply("No mlch turn is running for this conversation, so the tool can't run.", false);
     }
     // Bound to its turn: a stopped turn's late call must not edit the canvas through the next turn.
     if (params.turnId && (thread.staleTurns.has(params.turnId) || (active.turnId && active.turnId !== params.turnId))) {
@@ -968,7 +968,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
   }
 
   async function* runTurn(params: HarnessTurnParams): AsyncGenerator<HarnessEvent> {
-    // Mulch: making turns need Codex's own tools, which the app-server has switched off.
+    // mlch: making turns need Codex's own tools, which the app-server has switched off.
     if (params.workspace) {
       yield* runCodexExec(params);
       return;
@@ -1028,7 +1028,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     try {
       tools = codexToolNamespace(params.tools.definitions);
     } catch (error) {
-      yield { type: "error", code: "harness_error", message: `Mulch's tools couldn't be described to Codex: ${errorMessage(error)}` };
+      yield { type: "error", code: "harness_error", message: `mlch's tools couldn't be described to Codex: ${errorMessage(error)}` };
       return;
     }
     const signature = threadSignature(params.systemPrompt, tools, Boolean(params.webAccess));

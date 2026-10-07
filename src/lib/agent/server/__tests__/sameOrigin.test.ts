@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe("checkSameOrigin: accepts", () => {
-  it("a fetch from Mulch's own page", () => {
+  it("a fetch from mlch's own page", () => {
     expect(checkSameOrigin(fromPage("localhost:3000"))).toEqual({ ok: true });
   });
 
@@ -114,7 +114,7 @@ describe("checkSameOrigin: accepts", () => {
     expect(checkSameOrigin(request({ origin: "http://localhost:3000", ...STAMP }))).toEqual({ ok: true });
   });
 
-  it("an extra host listed in MULCH_AGENT_ALLOWED_HOSTS, from another machine", () => {
+  it("an extra host listed in MLCH_AGENT_ALLOWED_HOSTS, from another machine", () => {
     process.env[AGENT_ALLOWED_HOSTS_ENV] = "studio.lan, other.lan, 192.168.1.20";
     // No stamp: the server saw another machine.
     const lan = (host: string) =>

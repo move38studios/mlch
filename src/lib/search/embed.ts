@@ -3,9 +3,9 @@
  *
  * Runs in a worker thread (scripts/embed-worker.mjs) on WebAssembly: the
  * native ONNX runtime crashes inside Electron, so none is loaded. The model
- * (~130 MB) is downloaded once into ~/.mulch/models; nothing else leaves the
+ * (~130 MB) is downloaded once into ~/.mlch/models; nothing else leaves the
  * machine. A worker that fails is replaced on the next request, up to three
- * times; after that, and with MULCH_NO_EMBEDDINGS=1, search is keyword-only.
+ * times; after that, and with MLCH_NO_EMBEDDINGS=1, search is keyword-only.
  */
 
 import path from "node:path";
@@ -21,23 +21,23 @@ interface EmbedWorker {
   dead: boolean;
 }
 
-const globalState = globalThis as typeof globalThis & { __mulchEmbedWorker?: EmbedWorker; __mulchEmbedFailures?: number };
+const globalState = globalThis as typeof globalThis & { __mlchEmbedWorker?: EmbedWorker; __mlchEmbedFailures?: number };
 
 export function embeddingsEnabled(): boolean {
-  return process.env.MULCH_NO_EMBEDDINGS !== "1" && (globalState.__mulchEmbedFailures ?? 0) < 3;
+  return process.env.MLCH_NO_EMBEDDINGS !== "1" && (globalState.__mlchEmbedFailures ?? 0) < 3;
 }
 
 function failed(state: EmbedWorker, reason: string): void {
   if (state.dead) return;
   state.dead = true;
-  globalState.__mulchEmbedFailures = (globalState.__mulchEmbedFailures ?? 0) + 1;
-  log.error("search", "embedding worker failed", { reason, failures: globalState.__mulchEmbedFailures });
+  globalState.__mlchEmbedFailures = (globalState.__mlchEmbedFailures ?? 0) + 1;
+  log.error("search", "embedding worker failed", { reason, failures: globalState.__mlchEmbedFailures });
   for (const waiter of state.pending.values()) waiter.reject(new Error(reason));
   state.pending.clear();
 }
 
 function worker(): EmbedWorker {
-  const existing = globalState.__mulchEmbedWorker;
+  const existing = globalState.__mlchEmbedWorker;
   if (existing && !existing.dead) return existing;
   // Loaded at run time so the bundler leaves the worker file alone.
   const { Worker: WorkerThread } = process.getBuiltinModule("node:worker_threads") as typeof import("node:worker_threads");
@@ -55,7 +55,7 @@ function worker(): EmbedWorker {
   instance.on("error", (error) => failed(state, String(error)));
   instance.on("exit", (code) => failed(state, `exited ${code}`));
   instance.unref();
-  globalState.__mulchEmbedWorker = state;
+  globalState.__mlchEmbedWorker = state;
   return state;
 }
 

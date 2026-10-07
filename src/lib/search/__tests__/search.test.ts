@@ -19,9 +19,9 @@ describe("chunkText", () => {
 let library: string;
 beforeEach(() => {
   library = fs.mkdtempSync(path.join(os.tmpdir(), "mulch-search-"));
-  process.env.MULCH_LIBRARY = library;
-  process.env.MULCH_NO_EMBEDDINGS = "1";
-  for (const key of ["__mulchStore", "__mulchSearch"]) delete (globalThis as Record<string, unknown>)[key];
+  process.env.MLCH_LIBRARY = library;
+  process.env.MLCH_NO_EMBEDDINGS = "1";
+  for (const key of ["__mlchStore", "__mlchSearch"]) delete (globalThis as Record<string, unknown>)[key];
 });
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 
@@ -59,11 +59,11 @@ describe("search index", () => {
   });
 });
 
-const modelCached = fs.existsSync(path.join(os.homedir(), ".mulch", "models", "Xenova"));
+const modelCached = fs.existsSync(path.join(os.homedir(), ".mlch", "models", "Xenova"));
 
 describe.skipIf(!modelCached)("semantic search (local model)", () => {
   it("matches by meaning, through the embedding worker", async () => {
-    process.env.MULCH_NO_EMBEDDINGS = "";
+    process.env.MLCH_NO_EMBEDDINGS = "";
     const store = await import("@/lib/mulch/store");
     const { indexMulch, search } = await import("../index");
     const a = await store.createMulch("M");

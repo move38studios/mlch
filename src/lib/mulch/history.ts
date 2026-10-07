@@ -1,5 +1,5 @@
 /**
- * Mulch history: checkpoints you can travel back to. Server-only.
+ * mlch history: checkpoints you can travel back to. Server-only.
  *
  * After design in briefbuster's TIMETRAVEL.md: self-contained snapshots,
  * deduplicated by content hash, kept forever. The op log (events.jsonl) is
@@ -48,9 +48,9 @@ interface HistoryState {
   chains: Map<string, Promise<unknown>>;
 }
 
-const globalState = globalThis as typeof globalThis & { __mulchHistory?: HistoryState };
+const globalState = globalThis as typeof globalThis & { __mlchHistory?: HistoryState };
 function state(): HistoryState {
-  return (globalState.__mulchHistory ??= { lastHash: new Map(), lastAt: new Map(), timers: new Map(), chains: new Map() });
+  return (globalState.__mlchHistory ??= { lastHash: new Map(), lastAt: new Map(), timers: new Map(), chains: new Map() });
 }
 
 function historyDir(id: string): string {

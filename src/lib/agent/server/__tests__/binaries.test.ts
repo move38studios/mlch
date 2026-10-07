@@ -33,17 +33,17 @@ const BUNDLED_CLAUDE = "/app/node_modules/@anthropic-ai/claude-agent-sdk-darwin-
 const BUNDLED_CODEX = "/app/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex";
 
 describe("resolveClaudeBinary", () => {
-  it("prefers MULCH_CLAUDE_BIN", () => {
+  it("prefers MLCH_CLAUDE_BIN", () => {
     const lookup = resolveClaudeBinary(
-      deps({ "/custom/claude": MACH_O, [BUNDLED_CLAUDE]: MACH_O }, { env: { MULCH_CLAUDE_BIN: "/custom/claude" } }),
+      deps({ "/custom/claude": MACH_O, [BUNDLED_CLAUDE]: MACH_O }, { env: { MLCH_CLAUDE_BIN: "/custom/claude" } }),
     );
     expect(lookup).toEqual({ path: "/custom/claude", source: "env" });
   });
 
-  it("reports an MULCH_CLAUDE_BIN that isn't executable instead of falling back", () => {
-    const lookup = resolveClaudeBinary(deps({ [BUNDLED_CLAUDE]: MACH_O }, { env: { MULCH_CLAUDE_BIN: "/missing/claude" } }));
+  it("reports an MLCH_CLAUDE_BIN that isn't executable instead of falling back", () => {
+    const lookup = resolveClaudeBinary(deps({ [BUNDLED_CLAUDE]: MACH_O }, { env: { MLCH_CLAUDE_BIN: "/missing/claude" } }));
     expect(lookup.path).toBeNull();
-    expect("problem" in lookup && lookup.problem).toMatch(/MULCH_CLAUDE_BIN/);
+    expect("problem" in lookup && lookup.problem).toMatch(/MLCH_CLAUDE_BIN/);
   });
 
   it("finds the SDK's bundled native binary by walking up from the search roots", () => {
@@ -126,8 +126,8 @@ describe("detectLibc", () => {
 });
 
 describe("resolveCodexBinary", () => {
-  it("prefers MULCH_CODEX_BIN", () => {
-    expect(resolveCodexBinary(deps({ "/x/codex": MACH_O }, { env: { MULCH_CODEX_BIN: "/x/codex" } }))).toEqual({
+  it("prefers MLCH_CODEX_BIN", () => {
+    expect(resolveCodexBinary(deps({ "/x/codex": MACH_O }, { env: { MLCH_CODEX_BIN: "/x/codex" } }))).toEqual({
       path: "/x/codex",
       source: "env",
     });
@@ -178,10 +178,10 @@ describe("runCommand", () => {
   });
 
   it("passes exactly the given environment", async () => {
-    const result = await runCommand(process.execPath, ["-e", "process.stdout.write(JSON.stringify(Object.keys(process.env).filter(k => k.startsWith('MULCH_T'))))"], {
-      env: { MULCH_TEST_ONLY: "1" },
+    const result = await runCommand(process.execPath, ["-e", "process.stdout.write(JSON.stringify(Object.keys(process.env).filter(k => k.startsWith('MLCH_T'))))"], {
+      env: { MLCH_TEST_ONLY: "1" },
     });
-    expect(JSON.parse(result.stdout)).toEqual(["MULCH_TEST_ONLY"]);
+    expect(JSON.parse(result.stdout)).toEqual(["MLCH_TEST_ONLY"]);
   });
 
   it("reports a missing binary and a timeout", async () => {

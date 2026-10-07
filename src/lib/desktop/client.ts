@@ -2,7 +2,7 @@
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
-export interface MulchDesktop {
+export interface MlchDesktop {
   platform: string;
   backend: {
     state(): Promise<boolean>;
@@ -20,10 +20,10 @@ export interface MulchDesktop {
 
 declare global {
   interface Window {
-    mulchDesktop?: MulchDesktop;
+    mlchDesktop?: MlchDesktop;
   }
 }
 
-export function desktop(): MulchDesktop | undefined {
-  return typeof window === "undefined" ? undefined : window.mulchDesktop;
+export function desktop(): MlchDesktop | undefined {
+  return typeof window === "undefined" ? undefined : window.mlchDesktop;
 }

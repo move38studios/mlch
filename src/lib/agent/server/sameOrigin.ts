@@ -2,7 +2,7 @@
  * Request guard for the agent routes.
  *
  * `/api/agent/*` starts the Claude Code and Codex CLIs on the user's own
- * subscription, so only the person at this machine, through Mulch's own
+ * subscription, so only the person at this machine, through mlch's own
  * page, may use it: not another website open in their browser (a hidden form
  * post or a no-cors `fetch` would open a vendor sign-in or spend their quota),
  * and not another device on their network.
@@ -14,11 +14,11 @@
  * A program on another machine can forge all of them, and only the connection
  * itself (which a route handler never sees) tells it apart. So the server
  * must vouch for loopback connections: server.js (`npm run dev`, `npm start`)
- * deletes any client copy of `x-mulch-agent-local`, then stamps it with the
- * per-process secret in `MULCH_AGENT_LOCAL_SECRET` when the peer is 127.0.0.0/8
+ * deletes any client copy of `x-mlch-agent-local`, then stamps it with the
+ * per-process secret in `MLCH_AGENT_LOCAL_SECRET` when the peer is 127.0.0.0/8
  * or ::1. A server that does not vouch (plain `next dev` / `next start`)
  * cannot tell this machine from another, so on it the agent answers only on
- * the hosts listed in `MULCH_AGENT_ALLOWED_HOSTS`, never on localhost. (Next.js
+ * the hosts listed in `MLCH_AGENT_ALLOWED_HOSTS`, never on localhost. (Next.js
  * keeps an `X-Forwarded-For` the client sent, so that header proves nothing.)
  *
  * The checks, each closing a different door:
@@ -33,11 +33,11 @@
  *    127.0.0.1) passes checks 1 and 2, because its origin and the Host header
  *    agree; it cannot pass this one. Any other name or address (a LAN address,
  *    a tunnel) opens the agent to other machines, so it must be listed in
- *    `MULCH_AGENT_ALLOWED_HOSTS`.
+ *    `MLCH_AGENT_ALLOWED_HOSTS`.
  * 4. For a loopback host, the request must carry the server's stamp: it came
  *    over a loopback connection. So a request from the network that only
  *    claims `Host: localhost` is refused.
- * 5. The request must show that it came from Mulch's page: an `Origin`
+ * 5. The request must show that it came from mlch's page: an `Origin`
  *    that passed check 2, or `Sec-Fetch-Site: same-origin`. A GET may show it
  *    with `Sec-Fetch-Site: none` or a same-host `Referer` instead, because a
  *    browser sends neither `Origin` on a same-origin GET nor Fetch Metadata
@@ -56,29 +56,29 @@ export type SameOriginResult = { ok: true } | { ok: false; reason: string };
 export interface SameOriginOptions {
   /**
    * Host names or addresses (no port; IPv6 in brackets) that may serve the
-   * agent besides loopback. Defaults to `MULCH_AGENT_ALLOWED_HOSTS`
+   * agent besides loopback. Defaults to `MLCH_AGENT_ALLOWED_HOSTS`
    * (comma-separated).
    */
   allowedHosts?: readonly string[];
-  /** The server's loopback stamp. Defaults to `MULCH_AGENT_LOCAL_SECRET`. */
+  /** The server's loopback stamp. Defaults to `MLCH_AGENT_LOCAL_SECRET`. */
   localSecret?: string;
 }
 
 /** Environment variable that lists extra host names the agent may be used from. */
-export const AGENT_ALLOWED_HOSTS_ENV = "MULCH_AGENT_ALLOWED_HOSTS";
+export const AGENT_ALLOWED_HOSTS_ENV = "MLCH_AGENT_ALLOWED_HOSTS";
 
 /** Header the server stamps on requests that arrived over a loopback connection. */
-export const AGENT_LOCAL_HEADER = "x-mulch-agent-local";
+export const AGENT_LOCAL_HEADER = "x-mlch-agent-local";
 
 /** Environment variable holding the per-process secret the server stamps with. */
-export const AGENT_LOCAL_SECRET_ENV = "MULCH_AGENT_LOCAL_SECRET";
+export const AGENT_LOCAL_SECRET_ENV = "MLCH_AGENT_LOCAL_SECRET";
 
 /** A shorter secret is treated as unset: it could be guessed. */
 const MIN_LOCAL_SECRET_LENGTH = 32;
 
 const ALLOWED_FETCH_SITES = new Set(["same-origin", "none"]);
 
-const PAGE_ONLY = "Only Mulch's own page can use it.";
+const PAGE_ONLY = "Only mlch's own page can use it.";
 
 export function checkSameOrigin(request: Request, options: SameOriginOptions = {}): SameOriginResult {
   const headers = request.headers;
@@ -120,8 +120,8 @@ export function checkSameOrigin(request: Request, options: SameOriginOptions = {
       return {
         ok: false,
         reason:
-          "The agent needs Mulch's own server, which can tell this machine from another: " +
-          "start Mulch with `npm run dev` or `npm start`, not `next dev` or `next start`.",
+          "The agent needs mlch's own server, which can tell this machine from another: " +
+          "start mlch with `npm run dev` or `npm start`, not `next dev` or `next start`.",
       };
     }
     if (!isVouchedLocal(request, options.localSecret)) {
@@ -148,7 +148,7 @@ export function checkSameOrigin(request: Request, options: SameOriginOptions = {
 
 /**
  * Whether the server vouched that this request arrived over a loopback
- * connection: `x-mulch-agent-local` carries the per-process secret. Never true
+ * connection: `x-mlch-agent-local` carries the per-process secret. Never true
  * when no secret is configured, so a client-sent header alone proves nothing.
  */
 export function isVouchedLocal(request: Request, secret?: string): boolean {

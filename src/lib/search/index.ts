@@ -38,9 +38,9 @@ interface State {
   indexed: Set<string>;
 }
 
-const globalState = globalThis as typeof globalThis & { __mulchSearch?: State };
+const globalState = globalThis as typeof globalThis & { __mlchSearch?: State };
 function state(): State {
-  return (globalState.__mulchSearch ??= { dirty: new Map(), timers: new Map(), embedding: false, vectors: new Map(), indexed: new Set() });
+  return (globalState.__mlchSearch ??= { dirty: new Map(), timers: new Map(), embedding: false, vectors: new Map(), indexed: new Set() });
 }
 
 function db(): DatabaseSync {

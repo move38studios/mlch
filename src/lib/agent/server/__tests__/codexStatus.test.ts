@@ -241,7 +241,7 @@ describe("codexModelOptions efforts", () => {
     },
   ];
 
-  it("lists the reasoning levels, defaulting to Mulch's own level when offered", () => {
+  it("lists the reasoning levels, defaulting to mlch's own level when offered", () => {
     expect(codexModelOptions(listed, "medium")[0]).toMatchObject({
       efforts: ["low", "medium", "high"],
       defaultEffort: "medium",

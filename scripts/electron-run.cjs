@@ -29,7 +29,7 @@ const crashReports = () => new Set((fs.existsSync(reports) ? fs.readdirSync(repo
     args: [
       path.resolve(__dirname, '..'), ...(production ? [] : ['--dev']),
     ],
-    env: { ...process.env, ...(fakeMic ? { MULCH_FAKE_MIC: '1' } : {}), MULCH_ELECTRON_USER_DATA: profile, MULCH_LIBRARY: library || path.join(profile, 'mulches'), MULCH_ELECTRON_PORT: '47851' },
+    env: { ...process.env, ...(fakeMic ? { MLCH_FAKE_MIC: '1' } : {}), MLCH_ELECTRON_USER_DATA: profile, MLCH_LIBRARY: library || path.join(profile, 'mulches'), MLCH_ELECTRON_PORT: '47851' },
     timeout: 180_000,
   });
   let failed = false;

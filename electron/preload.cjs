@@ -2,7 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Narrow capabilities; never expose the IPC transport. Types: src/lib/desktop/client.ts.
-contextBridge.exposeInMainWorld('mulchDesktop', {
+contextBridge.exposeInMainWorld('mlchDesktop', {
   platform: process.platform,
   backend: {
     state: () => ipcRenderer.invoke('desktop:backend-state'),

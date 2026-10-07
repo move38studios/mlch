@@ -2,8 +2,8 @@
  * Finding and running the vendor CLIs. Server-only.
  *
  * Lookup order for each CLI:
- *   1. an explicit override (`MULCH_CLAUDE_BIN`, `MULCH_CODEX_BIN`),
- *   2. the native binary Mulch ships in node_modules (the version the
+ *   1. an explicit override (`MLCH_CLAUDE_BIN`, `MLCH_CODEX_BIN`),
+ *   2. the native binary mlch ships in node_modules (the version the
  *      harness was built and tested against),
  *   3. the CLI on PATH — native executables first, then npm's node launchers.
  *      Shell wrappers (e.g. ~/.superset/bin/claude) are skipped: they are not
@@ -218,7 +218,7 @@ function fromOverride(variable: string, deps: BinaryLookupDeps): BinaryLookup | 
 }
 
 /**
- * The Claude Code binary: `MULCH_CLAUDE_BIN`, then the Agent SDK's bundled
+ * The Claude Code binary: `MLCH_CLAUDE_BIN`, then the Agent SDK's bundled
  * native binary (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>`), then
  * `claude` on PATH.
  *
@@ -227,7 +227,7 @@ function fromOverride(variable: string, deps: BinaryLookupDeps): BinaryLookup | 
  * SDK's own resolver: musl first on a musl host, glibc first otherwise.
  */
 export function resolveClaudeBinary(deps: BinaryLookupDeps = defaultLookupDeps()): BinaryLookup {
-  const override = fromOverride("MULCH_CLAUDE_BIN", deps);
+  const override = fromOverride("MLCH_CLAUDE_BIN", deps);
   if (override) return override;
 
   const exe = deps.platform === "win32" ? "claude.exe" : "claude";
@@ -249,8 +249,8 @@ export function resolveClaudeBinary(deps: BinaryLookupDeps = defaultLookupDeps()
   return {
     path: null,
     problem:
-      "Claude Code wasn't found. Reinstall Mulch's dependencies (npm install), " +
-      "install Claude Code so `claude` is on your PATH, or set MULCH_CLAUDE_BIN.",
+      "Claude Code wasn't found. Reinstall mlch's dependencies (npm install), " +
+      "install Claude Code so `claude` is on your PATH, or set MLCH_CLAUDE_BIN.",
   };
 }
 
@@ -266,12 +266,12 @@ function codexTargetTriple(platform: NodeJS.Platform, arch: string): string | nu
 }
 
 /**
- * The Codex binary: `MULCH_CODEX_BIN`, then the native binary from
+ * The Codex binary: `MLCH_CODEX_BIN`, then the native binary from
  * `@openai/codex-<platform>-<arch>` (the package the `codex` launcher runs),
  * then `codex` on PATH.
  */
 export function resolveCodexBinary(deps: BinaryLookupDeps = defaultLookupDeps()): BinaryLookup {
-  const override = fromOverride("MULCH_CODEX_BIN", deps);
+  const override = fromOverride("MLCH_CODEX_BIN", deps);
   if (override) return override;
 
   const triple = codexTargetTriple(deps.platform, deps.arch);
@@ -290,8 +290,8 @@ export function resolveCodexBinary(deps: BinaryLookupDeps = defaultLookupDeps())
   return {
     path: null,
     problem:
-      "Codex wasn't found. Reinstall Mulch's dependencies (npm install), " +
-      "install the Codex CLI so `codex` is on your PATH, or set MULCH_CODEX_BIN.",
+      "Codex wasn't found. Reinstall mlch's dependencies (npm install), " +
+      "install the Codex CLI so `codex` is on your PATH, or set MLCH_CODEX_BIN.",
   };
 }
 

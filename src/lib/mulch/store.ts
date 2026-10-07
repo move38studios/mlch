@@ -47,15 +47,15 @@ interface StoreState {
   afterApply: Array<(id: string, batch: OpBatch) => void>;
 }
 
-const globalState = globalThis as typeof globalThis & { __mulchStore?: StoreState };
+const globalState = globalThis as typeof globalThis & { __mlchStore?: StoreState };
 function state(): StoreState {
-  if (!globalState.__mulchStore) {
-    globalState.__mulchStore = { open: new Map(), loading: new Map(), afterApply: [] };
+  if (!globalState.__mlchStore) {
+    globalState.__mlchStore = { open: new Map(), loading: new Map(), afterApply: [] };
     const flush = () => void flushAll();
     process.once("SIGTERM", flush);
     process.once("beforeExit", flush);
   }
-  return globalState.__mulchStore;
+  return globalState.__mlchStore;
 }
 
 export class MulchNotFoundError extends Error {

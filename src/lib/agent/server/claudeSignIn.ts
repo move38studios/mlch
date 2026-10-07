@@ -4,7 +4,7 @@
  * We run `claude auth login --claudeai` — the official CLI, subscription
  * login only (never `--console`, which bills API credits). The CLI opens the
  * browser itself, runs its own localhost callback and stores the credentials
- * where it always does; Mulch never sees a token.
+ * where it always does; mlch never sees a token.
  *
  * The URL the CLI prints ("If the browser didn't open, visit: <url>") is
  * never relayed. It is Claude's manual flow: its page shows a code to paste

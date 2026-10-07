@@ -398,7 +398,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
   }, [undo, redo, readOnly]);
 
   const shownNodes = useMemo(
-    () => (highlighted.size ? nodes.map((node) => (highlighted.has(node.id) ? { ...node, className: "mulch-focused" } : node)) : nodes),
+    () => (highlighted.size ? nodes.map((node) => (highlighted.has(node.id) ? { ...node, className: "mlch-focused" } : node)) : nodes),
     [nodes, highlighted],
   );
 
