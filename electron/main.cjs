@@ -109,7 +109,7 @@ async function createWindow() {
   try { saved = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
   const bounds = visibleBounds(saved?.bounds, screen.getAllDisplays(), screen.getPrimaryDisplay());
   window = new BrowserWindow({ title: 'mlch', ...bounds,
-    minWidth: Math.min(800, bounds.width), minHeight: Math.min(560, bounds.height), backgroundColor: '#f6f4ef', show: false,
+    minWidth: Math.min(800, bounds.width), minHeight: Math.min(560, bounds.height), backgroundColor: '#fcfcfa', show: false, icon: path.join(__dirname, 'icon.png'),
     titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
   });
@@ -243,6 +243,8 @@ else {
   });
   process.on('unhandledRejection', log);
   app.whenReady().then(async () => {
+    // A packaged app gets its icon from the bundle; in development, set it here.
+    if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, 'icon.png'));
     diagnostics = createDiagnostics(app.getPath('logs'), redactor);
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
       redactor.add(values); backend?.post({ type: 'secrets', values });

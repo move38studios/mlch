@@ -38,46 +38,45 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
   }
 
   return (
-    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 w-[min(680px,calc(100%-380px))] min-w-[360px]">
+    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 w-[min(700px,calc(100%-360px))] min-w-[380px]">
       <TranscriptStrip />
-      <div className="flex items-end gap-2 rounded-xl border border-line bg-white/95 backdrop-blur shadow-lg px-2 py-2">
+      <div className="float flex items-center gap-2 rounded-2xl pl-2 pr-2 py-2">
         <MicButton mulchId={mulchId} />
         {children}
-        <div className="flex flex-col flex-1 min-w-0">
-          <div className="flex gap-1 px-1 pb-1 text-[11px]">
-            {(["thought", "instruction"] as const).map((value) => (
-              <button
-                key={value}
-                onClick={() => setMode(value)}
-                className={`px-1.5 py-0.5 rounded ${mode === value ? "bg-ink text-paper" : "text-ink-3 hover:text-ink"}`}
-              >
-                {value === "thought" ? "Thought" : "Instruction"}
-              </button>
-            ))}
-          </div>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            rows={1}
-            placeholder="Type"
-            aria-label="Input"
-            className="w-full resize-none bg-transparent outline-none px-1 text-[15px] max-h-40 field-sizing-content"
-          />
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          rows={1}
+          placeholder={mode === "thought" ? "Type" : "Instruction"}
+          aria-label="Input"
+          className="flex-1 min-w-0 resize-none bg-transparent outline-none px-1.5 py-2 text-[15.5px] leading-[1.35] max-h-40 field-sizing-content placeholder:text-ink-3"
+        />
+        <div className="flex shrink-0 rounded-lg bg-paper-2 p-0.5 text-[12.5px]" role="group" aria-label="Mode">
+          {(["thought", "instruction"] as const).map((value) => (
+            <button
+              key={value}
+              onClick={() => setMode(value)}
+              aria-pressed={mode === value}
+              className={`px-2 py-1 rounded-md ${mode === value ? "bg-chrome text-ink font-medium shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-ink-3 hover:text-ink"}`}
+            >
+              {value === "thought" ? "Thought" : "Instruction"}
+            </button>
+          ))}
         </div>
         <button
           onClick={send}
           disabled={!text.trim() || sending}
           aria-label="Send"
           title="Send"
-          className="shrink-0 h-9 w-9 grid place-items-center rounded-lg bg-ink text-paper disabled:opacity-25"
+          className="shrink-0 h-10 w-10 grid place-items-center rounded-xl bg-ink text-white disabled:bg-paper-2 disabled:text-ink-3"
         >
-          <ArrowUp size={17} />
+          <ArrowUp size={18} strokeWidth={2} />
         </button>
       </div>
     </div>

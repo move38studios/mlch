@@ -1,24 +1,44 @@
 @import "tailwindcss";
 
+/*
+ * mlch visual language: black marker on a clean napkin, one amber
+ * highlighter. Ink is pure black (as in the logo) at three strengths.
+ * Amber is for fills only (it is too light for text on white).
+ */
 :root {
-  --paper: #f6f4ef;
-  --paper-2: #efece4;
-  --ink: #1d1b17;
-  --ink-2: #5d5850;
-  --ink-3: #9a948a;
-  --line: #ddd8cc;
-  --accent: #d2491f;
+  --paper: #fcfcfa; /* the canvas */
+  --chrome: #ffffff; /* floating panels, cards */
+  --paper-2: #f2f2ee; /* hover, wells */
+  --ink: #000000;
+  --ink-2: rgba(0, 0, 0, 0.62);
+  --ink-3: rgba(0, 0, 0, 0.4);
+  --line: rgba(0, 0, 0, 0.1);
+  --line-2: rgba(0, 0, 0, 0.18);
+  --amber: #ffc000;
+  --amber-soft: #fff0b3; /* question post-its */
+  --mist: #eaf1f6; /* definitions */
+  --sage: #edf2e8; /* examples, related ideas */
+  --danger: #c4361b;
+  --dot: rgba(0, 0, 0, 0.13);
+  --float-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 24px -8px rgba(0, 0, 0, 0.14);
 }
 
 @theme inline {
   --color-paper: var(--paper);
   --color-paper-2: var(--paper-2);
+  --color-chrome: var(--chrome);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
   --color-line: var(--line);
-  --color-accent: var(--accent);
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --color-line-2: var(--line-2);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-mist: var(--mist);
+  --color-sage: var(--sage);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-ui), -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-hand: var(--font-scribble), var(--font-ui), sans-serif;
 }
 
 html,
@@ -27,31 +47,53 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);
+  font-feature-settings: "ss01", "tnum" 0;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* The window has no title bar; this strip drags it. */
+::selection {
+  background: rgba(255, 192, 0, 0.45);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* The window has no title bar; floating controls sit on a drag strip. */
 .drag {
   -webkit-app-region: drag;
 }
 .drag button,
 .drag a,
-.drag input {
+.drag input,
+.drag .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* A floating panel over the canvas. */
+.float {
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  box-shadow: var(--float-shadow);
 }
 
 /* ── canvas ─────────────────────────────────────────────────────── */
 
+.react-flow {
+  --xy-background-color: var(--paper);
+}
 .react-flow__node-mulch {
   cursor: grab;
 }
 .mlch-node {
-  transition: box-shadow 120ms ease;
+  transition: box-shadow 140ms ease, transform 140ms ease;
 }
 @keyframes node-enter {
   from {
     opacity: 0;
-    transform: scale(0.92) translateY(6px);
+    transform: translateY(4px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -59,34 +101,23 @@ body {
   }
 }
 .node-enter {
-  animation: node-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.mlch-ai::before {
-  content: "";
-  position: absolute;
-  left: -1px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-  opacity: 0.55;
+  animation: node-enter 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Connection handle: a dot on the right, shown on hover. */
+/* Connection handle: a small dot on the right, shown on hover. */
 .react-flow__handle.mlch-handle {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   right: -5px;
-  background: var(--paper);
-  border: 1.5px solid var(--ink-3);
+  background: var(--chrome);
+  border: 1.5px solid var(--ink);
   opacity: 0;
   transition: opacity 120ms;
 }
 .mlch-node:hover .react-flow__handle.mlch-handle {
   opacity: 1;
 }
-/* The whole node accepts a connection; the target handle stays invisible. */
+/* The whole card accepts a connection; the target handle stays invisible. */
 .react-flow__handle.mlch-handle-target {
   opacity: 0;
   pointer-events: none;
@@ -96,21 +127,72 @@ body {
   border-color: transparent;
 }
 .mlch-resize.react-flow__resize-control.line.right:hover {
-  border-color: rgba(210, 73, 31, 0.4);
+  border-color: var(--amber);
 }
 
 .react-flow__controls {
-  box-shadow: none;
+  box-shadow: var(--float-shadow);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 10px;
   overflow: hidden;
+}
+.react-flow__controls-button {
+  border-bottom-color: var(--line);
 }
 .react-flow__minimap {
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 10px;
+  box-shadow: var(--float-shadow);
 }
 
-/* Markdown inside cards and the side panel. */
+/* Items the agent or a search points at. */
+@keyframes mlch-focus {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 192, 0, 0);
+  }
+  35% {
+    box-shadow: 0 0 0 7px rgba(255, 192, 0, 0.55);
+  }
+}
+.mlch-focused .mlch-node {
+  animation: mlch-focus 1.1s ease-in-out 2;
+}
+::highlight(mlch-find) {
+  background-color: rgba(255, 192, 0, 0.5);
+}
+
+/* ── scribbles (the one animated motif) ─────────────────────────── */
+
+@keyframes scribble-draw {
+  from {
+    stroke-dashoffset: var(--scribble-length);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes scribble-loop {
+  0% {
+    stroke-dashoffset: var(--scribble-length);
+  }
+  55% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: calc(var(--scribble-length) * -1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .node-enter,
+  .mlch-focused .mlch-node,
+  .scribble-anim path {
+    animation: none !important;
+  }
+}
+
+/* ── markdown in cards and the side panel ───────────────────────── */
+
 .mlch-md > * + * {
   margin-top: 0.45em;
 }
@@ -124,7 +206,11 @@ body {
 }
 .mlch-md a {
   text-decoration: underline;
+  text-decoration-color: var(--line-2);
   text-underline-offset: 2px;
+}
+.mlch-md a:hover {
+  text-decoration-color: var(--ink);
 }
 .mlch-md h1,
 .mlch-md h2,
@@ -137,23 +223,27 @@ body {
   padding: 0 0.25em;
   border-radius: 3px;
 }
+.mlch-md-full {
+  max-width: 64ch;
+}
 .mlch-md-full h1 {
-  font-size: 1.35em;
-  margin-top: 1em;
+  font-size: 1.45em;
+  line-height: 1.2;
+  margin-top: 1.1em;
 }
 .mlch-md-full h2 {
-  font-size: 1.15em;
-  margin-top: 1em;
+  font-size: 1.18em;
+  margin-top: 1.1em;
 }
 .mlch-md-full h3 {
-  margin-top: 0.8em;
+  margin-top: 0.9em;
 }
 .mlch-md-full > * + * {
-  margin-top: 0.7em;
+  margin-top: 0.75em;
 }
 .mlch-md-full blockquote {
-  border-left: 3px solid var(--line);
-  padding-left: 0.8em;
+  border-left: 3px solid var(--amber);
+  padding-left: 0.9em;
   color: var(--ink-2);
 }
 .mlch-md-full table {
@@ -162,17 +252,5 @@ body {
 .mlch-md-full td,
 .mlch-md-full th {
   border: 1px solid var(--line);
-  padding: 0.25em 0.5em;
-}
-
-/* Items the agent or a search points at. */
-@keyframes mulch-focus {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(210, 73, 31, 0); }
-  30% { box-shadow: 0 0 0 6px rgba(210, 73, 31, 0.35); }
-}
-.mlch-focused .mlch-node {
-  animation: mulch-focus 1.2s ease-in-out 2;
-}
-::highlight(mlch-find) {
-  background-color: rgba(248, 229, 140, 0.9);
+  padding: 0.3em 0.55em;
 }

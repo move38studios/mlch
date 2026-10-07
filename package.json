@@ -56,6 +56,7 @@
     "eslint-config-next": "^16.4.0",
     "jsdom": "^29.1.1",
     "playwright-core": "^1.63.0",
+    "svg-path-bbox": "^2.1.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   }

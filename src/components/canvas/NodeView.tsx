@@ -14,9 +14,12 @@ import { useCanvasUi } from "./ui";
 
 export type MulchFlowNode = Node<{ node: MulchNode; mulchId: string; fresh: boolean }, "mulch">;
 
-/** Added by the AI rather than said, typed or dropped by the user, and not since edited. */
-function isAiMade(node: MulchNode): boolean {
-  return node.origin.startsWith("agent:") && !node.userTouched;
+/** The person's own words (said, typed or touched) carry an ink outline; AI material a hairline. */
+function outline(node: MulchNode, tinted?: boolean): string {
+  const own = node.origin === "user" || node.origin.startsWith("speech:") || !!node.userTouched;
+  if (node.kind === "note") return "border border-transparent";
+  if (own && (node.kind === "idea" || node.kind === "question")) return "border-[1.5px] border-ink";
+  return tinted ? "border border-transparent" : "border border-line";
 }
 
 function hostOf(url: string): string {
@@ -87,7 +90,7 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
         </div>
       )}
       <div className="px-3.5 py-3">
-        <div className="flex items-center gap-1.5 mb-1.5 text-[10.5px] uppercase tracking-wider text-ink-3 font-medium">
+        <div className="flex items-center gap-1.5 mb-1 text-[12px] text-ink-3">
           <FileText size={11} /> {label}
           <span className="normal-case tracking-normal truncate">{node.fileName}</span>
         </div>
@@ -133,20 +136,20 @@ function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
     );
   }
   return (
-    <div className="px-3.5 py-3">
+    <div className="px-4 py-3">
       {(style.label || node.url) && (
-        <div className="flex items-center gap-1.5 mb-1.5 text-[10.5px] uppercase tracking-wider text-ink-3 font-medium">
-          {node.kind === "doc" && <FileText size={11} />}
+        <div className="flex items-center gap-1.5 mb-1 text-[12px] text-ink-3">
+          {node.kind === "doc" && <FileText size={12} strokeWidth={1.75} />}
           {style.label && <span>{style.label}</span>}
           {node.url && (
-            <a href={node.url} target="_blank" rel="noreferrer" className="nodrag normal-case tracking-normal truncate hover:text-ink-2 inline-flex items-center gap-1">
-              {hostOf(node.url)} <ExternalLink size={10} />
+            <a href={node.url} target="_blank" rel="noreferrer" className="nodrag truncate hover:text-ink inline-flex items-center gap-1">
+              {hostOf(node.url)} <ExternalLink size={10} strokeWidth={1.75} />
             </a>
           )}
-          {node.kind === "doc" && node.fileName && <span className="normal-case tracking-normal truncate">{node.fileName}</span>}
+          {node.kind === "doc" && node.fileName && <span className="truncate">{node.fileName}</span>}
         </div>
       )}
-      {node.title && <div className="font-semibold mb-1 leading-snug">{node.title}</div>}
+      {node.title && <div className="font-semibold mb-1 leading-[1.3]">{node.title}</div>}
       <div className="mlch-text overflow-hidden" style={{ maxHeight: `${style.clamp * 1.45}em` }}>
         {style.markdown ? (
           <div className="mlch-md">
@@ -173,7 +176,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
 
   return (
     <div
-      className={`mlch-node group relative rounded-[6px] text-ink ${style.card} ${selected ? "ring-2 ring-accent/70" : ""} ${fresh ? "node-enter" : ""} ${isAiMade(node) ? "mlch-ai" : ""}`}
+      className={`mlch-node group relative text-ink ${style.card} ${style.tilt ? "rounded-[3px]" : "rounded-[10px]"} ${outline(node, style.tinted)} ${selected ? "outline-[2.5px] outline-amber outline-offset-2" : ""} ${fresh ? "node-enter" : ""}`}
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
@@ -182,7 +185,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
     >
       <Handle type="target" position={Position.Left} className="mlch-handle-target" isConnectableStart={false} />
       {editing ? (
-        <div className="px-3.5 py-3">
+        <div className="px-4 py-3">
           <Editor node={node} onDone={() => setEditing(undefined)} />
         </div>
       ) : (
@@ -190,12 +193,12 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
       )}
       {long && !editing && (
         <button
-          className="nodrag absolute top-1.5 right-1.5 p-1 rounded text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-paper-2 hover:text-ink"
+          className="nodrag absolute top-2 right-2 p-1 rounded-md text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-paper-2 hover:text-ink"
           onClick={() => setOpen(node.id)}
           title="Open"
           aria-label="Open"
         >
-          <Maximize2 size={12} />
+          <Maximize2 size={13} strokeWidth={1.75} />
         </button>
       )}
       <Handle type="source" position={Position.Right} className="mlch-handle" />

@@ -73,7 +73,7 @@ function GenerationStatus({ node, mulchId }: { node: MulchNode; mulchId: string 
   const elapsed = Math.max(0, Math.round((now - gen.startedAt) / 1000));
   const stop = () => fetch(`/api/mulches/${mulchId}/generations/${gen.id}/cancel`, { method: "POST" });
   return (
-    <div className={`h-[150px] flex flex-col justify-center gap-1.5 px-4 rounded-t-[inherit] ${gen.status === "failed" ? "bg-accent/5" : "bg-paper-2"}`}>
+    <div className={`h-[150px] flex flex-col justify-center gap-1.5 px-4 rounded-t-[inherit] ${gen.status === "failed" ? "bg-danger/5" : "bg-paper-2"}`}>
       {active ? (
         <>
           <div className="flex items-center gap-2 text-ink-2 font-medium">
@@ -89,7 +89,7 @@ function GenerationStatus({ node, mulchId }: { node: MulchNode; mulchId: string 
         </>
       ) : gen.status === "failed" ? (
         <>
-          <div className="text-accent font-medium">Failed</div>
+          <div className="text-danger font-medium">Failed</div>
           <p className="text-ink-2 line-clamp-4">{gen.error}</p>
         </>
       ) : (

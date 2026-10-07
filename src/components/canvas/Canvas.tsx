@@ -30,6 +30,7 @@ import { FloatingEdge, type MulchFlowEdge } from "./FloatingEdge";
 import { GroupView, type GroupFlowNode } from "./GroupView";
 import { NodeView, type MulchFlowNode } from "./NodeView";
 import { useCanvasUi } from "./ui";
+import { Scribble } from "@/components/brand/Scribble";
 
 type FlowNode = MulchFlowNode | GroupFlowNode;
 
@@ -424,6 +425,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
       }}
       onPaneClick={() => setEditing(undefined)}
       connectionMode={ConnectionMode.Loose}
+      connectionLineStyle={{ stroke: "var(--ink)", strokeWidth: 1.5, strokeDasharray: "4 5", strokeLinecap: "round" }}
       connectionRadius={40}
       zoomOnDoubleClick={false}
       deleteKeyCode={editingId || draft || readOnly ? null : ["Backspace", "Delete"]}
@@ -438,9 +440,16 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
       fitViewOptions={{ padding: { top: "40px", left: "40px", right: "40px", bottom: "150px" }, maxZoom: 1 }}
       proOptions={{ hideAttribution: true }}
     >
-      <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="#d4cfc4" />
+      <Background variant={BackgroundVariant.Dots} gap={22} size={1.3} color="rgba(0,0,0,0.14)" bgColor="var(--paper)" />
       <Controls showInteractive={false} position="bottom-right" />
-      <MiniMap position="bottom-left" pannable zoomable maskColor="rgba(246,244,239,0.7)" nodeColor="#cfc9bc" style={{ width: 160, height: 110 }} />
+      {/* Worth it only once the canvas is bigger than the window. */}
+      {Object.keys(mulch.nodes).length > 14 && <MiniMap position="bottom-left" pannable zoomable bgColor="#ffffff" maskColor="rgba(252,252,250,0.72)" nodeColor="rgba(0,0,0,0.16)" nodeBorderRadius={6} style={{ width: 150, height: 100 }} />}
+      {/* A brand-new canvas: the logo's scribble, faint, until the first card lands. */}
+      {Object.keys(mulch.nodes).length === 0 && !draft && (
+        <div className="absolute inset-0 grid place-items-center pointer-events-none z-0">
+          <Scribble which="bottom" className="w-[min(420px,50%)] text-ink/[0.07]" strokeWidth={7} />
+        </div>
+      )}
       {draft && (
         <ViewportPortal>
           <div className="absolute" style={{ transform: `translate(${draft.x}px, ${draft.y}px)`, width: NODE_WIDTH.note }}>
@@ -454,7 +463,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
                 e.stopPropagation();
                 if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) commitDraft();
               }}
-              className="w-full px-3.5 py-3 text-[15px] leading-snug bg-white/80 border border-line rounded-[6px] outline-none resize-none field-sizing-content"
+              className="w-full px-4 py-3 text-[16px] leading-[1.4] bg-chrome border-[1.5px] border-ink rounded-[10px] outline-none resize-none field-sizing-content placeholder:text-ink-3"
             />
           </div>
         </ViewportPortal>

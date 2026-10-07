@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import { Recorder } from "@/lib/voice/recorder";
+import { Scribble } from "@/components/brand/Scribble";
 
 interface VoiceState {
   recording: boolean;
@@ -82,15 +83,15 @@ export function MicButton({ mulchId }: { mulchId: string }) {
       disabled={starting}
       aria-label={recording ? "Stop microphone" : "Microphone"}
       title={recording ? "Stop" : "Microphone"}
-      className={`relative shrink-0 h-9 w-9 grid place-items-center rounded-lg transition-colors ${recording ? "bg-accent text-white" : "bg-paper-2 text-ink hover:bg-line"}`}
+      className={`relative shrink-0 h-10 w-10 grid place-items-center rounded-xl transition-colors ${recording ? "bg-amber text-ink" : "bg-ink text-white hover:bg-ink/85"}`}
     >
       {recording && (
         <span
-          className="absolute inset-0 rounded-lg bg-accent/40 pointer-events-none"
-          style={{ transform: `scale(${1 + level * 0.6})`, transition: "transform 80ms linear" }}
+          className="absolute inset-0 rounded-xl bg-amber/45 pointer-events-none"
+          style={{ transform: `scale(${1 + level * 0.5})`, transition: "transform 90ms linear" }}
         />
       )}
-      <span className="relative">{recording ? <Square size={14} fill="currentColor" /> : <MicIcon size={17} />}</span>
+      <span className="relative">{recording ? <Square size={13} fill="currentColor" strokeWidth={0} /> : <MicIcon size={18} strokeWidth={1.9} />}</span>
     </button>
   );
 }
@@ -110,17 +111,22 @@ export function TranscriptStrip() {
   const lastAt = recent[recent.length - 1]?.at ?? 0;
   if (!recording && !pending && now - lastAt > 20_000) return null;
   return (
-    <div className="mb-2 px-3 text-[13px] leading-snug text-ink-2 space-y-0.5">
+    <div className="mb-2.5 px-4 text-[13.5px] leading-snug text-ink-2 space-y-0.5" aria-live="polite">
       {recent.map((segment, i) => (
-        <p key={segment.id} style={{ opacity: 0.45 + (i + 1) / (recent.length * 1.8) }}>
+        <p key={segment.id} style={{ opacity: 0.4 + (i + 1) / (recent.length * 1.7) }}>
           {segment.text}
         </p>
       ))}
       {(recording || pending > 0) && (
-        <p className="text-ink-3 text-xs inline-flex items-center gap-1.5">
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${speaking ? "bg-accent" : "bg-ink-3"}`} />
-          {pending > 0 ? "Transcribing" : "Listening"}
-        </p>
+        <Scribble
+          which="top"
+          mode="live"
+          active={speaking || pending > 0}
+          duration={2.2}
+          strokeWidth={9}
+          className="h-5 w-auto mt-1.5 text-ink"
+          style={{ opacity: speaking || pending > 0 ? 0.85 : 0.35 }}
+        />
       )}
     </div>
   );

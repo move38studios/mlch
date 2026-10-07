@@ -1,10 +1,17 @@
 import type { NodeKind } from "@/lib/mulch/types";
 
+/*
+ * Card styles. The person's own words carry an ink outline (see NodeView);
+ * everything else sits quieter on a hairline. Colour is used sparingly, as
+ * highlighter tints: questions are post-its, definitions mist, examples sage.
+ */
 export interface KindStyle {
-  /** Small label shown on the card; absent for kinds that speak for themselves. */
+  /** Small lowercase label on the card; absent for kinds that speak for themselves. */
   label?: string;
-  /** Card classes: background, border, text. */
+  /** Background and type. The border comes from who made the card. */
   card: string;
+  /** Has its own fill, so the hairline is dropped. */
+  tinted?: boolean;
   /** Rotate slightly, like a post-it. */
   tilt?: boolean;
   /** Render text as markdown. */
@@ -14,16 +21,16 @@ export interface KindStyle {
 }
 
 export const KIND_STYLES: Record<NodeKind, KindStyle> = {
-  idea: { card: "bg-white border border-line shadow-sm text-[15px] leading-snug", clamp: 12 },
-  note: { card: "bg-transparent border border-transparent text-[15px] leading-snug", clamp: 20 },
-  question: { label: "Question", card: "bg-[#f8e58c] border border-[#e9d26a] shadow-md text-[14px] leading-snug", tilt: true, clamp: 8 },
-  search: { label: "Search", card: "bg-white border border-line shadow-sm text-[13px] leading-snug", markdown: true, clamp: 7 },
-  definition: { label: "Definition", card: "bg-[#eaf1f8] border border-[#c9d8e8] text-[13px] leading-snug", markdown: true, clamp: 8 },
-  example: { label: "Example", card: "bg-[#ecf3e6] border border-[#cfdcc3] text-[13px] leading-snug", markdown: true, clamp: 8 },
-  doc: { label: "File", card: "bg-white border border-line shadow-sm text-[13px] leading-snug", markdown: true, clamp: 8 },
-  link: { label: "Link", card: "bg-white border border-line shadow-sm text-[13px] leading-snug", markdown: true, clamp: 7 },
-  image: { card: "bg-white border border-line shadow-sm text-[12px]", clamp: 3 },
-  media: { card: "bg-white border border-line shadow-sm text-[12px]", clamp: 3 },
-  artifact: { label: "File", card: "bg-white border border-ink/25 shadow-md text-[13px] leading-snug", clamp: 4 },
-  writeup: { label: "Write-up", card: "bg-white border border-ink/25 shadow-md text-[13px] leading-snug", markdown: true, clamp: 14 },
+  idea: { card: "bg-chrome text-[15.5px] leading-[1.4]", clamp: 12 },
+  note: { card: "bg-transparent text-[16px] leading-[1.4]", clamp: 20 },
+  question: { label: "question", card: "bg-amber-soft text-[14.5px] leading-[1.4] shadow-[0_6px_14px_-8px_rgba(0,0,0,0.35)]", tinted: true, tilt: true, clamp: 8 },
+  search: { label: "source", card: "bg-chrome text-[13.5px] leading-[1.45]", markdown: true, clamp: 7 },
+  definition: { label: "definition", card: "bg-mist text-[13.5px] leading-[1.45]", tinted: true, markdown: true, clamp: 8 },
+  example: { label: "example", card: "bg-sage text-[13.5px] leading-[1.45]", tinted: true, markdown: true, clamp: 8 },
+  doc: { label: "file", card: "bg-chrome text-[13.5px] leading-[1.45]", markdown: true, clamp: 8 },
+  link: { label: "link", card: "bg-chrome text-[13.5px] leading-[1.45]", markdown: true, clamp: 7 },
+  image: { card: "bg-chrome text-[12.5px]", clamp: 3 },
+  media: { card: "bg-chrome text-[12.5px]", clamp: 3 },
+  artifact: { label: "made", card: "bg-chrome text-[13.5px] leading-[1.45]", clamp: 4 },
+  writeup: { label: "write-up", card: "bg-chrome text-[13.5px] leading-[1.5]", markdown: true, clamp: 14 },
 };

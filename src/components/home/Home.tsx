@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Settings, Trash2 } from "lucide-react";
+import { Plus, Search, Settings, Trash2 } from "lucide-react";
+import { Scribble, Wordmark } from "@/components/brand/Scribble";
 import Link from "next/link";
 import { ResultList, useSearch } from "@/components/search/SearchPalette";
 import { formatDateTime } from "@/lib/format";
@@ -53,59 +54,66 @@ export function Home() {
 
   return (
     <main className="min-h-full flex flex-col">
-      <header className="drag h-12 shrink-0 pl-20 pr-3 flex items-center gap-3 border-b border-line">
-        <span className="font-semibold tracking-tight">Mulch</span>
+      <header className="drag h-[52px] shrink-0 pl-20 pr-3 flex items-center">
         <div className="flex-1" />
-        <Link href="/settings" className="p-2 rounded-md text-ink-2 hover:bg-paper-2" aria-label="Settings" title="Settings">
-          <Settings size={16} />
+        <Link href="/settings" className="p-2 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink" aria-label="Settings" title="Settings">
+          <Settings size={17} strokeWidth={1.75} />
         </Link>
       </header>
-      <div className="w-full max-w-3xl mx-auto px-6 py-10">
-        <div className="flex items-center mb-6">
-          <div className="flex-1" />
+      <div className="w-full max-w-[720px] mx-auto px-8 pt-6 pb-16">
+        <Wordmark className="h-11 w-auto mb-10 -ml-0.5" />
+        <div className="flex items-center gap-3 mb-8">
+          <div className="relative flex-1">
+            <Search size={15} strokeWidth={1.75} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search"
+              aria-label="Search"
+              className="w-full rounded-xl border border-line bg-chrome pl-10 pr-3 h-11 text-[15px] outline-none placeholder:text-ink-3 focus:border-line-2"
+            />
+          </div>
           <button
             onClick={create}
             disabled={creating}
-            className="inline-flex items-center gap-1.5 rounded-md bg-ink text-paper px-3 py-1.5 text-sm font-medium hover:bg-ink/85 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-amber text-ink h-11 px-4 text-[15px] font-semibold hover:brightness-95 active:brightness-90 disabled:opacity-50"
           >
-            <Plus size={15} /> New
+            <Plus size={17} strokeWidth={2.25} /> New
           </button>
         </div>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search"
-          aria-label="Search"
-          className="w-full mb-6 rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-ink/40"
-        />
         {results && (
-          <div className="mb-8 rounded-lg border border-line bg-white overflow-hidden">
+          <div className="mb-8 rounded-xl float overflow-hidden">
             <ResultList results={results} showMulch onPick={(hit) => router.push(`/n/${hit.mulchId}?focus=${hit.nodeId}${hit.page ? `&page=${hit.page}` : ""}`)} />
           </div>
         )}
-        {error && <p className="text-sm text-accent mb-4">{error}</p>}
-        {mulches && mulches.length === 0 && <p className="text-sm text-ink-3">Nothing yet.</p>}
-        <ul className="divide-y divide-line border-y border-line">
+        {error && <p className="text-sm text-danger mb-4">{error}</p>}
+        {mulches && mulches.length === 0 && (
+          <div className="pt-16 flex flex-col items-center text-ink-3 gap-4">
+            <Scribble which="bottom" className="w-40 text-ink/15" />
+            <p className="text-sm">Nothing yet.</p>
+          </div>
+        )}
+        <ul className="-mx-3">
           {mulches?.map((mulch) => (
-            <li key={mulch.id} className="group flex items-center">
-              <Link href={`/n/${mulch.id}`} className="flex-1 min-w-0 flex items-baseline gap-4 py-3 px-1 hover:bg-paper-2/60">
-                <span className="truncate font-medium">{mulch.title}</span>
-                <span className="text-xs text-ink-3 shrink-0">{mulch.nodeCount} items</span>
+            <li key={mulch.id} className="group flex items-center rounded-xl hover:bg-paper-2">
+              <Link href={`/n/${mulch.id}`} className="flex-1 min-w-0 flex items-baseline gap-4 py-3 px-3">
+                <span className="truncate text-[17px] font-medium tracking-[-0.01em]">{mulch.title}</span>
                 <span className="flex-1" />
-                <span className="text-xs text-ink-3 shrink-0 tabular-nums">{formatDateTime(mulch.updatedAt)}</span>
+                <span className="text-[13px] text-ink-3 shrink-0 tabular-nums">{mulch.nodeCount} items</span>
+                <span className="text-[13px] text-ink-3 shrink-0 tabular-nums w-36 text-right">{formatDateTime(mulch.updatedAt)}</span>
               </Link>
               {confirming === mulch.id ? (
-                <button onClick={() => remove(mulch.id)} className="ml-2 text-xs px-2 py-1 rounded bg-accent text-white">
+                <button onClick={() => remove(mulch.id)} className="mr-2 text-xs font-medium px-2.5 py-1 rounded-lg bg-danger text-white">
                   Delete
                 </button>
               ) : (
                 <button
                   onClick={() => setConfirming(mulch.id)}
-                  className="ml-2 p-1.5 rounded text-ink-3 opacity-0 group-hover:opacity-100 hover:text-accent"
+                  className="mr-2 p-1.5 rounded-lg text-ink-3 opacity-0 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100"
                   aria-label="Delete"
                   title="Delete"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={15} strokeWidth={1.75} />
                 </button>
               )}
             </li>

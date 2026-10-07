@@ -44,19 +44,19 @@ export function useSearch(query: string, mulchId?: string) {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  transcript: "Said",
-  doc: "File",
-  link: "Link",
-  writeup: "Write-up",
-  artifact: "File",
-  media: "Media",
-  image: "Image",
-  question: "Question",
-  search: "Search",
-  definition: "Definition",
-  example: "Example",
-  idea: "Idea",
-  note: "Note",
+  transcript: "said",
+  doc: "file",
+  link: "link",
+  writeup: "write-up",
+  artifact: "made",
+  media: "media",
+  image: "image",
+  question: "question",
+  search: "source",
+  definition: "definition",
+  example: "example",
+  idea: "idea",
+  note: "note",
 };
 
 export function ResultList({ results, showMulch, onPick }: { results: SearchResult[]; showMulch: boolean; onPick(result: SearchResult): void }) {
@@ -67,7 +67,7 @@ export function ResultList({ results, showMulch, onPick }: { results: SearchResu
         <li key={`${result.mulchId}/${result.nodeId}/${i}`}>
           <button onClick={() => onPick(result)} className="w-full text-left px-4 py-2 hover:bg-paper-2 focus:bg-paper-2 outline-none">
             <div className="flex items-baseline gap-2 text-[11px] text-ink-3">
-              <span className="uppercase tracking-wider font-medium">{KIND_LABEL[result.kind] ?? result.kind}</span>
+              <span>{KIND_LABEL[result.kind] ?? result.kind}</span>
               {result.title && <span className="truncate">{result.title}</span>}
               {result.page && <span>p.{result.page}</span>}
               {showMulch && <span className="ml-auto truncate">{result.mulchTitle}</span>}

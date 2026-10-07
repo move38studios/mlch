@@ -130,7 +130,7 @@ function KeyField({ id, label, set, stored, onSaved }: { id: string; label: stri
       ) : (
         <span className="text-xs text-ink-3">.env.local</span>
       )}
-      {error && <span className="text-xs text-accent">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
 }
@@ -202,7 +202,7 @@ export function Settings() {
                   </div>
                   <div className="text-xs text-ink-2 mt-0.5">
                     {h.problem ? (
-                      <span className="text-accent">{h.problem}</span>
+                      <span className="text-danger">{h.problem}</span>
                     ) : (
                       <>
                         Signed in{h.account?.plan ? `, ${h.account.plan}` : ""}

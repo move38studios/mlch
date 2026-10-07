@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Pause, Play, Square } from "lucide-react";
+import { Pause, Play, Square } from "lucide-react";
+import { Scribble } from "@/components/brand/Scribble";
 import { useMulch } from "@/lib/mulch/client";
 import type { JobStatus as Job } from "@/lib/mulch/events";
 
@@ -26,26 +27,26 @@ export function JobStatus({ mulchId }: { mulchId: string }) {
     fetch(`/api/mulches/${mulchId}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
 
   return (
-    <div className="flex items-center gap-2 text-xs text-ink-2">
-      {showSay && say && <span className="max-w-80 truncate text-ink-3">{say.text}</span>}
+    <div className="flex items-center gap-1 text-[12.5px] text-ink-2">
+      {showSay && say && <span className="max-w-72 truncate text-ink-3 px-1.5">{say.text}</span>}
       {running.map((job) => (
-        <span key={job.id} className="inline-flex items-center gap-1 rounded-full bg-paper-2 px-2 py-0.5" title={job.label}>
-          <Loader2 size={11} className="animate-spin" />
-          {LANE_LABEL[job.lane]}
+        <span key={job.id} className="inline-flex items-center gap-1.5 rounded-lg bg-paper-2 pl-1.5 pr-2 h-7" title={job.label}>
+          <Scribble which="bottom" mode="loop" strokeWidth={11} className="h-3 w-auto text-ink" />
+          <span className="text-ink">{LANE_LABEL[job.lane]}</span>
           {job.lane === "command" && <span className="max-w-40 truncate text-ink-3">{job.label}</span>}
         </span>
       ))}
       {running.length > 0 && (
-        <button onClick={() => post("cancel")} className="p-1 rounded hover:bg-paper-2" title="Stop" aria-label="Stop">
-          <Square size={12} />
+        <button onClick={() => post("cancel")} className="p-1.5 rounded-lg hover:bg-paper-2 hover:text-ink" title="Stop" aria-label="Stop">
+          <Square size={12} strokeWidth={2} />
         </button>
       )}
       <button
         onClick={() => post("pause", { paused: !paused })}
-        className={`inline-flex items-center gap-1 rounded px-1.5 py-1 hover:bg-paper-2 ${paused ? "text-accent" : ""}`}
+        className={`inline-flex items-center gap-1.5 rounded-lg px-2 h-7 hover:bg-paper-2 ${paused ? "bg-amber text-ink font-medium hover:bg-amber" : "hover:text-ink"}`}
         title={paused ? "Resume enrichment" : "Pause enrichment"}
       >
-        {paused ? <Play size={12} /> : <Pause size={12} />}
+        {paused ? <Play size={12} strokeWidth={2} /> : <Pause size={12} strokeWidth={2} />}
         {paused ? "Enrichment paused" : "Enrichment"}
       </button>
     </div>

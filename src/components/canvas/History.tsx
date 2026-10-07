@@ -69,8 +69,8 @@ export function HistoryBar({ mulchId, onPreview, onClose }: { mulchId: string; o
   }
 
   return (
-    <div className="shrink-0 border-b border-line bg-white px-4 py-2.5 flex items-center gap-4 text-sm z-10">
-      <span className="font-medium shrink-0">History</span>
+    <div className="absolute top-[58px] left-[84px] right-3 z-10 float rounded-xl px-4 h-12 flex items-center gap-4 text-[13.5px]">
+      <span className="font-semibold shrink-0">History</span>
       {checkpoints && checkpoints.length === 0 ? (
         <span className="text-ink-3 flex-1">No checkpoints yet.</span>
       ) : (
@@ -81,30 +81,34 @@ export function HistoryBar({ mulchId, onPreview, onClose }: { mulchId: string; o
             max={checkpoints?.length ?? 0}
             value={index}
             onChange={(e) => setIndex(Number(e.target.value))}
-            className="flex-1 accent-[var(--accent)]"
+            className="flex-1 accent-[var(--amber)]"
             aria-label="Time"
           />
-          <span className="w-72 shrink-0 text-ink-2 tabular-nums truncate">
+          <span className="w-80 shrink-0 flex items-baseline gap-3 tabular-nums truncate">
             {selected ? (
               <>
-                {formatDateTime(selected.at)} · {KIND_LABEL[selected.kind]}
-                {selected.label && selected.kind === "job" ? `: ${selected.label}` : ""} · {selected.nodeCount} items
+                <span className="font-medium">{formatDateTime(selected.at)}</span>
+                <span className="text-ink-3 truncate">
+                  {KIND_LABEL[selected.kind]}
+                  {selected.label && selected.kind === "job" ? `: ${selected.label}` : ""}
+                </span>
+                <span className="text-ink-3 shrink-0">{selected.nodeCount} items</span>
               </>
             ) : (
-              "Now"
+              <span className="font-medium">Now</span>
             )}
           </span>
           <button
             onClick={restore}
             disabled={!selected || restoring}
-            className="shrink-0 px-2.5 py-1 rounded-md bg-ink text-paper disabled:opacity-25"
+            className="shrink-0 px-3 h-8 rounded-lg bg-ink text-white font-medium disabled:opacity-20"
           >
             Restore
           </button>
         </>
       )}
-      <button onClick={onClose} className="p-1 rounded hover:bg-paper-2 text-ink-2" aria-label="Close history" title="Close">
-        <X size={15} />
+      <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2" aria-label="Close history" title="Close">
+        <X size={15} strokeWidth={1.75} />
       </button>
     </div>
   );

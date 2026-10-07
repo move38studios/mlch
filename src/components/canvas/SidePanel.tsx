@@ -71,7 +71,7 @@ export function SidePanel() {
   return (
     <aside className="w-[min(560px,45%)] shrink-0 border-l border-line bg-white flex flex-col">
       <div className="h-11 shrink-0 flex items-center gap-2 px-4 border-b border-line text-xs text-ink-3">
-        {label && <span className="uppercase tracking-wider font-medium">{label}</span>}
+        {label && <span>{label}</span>}
         {node.fileName && <span className="truncate">{node.fileName}</span>}
         {node.url && (
           <a href={node.url} target="_blank" rel="noreferrer" className="truncate hover:text-ink inline-flex items-center gap-1">

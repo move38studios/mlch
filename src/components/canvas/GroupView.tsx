@@ -20,8 +20,8 @@ function GroupViewImpl({ data, selected }: NodeProps<GroupFlowNode>) {
     else setTitle(group.title);
   };
   return (
-    <div className={`w-full h-full rounded-xl border-[1.5px] border-dashed ${selected ? "border-accent/70 bg-accent/[0.03]" : "border-ink/20 bg-ink/[0.015]"}`}>
-      <div className="px-4 pt-2.5 text-[13px] font-semibold text-ink-2" onDoubleClick={(e) => { e.stopPropagation(); if (!readOnly) setEditing(true); }}>
+    <div className={`w-full h-full rounded-[18px] bg-ink/[0.035] ${selected ? "outline-[2.5px] outline-amber outline-offset-2" : ""}`}>
+      <div className="px-5 pt-3 text-[14px] font-semibold tracking-[-0.005em] text-ink" onDoubleClick={(e) => { e.stopPropagation(); if (!readOnly) setEditing(true); }}>
         {editing ? (
           <input
             autoFocus

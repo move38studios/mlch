@@ -38,7 +38,7 @@ function Title() {
         }
       }}
       aria-label="Title"
-      className="min-w-0 w-80 bg-transparent font-semibold outline-none rounded px-1.5 py-0.5 hover:bg-paper-2 focus:bg-white"
+      className="min-w-[8ch] max-w-[44vw] field-sizing-content bg-transparent text-[14.5px] font-semibold tracking-[-0.005em] outline-none rounded-lg px-1.5 py-1 hover:bg-paper-2 focus:bg-paper-2"
     />
   );
 }
@@ -58,8 +58,8 @@ function AddFolder({ mulchId }: { mulchId: string }) {
     if (!response.ok) notify(((await response.json().catch(() => ({}))) as { error?: string }).error || "Could not add the folder.");
   }
   return (
-    <button onClick={choose} className="p-1.5 rounded-md text-ink-2 hover:bg-paper-2" title="Add folder" aria-label="Add folder">
-      <FolderPlus size={16} />
+    <button onClick={choose} className="p-1.5 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink" title="Add folder" aria-label="Add folder">
+      <FolderPlus size={16} strokeWidth={1.75} />
     </button>
   );
 }
@@ -74,7 +74,7 @@ function Notice() {
   }, [notice, dismiss]);
   if (!notice) return null;
   return (
-    <div className={`absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-xl flex items-start gap-2 rounded-md px-3 py-2 text-sm shadow-md ${notice.level === "error" ? "bg-accent text-white" : "bg-ink text-paper"}`}>
+    <div className={`absolute top-[60px] left-1/2 -translate-x-1/2 z-20 max-w-xl flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-[13.5px] shadow-lg ${notice.level === "error" ? "bg-danger text-white" : "bg-ink text-white"}`}>
       <span className="flex-1">{notice.message}</span>
       <button onClick={dismiss} aria-label="Close" className="opacity-70 hover:opacity-100">
         <X size={14} />
@@ -115,44 +115,47 @@ export function MulchView({ id }: { id: string }) {
   }, [loaded, focusParam, pageParam]);
 
   return (
-    <main className="h-full flex flex-col">
-      <header className="drag h-12 shrink-0 pl-20 pr-3 flex items-center gap-2 border-b border-line bg-paper z-10">
-        <Link href="/" className="p-1.5 rounded-md text-ink-2 hover:bg-paper-2" aria-label="Home" title="Home">
-          <ArrowLeft size={16} />
-        </Link>
-        <Title />
-        <div className="flex-1" />
-        {!connected && mulch && <span className="text-xs text-ink-3">Reconnecting</span>}
-        {mulch && <JobStatus mulchId={id} />}
-        {mulch && <AddFolder mulchId={id} />}
-        {mulch && (
-          <button
-            onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
-            className={`p-1.5 rounded-md hover:bg-paper-2 ${historyOpen ? "text-accent" : "text-ink-2"}`}
-            title="History"
-            aria-label="History"
-          >
-            <History size={16} />
-          </button>
-        )}
-      </header>
-      {historyOpen && <HistoryBar mulchId={id} onPreview={onPreview} onClose={closeHistory} />}
-      <div className="relative flex-1 min-h-0 flex">
-        <div className="relative flex-1 min-w-0">
-          <Notice />
-          {error ? (
-            <p className="p-8 text-sm text-ink-2">{error}</p>
-          ) : shown ? (
-            <>
-              <Canvas mulch={shown} />
-              {!preview && <InputBar mulchId={id} />}
-              <ArtifactViewer />
-              <SearchPalette mulchId={id} onFocus={(hit) => useMulch.getState().setFocus({ ids: [hit.nodeId], ...(hit.page ? { page: hit.page } : {}), quote: hit.snippet.replace(/^…|…$/g, "").slice(0, 80) })} />
-            </>
-          ) : null}
-        </div>
-        <SidePanel />
+    <main className="h-full flex">
+      <div className="relative flex-1 min-w-0">
+        {error ? (
+          <p className="pt-24 px-8 text-sm text-ink-2">{error}</p>
+        ) : shown ? (
+          <>
+            <Canvas mulch={shown} />
+            {!preview && <InputBar mulchId={id} />}
+            <ArtifactViewer />
+            <SearchPalette mulchId={id} onFocus={(hit) => useMulch.getState().setFocus({ ids: [hit.nodeId], ...(hit.page ? { page: hit.page } : {}), quote: hit.snippet.replace(/^…|…$/g, "").slice(0, 80) })} />
+          </>
+        ) : null}
+        {/* Floating controls over the canvas; the strip behind them drags the window. */}
+        <header className="drag absolute inset-x-0 top-0 h-[52px] pl-[84px] pr-3 flex items-center gap-2 z-10 pointer-events-none">
+          <div className="no-drag pointer-events-auto float rounded-xl h-9 flex items-center pl-1 pr-1.5 gap-0.5 min-w-0">
+            <Link href="/" className="p-1.5 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink" aria-label="Home" title="Home">
+              <ArrowLeft size={16} strokeWidth={1.75} />
+            </Link>
+            <Title />
+          </div>
+          {!connected && mulch && <span className="pointer-events-auto text-xs text-ink-3">Reconnecting</span>}
+          <div className="flex-1" />
+          {mulch && (
+            <div className="no-drag pointer-events-auto float rounded-xl h-9 flex items-center px-1 gap-0.5">
+              <JobStatus mulchId={id} />
+              <AddFolder mulchId={id} />
+              <button
+                onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
+                className={`p-1.5 rounded-lg hover:bg-paper-2 ${historyOpen ? "bg-amber text-ink hover:bg-amber" : "text-ink-2 hover:text-ink"}`}
+                title="History"
+                aria-label="History"
+              >
+                <History size={16} strokeWidth={1.75} />
+              </button>
+            </div>
+          )}
+        </header>
+        {historyOpen && <HistoryBar mulchId={id} onPreview={onPreview} onClose={closeHistory} />}
+        <Notice />
       </div>
+      <SidePanel />
     </main>
   );
 }
