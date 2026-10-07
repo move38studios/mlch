@@ -1,8 +1,8 @@
 /**
- * Search over napkins: one local SQLite index for the whole library. Server-only.
+ * Search over mulches: one local SQLite index for the whole library. Server-only.
  *
  *   <library>/.index.sqlite
- *     chunks       one row per passage: napkin, item, kind, page, text, vector
+ *     chunks       one row per passage: mulch, item, kind, page, text, vector
  *     chunks_fts   FTS5 over chunks (keyword search, bm25)
  *     items        per item: a signature of what was indexed, to skip unchanged items
  *
@@ -22,8 +22,8 @@ import path from "node:path";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { libraryDir } from "@/lib/desktop/server";
 import { readAssetText } from "@/lib/ingest/ingest";
-import { getNapkin, listNapkins, NapkinNotFoundError, napkinDir, onAfterApply, openNapkin } from "@/lib/napkin/store";
-import type { NapkinNode, NodeKind } from "@/lib/napkin/types";
+import { getMulch, listMulches, MulchNotFoundError, mulchDir, onAfterApply, openMulch } from "@/lib/mulch/store";
+import type { MulchNode, NodeKind } from "@/lib/mulch/types";
 import { chunkText, htmlText } from "./chunk";
 import { EMBED_DIMS, embed, embeddingsEnabled } from "./embed";
 
@@ -33,7 +33,7 @@ interface State {
   dirty: Map<string, Set<string>>;
   timers: Map<string, ReturnType<typeof setTimeout>>;
   embedding: boolean;
-  /** napkinId → cached vectors for search. */
+  /** mulchId → cached vectors for search. */
   vectors: Map<string, { ids: number[]; data: Float32Array }>;
   indexed: Set<string>;
 }
@@ -55,7 +55,7 @@ function db(): DatabaseSync {
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS chunks (
       id INTEGER PRIMARY KEY,
-      napkin_id TEXT NOT NULL,
+      mulch_id TEXT NOT NULL,
       node_id TEXT NOT NULL,
       kind TEXT NOT NULL,
       source TEXT NOT NULL,
@@ -65,7 +65,7 @@ function db(): DatabaseSync {
       text TEXT NOT NULL,
       vector BLOB
     );
-    CREATE INDEX IF NOT EXISTS chunks_item ON chunks(napkin_id, node_id);
+    CREATE INDEX IF NOT EXISTS chunks_item ON chunks(mulch_id, node_id);
     CREATE INDEX IF NOT EXISTS chunks_pending ON chunks(vector) WHERE vector IS NULL;
     CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(text, title, content='chunks', content_rowid='id', tokenize='unicode61 remove_diacritics 2');
     CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
@@ -75,10 +75,10 @@ function db(): DatabaseSync {
       INSERT INTO chunks_fts(chunks_fts, rowid, text, title) VALUES ('delete', old.id, old.text, old.title);
     END;
     CREATE TABLE IF NOT EXISTS items (
-      napkin_id TEXT NOT NULL,
+      mulch_id TEXT NOT NULL,
       node_id TEXT NOT NULL,
       signature TEXT NOT NULL,
-      PRIMARY KEY (napkin_id, node_id)
+      PRIMARY KEY (mulch_id, node_id)
     );
   `);
   s.db = database;
@@ -101,23 +101,23 @@ interface Row {
   text: string;
 }
 
-function signature(node: NapkinNode): string {
+function signature(node: MulchNode): string {
   return createHash("sha1").update(JSON.stringify([node.kind, node.title, node.text, node.assetId, node.docPath, node.url, node.fileName, node.gen?.status])).digest("hex");
 }
 
-async function rowsFor(napkinId: string, node: NapkinNode): Promise<Row[]> {
+async function rowsFor(mulchId: string, node: MulchNode): Promise<Row[]> {
   const title = [node.title, node.fileName].filter(Boolean).join(" · ") || undefined;
   const rows: Row[] = [];
   const head = [node.title, node.text, node.url].filter(Boolean).join("\n");
   if (head.trim()) rows.push({ kind: node.kind, source: "item", title, text: head.slice(0, 4000) });
   // Full text of documents and links lives beside their file.
   if ((node.kind === "doc" || node.kind === "link") && node.assetId) {
-    const full = await readAssetText(napkinId, node.assetId);
+    const full = await readAssetText(mulchId, node.assetId);
     if (full) for (const passage of chunkText(full)) rows.push({ kind: node.kind, source: "full", title, page: passage.page, offset: passage.offset, text: passage.text });
   }
   if ((node.kind === "writeup" || node.kind === "artifact") && node.docPath && /\.(md|html|svg|csv|json|txt)$/.test(node.docPath)) {
     try {
-      const raw = await fs.readFile(path.join(napkinDir(napkinId), node.docPath), "utf8");
+      const raw = await fs.readFile(path.join(mulchDir(mulchId), node.docPath), "utf8");
       const text = node.docPath.endsWith(".html") || node.docPath.endsWith(".svg") ? htmlText(raw) : raw;
       for (const passage of chunkText(text)) rows.push({ kind: node.kind, source: "full", title, offset: passage.offset, text: passage.text });
     } catch {
@@ -127,44 +127,44 @@ async function rowsFor(napkinId: string, node: NapkinNode): Promise<Row[]> {
   return rows;
 }
 
-function replaceRows(napkinId: string, nodeId: string, rows: Row[], sig: string | undefined): void {
+function replaceRows(mulchId: string, nodeId: string, rows: Row[], sig: string | undefined): void {
   const database = db();
   database.exec("BEGIN");
   try {
-    database.prepare("DELETE FROM chunks WHERE napkin_id = ? AND node_id = ?").run(napkinId, nodeId);
-    const insert = database.prepare("INSERT INTO chunks (napkin_id, node_id, kind, source, title, page, offset, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    for (const row of rows) insert.run(napkinId, nodeId, row.kind, row.source, row.title ?? null, row.page ?? null, row.offset ?? null, row.text);
-    if (sig) database.prepare("INSERT OR REPLACE INTO items (napkin_id, node_id, signature) VALUES (?, ?, ?)").run(napkinId, nodeId, sig);
-    else database.prepare("DELETE FROM items WHERE napkin_id = ? AND node_id = ?").run(napkinId, nodeId);
+    database.prepare("DELETE FROM chunks WHERE mulch_id = ? AND node_id = ?").run(mulchId, nodeId);
+    const insert = database.prepare("INSERT INTO chunks (mulch_id, node_id, kind, source, title, page, offset, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    for (const row of rows) insert.run(mulchId, nodeId, row.kind, row.source, row.title ?? null, row.page ?? null, row.offset ?? null, row.text);
+    if (sig) database.prepare("INSERT OR REPLACE INTO items (mulch_id, node_id, signature) VALUES (?, ?, ?)").run(mulchId, nodeId, sig);
+    else database.prepare("DELETE FROM items WHERE mulch_id = ? AND node_id = ?").run(mulchId, nodeId);
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");
     throw error;
   }
-  state().vectors.delete(napkinId);
+  state().vectors.delete(mulchId);
 }
 
-/** Bring the index for these items (or the whole napkin) up to date. */
-export async function indexNapkin(napkinId: string, nodeIds?: Iterable<string>): Promise<void> {
-  const napkin = await getNapkin(napkinId);
+/** Bring the index for these items (or the whole mulch) up to date. */
+export async function indexMulch(mulchId: string, nodeIds?: Iterable<string>): Promise<void> {
+  const mulch = await getMulch(mulchId);
   const database = db();
   const known = new Map(
-    (database.prepare("SELECT node_id, signature FROM items WHERE napkin_id = ?").all(napkinId) as Array<{ node_id: string; signature: string }>).map((r) => [r.node_id, r.signature]),
+    (database.prepare("SELECT node_id, signature FROM items WHERE mulch_id = ?").all(mulchId) as Array<{ node_id: string; signature: string }>).map((r) => [r.node_id, r.signature]),
   );
-  const targets = nodeIds ? new Set(nodeIds) : new Set([...Object.keys(napkin.nodes), ...known.keys()]);
+  const targets = nodeIds ? new Set(nodeIds) : new Set([...Object.keys(mulch.nodes), ...known.keys()]);
   targets.delete(TRANSCRIPT);
   for (const nodeId of targets) {
-    const node = napkin.nodes[nodeId];
+    const node = mulch.nodes[nodeId];
     if (!node) {
-      if (known.has(nodeId)) replaceRows(napkinId, nodeId, [], undefined);
+      if (known.has(nodeId)) replaceRows(mulchId, nodeId, [], undefined);
       continue;
     }
     const sig = signature(node);
     if (known.get(nodeId) === sig) continue;
-    replaceRows(napkinId, nodeId, await rowsFor(napkinId, node), sig);
+    replaceRows(mulchId, nodeId, await rowsFor(mulchId, node), sig);
   }
   // The transcript, in passages of a few segments.
-  const transcript = (await openNapkin(napkinId)).transcript;
+  const transcript = (await openMulch(mulchId)).transcript;
   const transcriptSig = createHash("sha1").update(String(transcript.length) + (transcript.at(-1)?.id ?? "")).digest("hex");
   if (known.get(TRANSCRIPT) !== transcriptSig) {
     const rows: Row[] = [];
@@ -172,22 +172,22 @@ export async function indexNapkin(napkinId: string, nodeIds?: Iterable<string>):
       const group = transcript.slice(i, i + 4);
       rows.push({ kind: "transcript", source: "transcript", title: new Date(group[0].at).toISOString(), offset: i, text: group.map((s) => s.text).join(" ") });
     }
-    replaceRows(napkinId, TRANSCRIPT, rows, transcriptSig);
+    replaceRows(mulchId, TRANSCRIPT, rows, transcriptSig);
   }
-  state().indexed.add(napkinId);
+  state().indexed.add(mulchId);
   void embedPending();
 }
 
-async function ensureIndexed(napkinId: string): Promise<void> {
-  if (!state().indexed.has(napkinId)) await indexNapkin(napkinId);
+async function ensureIndexed(mulchId: string): Promise<void> {
+  if (!state().indexed.has(mulchId)) await indexMulch(mulchId);
 }
 
-/** Remove a napkin from the index (it was moved to the trash). */
-export function dropNapkin(napkinId: string): void {
-  db().prepare("DELETE FROM chunks WHERE napkin_id = ?").run(napkinId);
-  db().prepare("DELETE FROM items WHERE napkin_id = ?").run(napkinId);
-  state().vectors.delete(napkinId);
-  state().indexed.delete(napkinId);
+/** Remove a mulch from the index (it was moved to the trash). */
+export function dropMulch(mulchId: string): void {
+  db().prepare("DELETE FROM chunks WHERE mulch_id = ?").run(mulchId);
+  db().prepare("DELETE FROM items WHERE mulch_id = ?").run(mulchId);
+  state().vectors.delete(mulchId);
+  state().indexed.delete(mulchId);
 }
 
 /** Embed passages that have no vector yet, in the background. */
@@ -197,17 +197,17 @@ async function embedPending(): Promise<void> {
   s.embedding = true;
   try {
     const database = db();
-    const select: StatementSync = database.prepare("SELECT id, napkin_id, title, text FROM chunks WHERE vector IS NULL LIMIT 12");
+    const select: StatementSync = database.prepare("SELECT id, mulch_id, title, text FROM chunks WHERE vector IS NULL LIMIT 12");
     const update = database.prepare("UPDATE chunks SET vector = ? WHERE id = ?");
     for (;;) {
-      const batch = select.all() as Array<{ id: number; napkin_id: string; title: string | null; text: string }>;
+      const batch = select.all() as Array<{ id: number; mulch_id: string; title: string | null; text: string }>;
       if (!batch.length) break;
       const vectors = await embed(batch.map((row) => (row.title ? `${row.title}: ${row.text}` : row.text)), "passage");
       if (!vectors) break;
       database.exec("BEGIN");
       batch.forEach((row, i) => update.run(Buffer.from(vectors[i].buffer, vectors[i].byteOffset, vectors[i].byteLength), row.id));
       database.exec("COMMIT");
-      for (const napkinId of new Set(batch.map((row) => row.napkin_id))) s.vectors.delete(napkinId);
+      for (const mulchId of new Set(batch.map((row) => row.mulch_id))) s.vectors.delete(mulchId);
     }
   } catch (error) {
     log.error("search", "embedding failed", { error });
@@ -218,27 +218,27 @@ async function embedPending(): Promise<void> {
 
 /* ── hooks ─────────────────────────────────────────────────────── */
 
-onAfterApply((napkinId, batch) => {
+onAfterApply((mulchId, batch) => {
   const s = state();
-  const dirty = s.dirty.get(napkinId) ?? new Set<string>();
+  const dirty = s.dirty.get(mulchId) ?? new Set<string>();
   for (const op of batch.ops) {
     if (op.op === "addNode") dirty.add(op.node.id);
     else if (op.op === "updateNode" || op.op === "removeNode") dirty.add(op.id);
   }
   // A transcript change has no op; recheck it with any batch.
   dirty.add(TRANSCRIPT);
-  s.dirty.set(napkinId, dirty);
-  if (s.timers.has(napkinId)) return;
+  s.dirty.set(mulchId, dirty);
+  if (s.timers.has(mulchId)) return;
   s.timers.set(
-    napkinId,
+    mulchId,
     setTimeout(() => {
-      s.timers.delete(napkinId);
-      const ids = s.dirty.get(napkinId) ?? new Set();
-      s.dirty.delete(napkinId);
-      indexNapkin(napkinId, ids).catch((error) => {
-        // The napkin was moved to the trash meanwhile.
-        if (error instanceof NapkinNotFoundError) return;
-        log.error("search", "index failed", { napkinId, error });
+      s.timers.delete(mulchId);
+      const ids = s.dirty.get(mulchId) ?? new Set();
+      s.dirty.delete(mulchId);
+      indexMulch(mulchId, ids).catch((error) => {
+        // The mulch was moved to the trash meanwhile.
+        if (error instanceof MulchNotFoundError) return;
+        log.error("search", "index failed", { mulchId, error });
       });
     }, 1500),
   );
@@ -247,7 +247,7 @@ onAfterApply((napkinId, batch) => {
 /* ── searching ─────────────────────────────────────────────────── */
 
 export interface SearchHit {
-  napkinId: string;
+  mulchId: string;
   nodeId: string;
   kind: NodeKind | "transcript";
   title?: string;
@@ -276,41 +276,41 @@ function snippetAround(text: string, query: string, size = 320): string {
   return `${start > 0 ? "…" : ""}${text.slice(start, start + size).trim()}${start + size < text.length ? "…" : ""}`;
 }
 
-function vectorsFor(napkinIds: string[]): Array<{ ids: number[]; data: Float32Array }> {
+function vectorsFor(mulchIds: string[]): Array<{ ids: number[]; data: Float32Array }> {
   const s = state();
-  return napkinIds.map((napkinId) => {
-    const cached = s.vectors.get(napkinId);
+  return mulchIds.map((mulchId) => {
+    const cached = s.vectors.get(mulchId);
     if (cached) return cached;
-    const rows = db().prepare("SELECT id, vector FROM chunks WHERE napkin_id = ? AND vector IS NOT NULL").all(napkinId) as Array<{ id: number; vector: Uint8Array }>;
+    const rows = db().prepare("SELECT id, vector FROM chunks WHERE mulch_id = ? AND vector IS NOT NULL").all(mulchId) as Array<{ id: number; vector: Uint8Array }>;
     const data = new Float32Array(rows.length * EMBED_DIMS);
     rows.forEach((row, i) => data.set(new Float32Array(row.vector.buffer, row.vector.byteOffset, EMBED_DIMS), i * EMBED_DIMS));
     const value = { ids: rows.map((r) => r.id), data };
-    s.vectors.set(napkinId, value);
+    s.vectors.set(mulchId, value);
     return value;
   });
 }
 
 export interface SearchOptions {
-  /** Napkins to search; all napkins when absent. */
-  napkinIds?: string[];
+  /** Mulches to search; all mulches when absent. */
+  mulchIds?: string[];
   kinds?: string[];
   limit?: number;
 }
 
 export async function search(query: string, options: SearchOptions = {}): Promise<SearchHit[]> {
-  const napkinIds = options.napkinIds ?? (await listNapkins()).map((n) => n.id);
-  for (const id of napkinIds) await ensureIndexed(id);
+  const mulchIds = options.mulchIds ?? (await listMulches()).map((n) => n.id);
+  for (const id of mulchIds) await ensureIndexed(id);
   const database = db();
   const limit = options.limit ?? 12;
-  const placeholders = napkinIds.map(() => "?").join(",") || "''";
+  const placeholders = mulchIds.map(() => "?").join(",") || "''";
   const kindFilter = options.kinds?.length ? ` AND c.kind IN (${options.kinds.map(() => "?").join(",")})` : "";
   const ranks = new Map<number, number>();
 
   const fts = ftsQuery(query);
   if (fts) {
     const rows = database
-      .prepare(`SELECT c.id FROM chunks_fts f JOIN chunks c ON c.id = f.rowid WHERE chunks_fts MATCH ? AND c.napkin_id IN (${placeholders})${kindFilter} ORDER BY bm25(chunks_fts, 1.0, 2.0) LIMIT 60`)
-      .all(fts, ...napkinIds, ...(options.kinds ?? [])) as Array<{ id: number }>;
+      .prepare(`SELECT c.id FROM chunks_fts f JOIN chunks c ON c.id = f.rowid WHERE chunks_fts MATCH ? AND c.mulch_id IN (${placeholders})${kindFilter} ORDER BY bm25(chunks_fts, 1.0, 2.0) LIMIT 60`)
+      .all(fts, ...mulchIds, ...(options.kinds ?? [])) as Array<{ id: number }>;
     rows.forEach((row, rank) => ranks.set(row.id, (ranks.get(row.id) ?? 0) + 1 / (60 + rank)));
   }
 
@@ -318,7 +318,7 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   const queryVector = (await embed([query], "query", 8000))?.[0];
   if (queryVector) {
     const scored: Array<{ id: number; score: number }> = [];
-    for (const { ids, data } of vectorsFor(napkinIds)) {
+    for (const { ids, data } of vectorsFor(mulchIds)) {
       for (let i = 0; i < ids.length; i++) {
         let dot = 0;
         const base = i * EMBED_DIMS;
@@ -343,8 +343,8 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   const ordered = [...ranks.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit * 3);
   if (!ordered.length) return [];
   const rows = database
-    .prepare(`SELECT id, napkin_id, node_id, kind, title, page, offset, text FROM chunks WHERE id IN (${ordered.map(() => "?").join(",")})`)
-    .all(...ordered.map(([id]) => id)) as Array<{ id: number; napkin_id: string; node_id: string; kind: string; title: string | null; page: number | null; offset: number | null; text: string }>;
+    .prepare(`SELECT id, mulch_id, node_id, kind, title, page, offset, text FROM chunks WHERE id IN (${ordered.map(() => "?").join(",")})`)
+    .all(...ordered.map(([id]) => id)) as Array<{ id: number; mulch_id: string; node_id: string; kind: string; title: string | null; page: number | null; offset: number | null; text: string }>;
   const byId = new Map(rows.map((row) => [row.id, row]));
   const hits: SearchHit[] = [];
   const seen = new Map<string, number>();
@@ -352,11 +352,11 @@ export async function search(query: string, options: SearchOptions = {}): Promis
     const row = byId.get(id);
     if (!row) continue;
     // At most two passages per item, so one long book does not crowd out the rest.
-    const key = `${row.napkin_id}/${row.node_id}`;
+    const key = `${row.mulch_id}/${row.node_id}`;
     if ((seen.get(key) ?? 0) >= 2) continue;
     seen.set(key, (seen.get(key) ?? 0) + 1);
     hits.push({
-      napkinId: row.napkin_id,
+      mulchId: row.mulch_id,
       nodeId: row.node_id,
       kind: row.kind as SearchHit["kind"],
       ...(row.title ? { title: row.title } : {}),
@@ -371,13 +371,13 @@ export async function search(query: string, options: SearchOptions = {}): Promis
 }
 
 /** Text of an item's source around a page or offset (for reading after a hit). */
-export async function readAround(napkinId: string, nodeId: string, at: { page?: number; offset?: number }, size = 6000): Promise<string | undefined> {
-  const napkin = await getNapkin(napkinId);
-  const node = napkin.nodes[nodeId];
+export async function readAround(mulchId: string, nodeId: string, at: { page?: number; offset?: number }, size = 6000): Promise<string | undefined> {
+  const mulch = await getMulch(mulchId);
+  const node = mulch.nodes[nodeId];
   if (!node) return undefined;
   let full: string | undefined;
-  if (node.assetId && (node.kind === "doc" || node.kind === "link")) full = await readAssetText(napkinId, node.assetId);
-  else if (node.docPath) full = await fs.readFile(path.join(napkinDir(napkinId), node.docPath), "utf8").catch(() => undefined);
+  if (node.assetId && (node.kind === "doc" || node.kind === "link")) full = await readAssetText(mulchId, node.assetId);
+  else if (node.docPath) full = await fs.readFile(path.join(mulchDir(mulchId), node.docPath), "utf8").catch(() => undefined);
   full ??= [node.title, node.text].filter(Boolean).join("\n\n");
   let start = at.offset ?? 0;
   if (at.page !== undefined) {

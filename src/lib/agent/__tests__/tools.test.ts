@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { overlaps, rectOf } from "@/lib/napkin/sizes";
+import { overlaps, rectOf } from "@/lib/mulch/sizes";
 
 let library: string;
 beforeEach(() => {
@@ -14,11 +14,11 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 
 async function setup(tools: string[], extra: Record<string, unknown> = {}) {
-  const store = await import("@/lib/napkin/store");
-  const { createNapkinTools } = await import("../tools");
-  const napkin = await store.createNapkin("T");
-  await store.applyToNapkin(
-    napkin.id,
+  const store = await import("@/lib/mulch/store");
+  const { createMulchTools } = await import("../tools");
+  const mulch = await store.createMulch("T");
+  await store.applyToMulch(
+    mulch.id,
     [
       { op: "addNode", node: { id: "mine", kind: "note", x: 0, y: 0, text: "user note", origin: "user", createdAt: 1 } },
       { op: "addNode", node: { id: "said", kind: "idea", x: 400, y: 0, text: "spoken", origin: "speech:j0", createdAt: 2 } },
@@ -26,13 +26,13 @@ async function setup(tools: string[], extra: Record<string, unknown> = {}) {
     ],
     "user",
   );
-  const ctx = { napkinId: napkin.id, jobId: "j1", tools, added: [] as string[], ...extra };
-  return { store, napkin, ctx, runtime: createNapkinTools(ctx as never) };
+  const ctx = { mulchId: mulch.id, jobId: "j1", tools, added: [] as string[], ...extra };
+  return { store, mulch, ctx, runtime: createMulchTools(ctx as never) };
 }
 
-describe("napkin tools", () => {
+describe("mulch tools", () => {
   it("add_nodes places items near anchors without overlap and resolves refs in edges", async () => {
-    const { store, napkin, ctx, runtime } = await setup(["add_nodes"]);
+    const { store, mulch, ctx, runtime } = await setup(["add_nodes"]);
     const result = await runtime.execute("add_nodes", {
       nodes: [
         { ref: "q", kind: "question", text: "why?", near: ["said"] },
@@ -46,7 +46,7 @@ describe("napkin tools", () => {
     });
     expect(result.ok).toBe(true);
     expect(result.text).toContain("unknown nope");
-    const after = await store.getNapkin(napkin.id);
+    const after = await store.getMulch(mulch.id);
     expect(ctx.added).toHaveLength(2);
     expect(Object.keys(after.edges)).toHaveLength(2);
     const rects = Object.values(after.nodes).map(rectOf);
@@ -55,34 +55,34 @@ describe("napkin tools", () => {
   });
 
   it("protects what the person made or said unless allowed", async () => {
-    const { store, napkin, runtime } = await setup(["update_node", "remove_nodes"]);
+    const { store, mulch, runtime } = await setup(["update_node", "remove_nodes"]);
     expect((await runtime.execute("update_node", { id: "mine", text: "x" })).ok).toBe(false);
     expect((await runtime.execute("update_node", { id: "said", text: "x" })).ok).toBe(false);
     expect((await runtime.execute("update_node", { id: "ai", text: "better" })).ok).toBe(true);
     const removed = await runtime.execute("remove_nodes", { ids: ["mine", "ai"] });
     expect(removed.text).toContain("Kept mine");
-    const after = await store.getNapkin(napkin.id);
+    const after = await store.getMulch(mulch.id);
     expect(Object.keys(after.nodes).sort()).toEqual(["mine", "said"]);
 
     const allowed = await setup(["remove_nodes"], { allowUserEdits: true });
     await allowed.runtime.execute("remove_nodes", { ids: ["mine"] });
-    expect((await allowed.store.getNapkin(allowed.napkin.id)).nodes.mine).toBeUndefined();
+    expect((await allowed.store.getMulch(allowed.mulch.id)).nodes.mine).toBeUndefined();
   });
 
   it("arrange creates group boxes and write_doc saves a file", async () => {
-    const { store, napkin, runtime } = await setup(["arrange", "write_doc"], { allowUserEdits: true });
+    const { store, mulch, runtime } = await setup(["arrange", "write_doc"], { allowUserEdits: true });
     const arranged = await runtime.execute("arrange", { groups: [{ title: "A", ids: ["mine", "said"] }, { title: "B", ids: ["ai"] }] });
     expect(arranged.ok).toBe(true);
-    let after = await store.getNapkin(napkin.id);
+    let after = await store.getMulch(mulch.id);
     expect(Object.values(after.groups).map((g) => g.title).sort()).toEqual(["A", "B"]);
     expect(after.nodes.mine.groupId).toBe(after.nodes.said.groupId);
 
     const doc = await runtime.execute("write_doc", { title: "My Summary", markdown: "Body", near: ["ai"] });
     expect(doc.ok).toBe(true);
-    after = await store.getNapkin(napkin.id);
+    after = await store.getMulch(mulch.id);
     const writeup = Object.values(after.nodes).find((n) => n.kind === "writeup")!;
     expect(writeup.docPath).toBe("docs/my-summary.md");
-    expect(fs.readFileSync(path.join(library, napkin.id, "docs/my-summary.md"), "utf8")).toBe("# My Summary\n\nBody");
+    expect(fs.readFileSync(path.join(library, mulch.id, "docs/my-summary.md"), "utf8")).toBe("# My Summary\n\nBody");
   });
 
   it("file tools stay inside the folder", async () => {

@@ -2,9 +2,9 @@
  * Media generations on fal, owned by the server. Server-only.
  *
  * The agent starts a generation and goes on; this module puts a card on the
- * napkin at once, polls fal's queue and keeps the card's status current,
- * saves the outputs into the napkin's assets/ (fal URLs expire), and finishes
- * the card. Records live in <napkin>/generations.json, so polling resumes
+ * mulch at once, polls fal's queue and keeps the card's status current,
+ * saves the outputs into the mulch's assets/ (fal URLs expire), and finishes
+ * the card. Records live in <mulch>/generations.json, so polling resumes
  * after a restart. An agent can wait for generations within its turn
  * (`waitFor`), or ask to be called back when one finishes (`onFinished`, used
  * for review turns).
@@ -15,11 +15,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { saveAsset } from "@/lib/ingest/ingest";
 import { assetPath } from "@/lib/ingest/ingest";
-import { newClientId } from "@/lib/napkin/ids";
-import { placeNear } from "@/lib/napkin/place";
-import { NODE_WIDTH } from "@/lib/napkin/sizes";
-import { applyToNapkin, atomicWriteFile, getNapkin, napkinDir } from "@/lib/napkin/store";
-import type { GenerationState, NapkinNode, NapkinOp } from "@/lib/napkin/types";
+import { newClientId } from "@/lib/mulch/ids";
+import { placeNear } from "@/lib/mulch/place";
+import { NODE_WIDTH } from "@/lib/mulch/sizes";
+import { applyToMulch, atomicWriteFile, getMulch, mulchDir } from "@/lib/mulch/store";
+import type { GenerationState, MulchNode, MulchOp } from "@/lib/mulch/types";
 import * as fal from "./fal";
 import { recordSpend } from "./spend";
 
@@ -32,11 +32,11 @@ export interface ReviewRequest {
 
 export interface GenerationRecord {
   id: string;
-  napkinId: string;
+  mulchId: string;
   nodeId: string;
   endpoint: string;
   title: string;
-  /** Input as submitted (napkin items replaced by upload URLs). */
+  /** Input as submitted (mulch items replaced by upload URLs). */
   input: Record<string, unknown>;
   handle?: fal.QueueHandle;
   status: GenerationState["status"];
@@ -74,44 +74,44 @@ export function onFinished(hook: (record: GenerationRecord) => void): void {
   hooks.push(hook);
 }
 
-function recordsFile(napkinId: string): string {
-  return path.join(napkinDir(napkinId), "generations.json");
+function recordsFile(mulchId: string): string {
+  return path.join(mulchDir(mulchId), "generations.json");
 }
 
-async function persist(napkinId: string): Promise<void> {
-  const records = [...state().records.values()].filter((r) => r.napkinId === napkinId);
-  await atomicWriteFile(recordsFile(napkinId), JSON.stringify(records, null, 1));
+async function persist(mulchId: string): Promise<void> {
+  const records = [...state().records.values()].filter((r) => r.mulchId === mulchId);
+  await atomicWriteFile(recordsFile(mulchId), JSON.stringify(records, null, 1));
 }
 
-async function load(napkinId: string): Promise<void> {
+async function load(mulchId: string): Promise<void> {
   const s = state();
-  if (s.loaded.has(napkinId)) return;
-  s.loaded.add(napkinId);
+  if (s.loaded.has(mulchId)) return;
+  s.loaded.add(mulchId);
   try {
-    const records = JSON.parse(await fs.readFile(recordsFile(napkinId), "utf8")) as GenerationRecord[];
+    const records = JSON.parse(await fs.readFile(recordsFile(mulchId), "utf8")) as GenerationRecord[];
     for (const record of records) if (!s.records.has(record.id)) s.records.set(record.id, record);
   } catch {
     // none yet
   }
 }
 
-export async function getGeneration(napkinId: string, id: string): Promise<GenerationRecord | undefined> {
-  await load(napkinId);
+export async function getGeneration(mulchId: string, id: string): Promise<GenerationRecord | undefined> {
+  await load(mulchId);
   const record = state().records.get(id);
-  return record?.napkinId === napkinId ? record : undefined;
+  return record?.mulchId === mulchId ? record : undefined;
 }
 
 /** The generation behind a media item. */
-export async function generationForNode(napkinId: string, nodeId: string): Promise<GenerationRecord | undefined> {
-  await load(napkinId);
-  return [...state().records.values()].find((r) => r.napkinId === napkinId && (r.nodeId === nodeId || r.extraNodeIds.includes(nodeId)));
+export async function generationForNode(mulchId: string, nodeId: string): Promise<GenerationRecord | undefined> {
+  await load(mulchId);
+  return [...state().records.values()].find((r) => r.mulchId === mulchId && (r.nodeId === nodeId || r.extraNodeIds.includes(nodeId)));
 }
 
-/** Resume polling unfinished generations of a napkin (after a restart). */
-export async function resumeGenerations(napkinId: string): Promise<void> {
-  await load(napkinId);
+/** Resume polling unfinished generations of a mulch (after a restart). */
+export async function resumeGenerations(mulchId: string): Promise<void> {
+  await load(mulchId);
   for (const record of state().records.values()) {
-    if (record.napkinId === napkinId && record.handle && (record.status === "queued" || record.status === "running")) poll(record);
+    if (record.mulchId === mulchId && record.handle && (record.status === "queued" || record.status === "running")) poll(record);
   }
 }
 
@@ -128,28 +128,28 @@ function genState(record: GenerationRecord, extra: Partial<GenerationState> = {}
   };
 }
 
-async function updateNode(record: GenerationRecord, patch: Partial<NapkinNode>): Promise<void> {
-  await applyToNapkin(record.napkinId, [{ op: "updateNode", id: record.nodeId, patch }], record.origin);
+async function updateNode(record: GenerationRecord, patch: Partial<MulchNode>): Promise<void> {
+  await applyToMulch(record.mulchId, [{ op: "updateNode", id: record.nodeId, patch }], record.origin);
 }
 
-/* ── inputs: napkin items as files ─────────────────────────────── */
+/* ── inputs: mulch items as files ─────────────────────────────── */
 
-const NAPKIN_REF = /^napkin:([a-z]+-[a-f0-9]+)$/;
+const ITEM_REF = /^item:([a-z]+-[a-f0-9]+)$/;
 
-/** Replace "napkin:<item id>" strings in the input with uploaded URLs of those items' files. */
-export async function resolveInputs(napkinId: string, value: unknown): Promise<unknown> {
+/** Replace "item:<item id>" strings in the input with uploaded URLs of those items' files. */
+export async function resolveInputs(mulchId: string, value: unknown): Promise<unknown> {
   if (typeof value === "string") {
-    const match = value.match(NAPKIN_REF);
+    const match = value.match(ITEM_REF);
     if (!match) return value;
-    const node = (await getNapkin(napkinId)).nodes[match[1]];
+    const node = (await getMulch(mulchId)).nodes[match[1]];
     if (!node?.assetId) throw new fal.FalError(`${match[1]} has no file to use as input (use image, media or document items).`);
-    const bytes = await fs.readFile(assetPath(napkinId, node.assetId));
+    const bytes = await fs.readFile(assetPath(mulchId, node.assetId));
     const mime = node.mime ?? guessMime(node.assetId);
     return fal.uploadFile(bytes, mime, node.fileName ?? node.assetId);
   }
-  if (Array.isArray(value)) return Promise.all(value.map((item) => resolveInputs(napkinId, item)));
+  if (Array.isArray(value)) return Promise.all(value.map((item) => resolveInputs(mulchId, item)));
   if (value && typeof value === "object") {
-    const entries = await Promise.all(Object.entries(value).map(async ([k, v]) => [k, await resolveInputs(napkinId, v)] as const));
+    const entries = await Promise.all(Object.entries(value).map(async ([k, v]) => [k, await resolveInputs(mulchId, v)] as const));
     return Object.fromEntries(entries);
   }
   return value;
@@ -170,7 +170,7 @@ export function guessMime(name: string): string {
 /* ── starting ──────────────────────────────────────────────────── */
 
 export interface StartOptions {
-  napkinId: string;
+  mulchId: string;
   endpoint: string;
   input: Record<string, unknown>;
   title: string;
@@ -182,11 +182,11 @@ export interface StartOptions {
 }
 
 export async function startGeneration(options: StartOptions): Promise<GenerationRecord> {
-  await load(options.napkinId);
-  const napkin = await getNapkin(options.napkinId);
+  await load(options.mulchId);
+  const mulch = await getMulch(options.mulchId);
   const record: GenerationRecord = {
     id: newClientId("g"),
-    napkinId: options.napkinId,
+    mulchId: options.mulchId,
     nodeId: newClientId("n"),
     endpoint: options.endpoint,
     title: options.title,
@@ -198,20 +198,20 @@ export async function startGeneration(options: StartOptions): Promise<Generation
     ...(options.review ? { review: options.review } : {}),
     createdAt: Date.now(),
   };
-  const anchors = (options.near ?? []).filter((id) => napkin.nodes[id]);
-  const position = placeNear(napkin, { w: NODE_WIDTH.media, h: 300 }, { anchorIds: anchors, seed: record.nodeId });
-  await applyToNapkin(
-    options.napkinId,
+  const anchors = (options.near ?? []).filter((id) => mulch.nodes[id]);
+  const position = placeNear(mulch, { w: NODE_WIDTH.media, h: 300 }, { anchorIds: anchors, seed: record.nodeId });
+  await applyToMulch(
+    options.mulchId,
     [{ op: "addNode", node: { id: record.nodeId, kind: "media", x: position.x, y: position.y, title: options.title, text: options.prompt, gen: genState(record), origin: options.origin, createdAt: Date.now() } }],
     options.origin,
   );
   state().records.set(record.id, record);
   try {
-    record.input = (await resolveInputs(options.napkinId, options.input)) as Record<string, unknown>;
+    record.input = (await resolveInputs(options.mulchId, options.input)) as Record<string, unknown>;
     record.handle = await fal.submit(options.endpoint, record.input);
     if (record.cost) await recordSpend(record.cost);
-    log.info("media", "generation submitted", { napkinId: record.napkinId, generationId: record.id, endpoint: record.endpoint, cost: record.cost });
-    await persist(options.napkinId);
+    log.info("media", "generation submitted", { mulchId: record.mulchId, generationId: record.id, endpoint: record.endpoint, cost: record.cost });
+    await persist(options.mulchId);
     poll(record);
   } catch (error) {
     await finish(record, "failed", error instanceof Error ? error.message : String(error));
@@ -219,8 +219,8 @@ export async function startGeneration(options: StartOptions): Promise<Generation
   return record;
 }
 
-export async function cancelGeneration(napkinId: string, id: string): Promise<void> {
-  const record = await getGeneration(napkinId, id);
+export async function cancelGeneration(mulchId: string, id: string): Promise<void> {
+  const record = await getGeneration(mulchId, id);
   if (!record || (record.status !== "queued" && record.status !== "running")) return;
   if (record.handle) await fal.cancel(record.handle);
   await finish(record, "cancelled");
@@ -270,7 +270,7 @@ function poll(record: GenerationRecord): void {
         await sleep(Date.now() - record.createdAt > 60_000 ? 4000 : 1500);
       }
     } catch (error) {
-      log.error("media", "poll failed", { napkinId: record.napkinId, generationId: record.id, error });
+      log.error("media", "poll failed", { mulchId: record.mulchId, generationId: record.id, error });
       await finish(record, "failed", error instanceof Error ? error.message : String(error)).catch(() => {});
     } finally {
       s.polling.delete(record.id);
@@ -311,42 +311,42 @@ async function complete(record: GenerationRecord): Promise<void> {
       const mime = !generic(file.contentType) ? file.contentType! : !generic(served) ? served! : guessMime(file.fileName ?? new URL(file.url).pathname);
       const ext = path.extname(file.fileName ?? new URL(file.url).pathname) || EXT_BY_MIME[mime] || ".bin";
       const fileName = `${record.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "media"}${ext}`;
-      saved.push({ assetId: await saveAsset(record.napkinId, bytes, fileName), mime, fileName });
+      saved.push({ assetId: await saveAsset(record.mulchId, bytes, fileName), mime, fileName });
     } catch (error) {
-      log.error("media", "download failed", { napkinId: record.napkinId, generationId: record.id, error });
+      log.error("media", "download failed", { mulchId: record.mulchId, generationId: record.id, error });
     }
   }
   if (!saved.length) {
     await finish(record, "failed", "The outputs could not be downloaded.");
     return;
   }
-  const napkin = await getNapkin(record.napkinId);
-  const ops: NapkinOp[] = [{ op: "updateNode", id: record.nodeId, patch: { assetId: saved[0].assetId, mime: saved[0].mime, fileName: saved[0].fileName } }];
+  const mulch = await getMulch(record.mulchId);
+  const ops: MulchOp[] = [{ op: "updateNode", id: record.nodeId, patch: { assetId: saved[0].assetId, mime: saved[0].mime, fileName: saved[0].fileName } }];
   const taken = [];
   for (const extra of saved.slice(1)) {
     const id = newClientId("n");
-    const position = placeNear(napkin, { w: NODE_WIDTH.media, h: 300 }, { anchorIds: [record.nodeId], seed: id, taken });
+    const position = placeNear(mulch, { w: NODE_WIDTH.media, h: 300 }, { anchorIds: [record.nodeId], seed: id, taken });
     taken.push({ ...position, w: NODE_WIDTH.media, h: 300 });
     record.extraNodeIds.push(id);
     ops.push({
       op: "addNode",
-      node: { id, kind: "media", x: position.x, y: position.y, title: record.title, text: napkin.nodes[record.nodeId]?.text ?? "", assetId: extra.assetId, mime: extra.mime, fileName: extra.fileName, gen: genState({ ...record, status: "done", finishedAt: Date.now() }), origin: record.origin, createdAt: Date.now() },
+      node: { id, kind: "media", x: position.x, y: position.y, title: record.title, text: mulch.nodes[record.nodeId]?.text ?? "", assetId: extra.assetId, mime: extra.mime, fileName: extra.fileName, gen: genState({ ...record, status: "done", finishedAt: Date.now() }), origin: record.origin, createdAt: Date.now() },
     });
   }
-  await applyToNapkin(record.napkinId, ops, record.origin);
+  await applyToMulch(record.mulchId, ops, record.origin);
   await finish(record, "done");
 }
 
 async function finish(record: GenerationRecord, status: GenerationRecord["status"], error?: string): Promise<void> {
   const wasCharged = !!record.handle && record.cost !== undefined;
-  log[status === "failed" ? "warn" : "info"]("media", `generation ${status}`, { napkinId: record.napkinId, generationId: record.id, endpoint: record.endpoint, ms: Date.now() - record.createdAt, ...(error ? { error } : {}) });
+  log[status === "failed" ? "warn" : "info"]("media", `generation ${status}`, { mulchId: record.mulchId, generationId: record.id, endpoint: record.endpoint, ms: Date.now() - record.createdAt, ...(error ? { error } : {}) });
   record.status = status;
   record.finishedAt = Date.now();
   if (error) record.error = error;
   // Failed and cancelled runs are not charged by fal; take the estimate back.
   if (wasCharged && status !== "done") await recordSpend(-(record.cost ?? 0));
   await updateNode(record, { gen: genState(record) }).catch(() => {});
-  await persist(record.napkinId).catch(() => {});
+  await persist(record.mulchId).catch(() => {});
   const s = state();
   for (const resolve of s.waiters.get(record.id) ?? []) resolve();
   s.waiters.delete(record.id);
@@ -360,12 +360,12 @@ async function finish(record: GenerationRecord, status: GenerationRecord["status
 }
 
 /** Wait until all these generations finish, or `ms` pass. */
-export async function waitFor(napkinId: string, ids: string[], ms: number, signal?: AbortSignal): Promise<GenerationRecord[]> {
-  await load(napkinId);
+export async function waitFor(mulchId: string, ids: string[], ms: number, signal?: AbortSignal): Promise<GenerationRecord[]> {
+  await load(mulchId);
   const s = state();
   const pending = ids
     .map((id) => s.records.get(id))
-    .filter((r): r is GenerationRecord => !!r && r.napkinId === napkinId && (r.status === "queued" || r.status === "running"));
+    .filter((r): r is GenerationRecord => !!r && r.mulchId === mulchId && (r.status === "queued" || r.status === "running"));
   if (pending.length) {
     await Promise.race([
       Promise.all(pending.map((record) => new Promise<void>((resolve) => s.waiters.set(record.id, [...(s.waiters.get(record.id) ?? []), resolve])))),
@@ -373,5 +373,5 @@ export async function waitFor(napkinId: string, ids: string[], ms: number, signa
       ...(signal ? [new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }))] : []),
     ]);
   }
-  return ids.map((id) => s.records.get(id)).filter((r): r is GenerationRecord => !!r && r.napkinId === napkinId);
+  return ids.map((id) => s.records.get(id)).filter((r): r is GenerationRecord => !!r && r.mulchId === mulchId);
 }

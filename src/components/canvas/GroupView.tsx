@@ -2,15 +2,15 @@
 
 import { memo, useState } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
-import { useNapkin } from "@/lib/napkin/client";
+import { useMulch } from "@/lib/mulch/client";
 import { useCanvasUi } from "./ui";
-import type { NapkinGroup } from "@/lib/napkin/types";
+import type { MulchGroup } from "@/lib/mulch/types";
 
-export type GroupFlowNode = Node<{ group: NapkinGroup }, "napkinGroup">;
+export type GroupFlowNode = Node<{ group: MulchGroup }, "mulchGroup">;
 
 function GroupViewImpl({ data, selected }: NodeProps<GroupFlowNode>) {
   const { group } = data;
-  const apply = useNapkin((s) => s.apply);
+  const apply = useMulch((s) => s.apply);
   const [editing, setEditing] = useState(false);
   const readOnly = useCanvasUi((s) => s.readOnly);
   const [title, setTitle] = useState(group.title);

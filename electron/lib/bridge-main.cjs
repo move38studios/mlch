@@ -43,7 +43,7 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, log 
         return { ok: true };
       }
       case 'open': {
-        // Mulch: open a napkin file in its default app.
+        // Mulch: open a mulch file in its default app.
         const file = target(payload);
         if (!file) return fail('Opening a file needs a full path.');
         let stat;

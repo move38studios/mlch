@@ -1,5 +1,5 @@
 /**
- * App settings, stored as .settings.json in the napkin library. Server-only.
+ * App settings, stored as .settings.json in the mulch library. Server-only.
  */
 
 import fs from "node:fs/promises";
@@ -7,9 +7,9 @@ import path from "node:path";
 import { z } from "zod";
 import type { AgentHarnessId } from "@/lib/agent/types";
 import { libraryDir } from "@/lib/desktop/server";
-import { atomicWriteFile } from "@/lib/napkin/store";
+import { atomicWriteFile } from "@/lib/mulch/store";
 
-export const ENRICHMENTS = ["search", "definitions", "examples", "related", "questions", "napkins"] as const;
+export const ENRICHMENTS = ["search", "definitions", "examples", "related", "questions", "mulches"] as const;
 export type Enrichment = (typeof ENRICHMENTS)[number];
 
 const lanes = z.object({

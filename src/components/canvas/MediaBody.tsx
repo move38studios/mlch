@@ -2,10 +2,10 @@
 
 import { createElement, useEffect, useState } from "react";
 import { Loader2, Square } from "lucide-react";
-import type { NapkinNode } from "@/lib/napkin/types";
+import type { MulchNode } from "@/lib/mulch/types";
 
 /** Image, video, audio or 3D, by type. */
-export function mediaKind(node: Pick<NapkinNode, "mime" | "fileName" | "assetId">): "image" | "video" | "audio" | "model" | "other" {
+export function mediaKind(node: Pick<MulchNode, "mime" | "fileName" | "assetId">): "image" | "video" | "audio" | "model" | "other" {
   const mime = node.mime ?? "";
   const name = (node.fileName ?? node.assetId ?? "").toLowerCase();
   if (mime.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/.test(name)) return "image";
@@ -35,9 +35,9 @@ function ModelView({ src, interactive }: { src: string; interactive: boolean }) 
   });
 }
 
-export function MediaPlayer({ node, napkinId, large = false }: { node: NapkinNode; napkinId: string; large?: boolean }) {
+export function MediaPlayer({ node, mulchId, large = false }: { node: MulchNode; mulchId: string; large?: boolean }) {
   if (!node.assetId) return null;
-  const src = `/api/napkins/${napkinId}/assets/${node.assetId}`;
+  const src = `/api/mulches/${mulchId}/assets/${node.assetId}`;
   switch (mediaKind(node)) {
     case "image":
       // eslint-disable-next-line @next/next/no-img-element
@@ -61,7 +61,7 @@ export function MediaPlayer({ node, napkinId, large = false }: { node: NapkinNod
   }
 }
 
-function GenerationStatus({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
+function GenerationStatus({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   const gen = node.gen!;
   const [now, setNow] = useState(() => Date.now());
   const active = gen.status === "queued" || gen.status === "running";
@@ -71,7 +71,7 @@ function GenerationStatus({ node, napkinId }: { node: NapkinNode; napkinId: stri
     return () => clearInterval(timer);
   }, [active]);
   const elapsed = Math.max(0, Math.round((now - gen.startedAt) / 1000));
-  const stop = () => fetch(`/api/napkins/${napkinId}/generations/${gen.id}/cancel`, { method: "POST" });
+  const stop = () => fetch(`/api/mulches/${mulchId}/generations/${gen.id}/cancel`, { method: "POST" });
   return (
     <div className={`h-[150px] flex flex-col justify-center gap-1.5 px-4 rounded-t-[inherit] ${gen.status === "failed" ? "bg-accent/5" : "bg-paper-2"}`}>
       {active ? (
@@ -99,11 +99,11 @@ function GenerationStatus({ node, napkinId }: { node: NapkinNode; napkinId: stri
   );
 }
 
-export function MediaBody({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
+export function MediaBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   const done = !!node.assetId;
   return (
     <div>
-      {done ? <MediaPlayer node={node} napkinId={napkinId} /> : node.gen ? <GenerationStatus node={node} napkinId={napkinId} /> : null}
+      {done ? <MediaPlayer node={node} mulchId={mulchId} /> : node.gen ? <GenerationStatus node={node} mulchId={mulchId} /> : null}
       <div className="px-3 py-2.5">
         {node.title && <div className="font-medium text-ink truncate">{node.title}</div>}
         {node.text && <p className="text-ink-2 mt-0.5 line-clamp-2">{node.text}</p>}

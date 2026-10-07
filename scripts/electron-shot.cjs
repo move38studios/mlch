@@ -1,4 +1,4 @@
-// Launch the desktop app (dev mode) with a throwaway profile and napkin
+// Launch the desktop app (dev mode) with a throwaway profile and mulch
 // library, open a path, and save a screenshot. For checking UI changes.
 //   node scripts/electron-shot.cjs <out.png> [path] [--library <dir>] [--wait <ms>]
 const fs = require('node:fs');
@@ -16,7 +16,7 @@ const [out = 'shot.png', route = '/'] = args;
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'mulch-shot-'));
   const app = await electron.launch({
     args: [path.resolve(__dirname, '..'), '--dev'],
-    env: { ...process.env, MULCH_ELECTRON_USER_DATA: profile, MULCH_LIBRARY: library || path.join(profile, 'napkins'), MULCH_ELECTRON_PORT: '47851' },
+    env: { ...process.env, MULCH_ELECTRON_USER_DATA: profile, MULCH_LIBRARY: library || path.join(profile, 'mulches'), MULCH_ELECTRON_PORT: '47851' },
     timeout: 180_000,
   });
   try {

@@ -1,5 +1,5 @@
 /**
- * Files the AI makes for a napkin, in its artifacts/ folder. Server-only.
+ * Files the AI makes for a mulch, in its artifacts/ folder. Server-only.
  *
  * HTML artifacts are shown inside the app, so they are served with a
  * sandboxing Content-Security-Policy: an opaque origin (no access to the
@@ -10,7 +10,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { atomicWriteFile, napkinDir } from "@/lib/napkin/store";
+import { atomicWriteFile, mulchDir } from "@/lib/mulch/store";
 
 export const ARTIFACT_EXTENSIONS = ["html", "svg", "md", "csv", "json", "txt", "pptx", "pdf", "docx", "xlsx", "png", "jpg"] as const;
 export const ARTIFACT_PATH = new RegExp(`^artifacts\\/[a-z0-9][a-z0-9._-]*\\.(${ARTIFACT_EXTENSIONS.join("|")})$`);
@@ -59,9 +59,9 @@ export function slugify(title: string): string {
   );
 }
 
-/** Saves under a free name; returns the path relative to the napkin folder. */
-export async function saveArtifact(napkinId: string, title: string, extension: string, bytes: Buffer): Promise<string> {
-  const dir = path.join(napkinDir(napkinId), "artifacts");
+/** Saves under a free name; returns the path relative to the mulch folder. */
+export async function saveArtifact(mulchId: string, title: string, extension: string, bytes: Buffer): Promise<string> {
+  const dir = path.join(mulchDir(mulchId), "artifacts");
   await fs.mkdir(dir, { recursive: true });
   const existing = new Set(await fs.readdir(dir).catch(() => [] as string[]));
   let name = `${slugify(title)}.${extension}`;
@@ -70,18 +70,18 @@ export async function saveArtifact(napkinId: string, title: string, extension: s
   return `artifacts/${name}`;
 }
 
-export function artifactFile(napkinId: string, docPath: string): string {
+export function artifactFile(mulchId: string, docPath: string): string {
   if (!ARTIFACT_PATH.test(docPath)) throw new Error("Invalid file.");
-  return path.join(napkinDir(napkinId), docPath);
+  return path.join(mulchDir(mulchId), docPath);
 }
 
 /**
  * Give a file the agent wrote in artifacts/ a safe name (lowercase, no
- * spaces) and return its napkin-relative path, or undefined if it is not an
+ * spaces) and return its mulch-relative path, or undefined if it is not an
  * artifact type or not inside artifacts/.
  */
-export async function adoptArtifact(napkinId: string, file: string): Promise<string | undefined> {
-  const dir = path.join(napkinDir(napkinId), "artifacts");
+export async function adoptArtifact(mulchId: string, file: string): Promise<string | undefined> {
+  const dir = path.join(mulchDir(mulchId), "artifacts");
   const resolved = path.resolve(dir, file);
   if (path.dirname(resolved) !== dir) return undefined;
   const ext = path.extname(resolved).slice(1).toLowerCase();

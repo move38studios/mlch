@@ -33,7 +33,7 @@ const ENRICH: Array<{ id: string; label: string }> = [
   { id: "examples", label: "Examples" },
   { id: "related", label: "Related ideas" },
   { id: "questions", label: "Questions" },
-  { id: "napkins", label: "Links to your other mulches" },
+  { id: "mulches", label: "Links to your other mulches" },
 ];
 const KEYS: Array<{ id: "groq" | "firecrawl" | "fal" | "exa"; label: string }> = [
   { id: "groq", label: "Groq API key" },

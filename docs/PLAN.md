@@ -1,8 +1,6 @@
 # Mulch V1 plan
 
-(Written when the product was called npkn; renamed to Mulch on 2026-10-07. "Napkin" below is the internal term for a canvas.)
-
-Status 2026-10-07: M0–M7 built, plus images, artifacts and the maker lane, media generation, search and research, logging. Next: George tests with real voice and real napkins.
+Status 2026-10-07: M0–M7 built, plus images, artifacts and the maker lane, media generation, search and research, logging. Next: George tests with real voice and real mulches.
 
 ## Decisions
 
@@ -25,7 +23,7 @@ Status 2026-10-07: M0–M7 built, plus images, artifacts and the maker lane, med
 - `electron/main.cjs`, `server.cjs`, `preload.cjs`, `lib/backend.cjs`, `runtime.cjs`, `env.cjs`, `files.cjs`, `credentials.cjs`, `bridge*.cjs`, `diagnostics.cjs`, `menu.cjs`, `window-state.cjs`, `recovery.cjs`. Rename, and add `media` (microphone) to the permission allowlist.
 - `server.js` (loopback-only dev server with cross-site and DNS-rebinding guard).
 - `scripts/package-electron.cjs` (keep for later signed builds; use the unsigned path now).
-- `src/lib/agent/server/*`: `claudeHarness.ts`, `codexHarness.ts`, `codexAppServer.ts`, `billing.ts`, `env.ts`, `binaries.ts`, `chatStream.ts`, `sameOrigin.ts`, `claudeSignIn.ts`, `claudeStatus.ts`, `codexStatus.ts`, `toolExecution.ts`, `asyncQueue.ts`. Replace workflow tools with napkin tools.
+- `src/lib/agent/server/*`: `claudeHarness.ts`, `codexHarness.ts`, `codexAppServer.ts`, `billing.ts`, `env.ts`, `binaries.ts`, `chatStream.ts`, `sameOrigin.ts`, `claudeSignIn.ts`, `claudeStatus.ts`, `codexStatus.ts`, `toolExecution.ts`, `asyncQueue.ts`. Replace workflow tools with mulch tools.
 - The pattern: tools edit a server-side draft, stream graph ops to the client, and each tool call becomes one undo step (`graph/applyOps.ts`, `graph/draft.ts`).
 - `src/store/undoHistory.ts` (`UndoManager`).
 - `next.config.shared.cjs` (`serverExternalPackages` for the agent SDKs).
@@ -59,7 +57,7 @@ Not taken: anything tied to Cloudflare, auth, billing, cards corpus, OpenRouter 
 Electron main ── window (renderer: Next pages, React Flow canvas, mic capture)
      │
      └─ utilityProcess: Next server (API routes)
-            ├─ napkin store (files on disk)
+            ├─ mulch store (files on disk)
             ├─ transcription (Groq)
             ├─ agent harness (claude-agent-sdk / codex app-server, user's login)
             ├─ job queue: fast lane, slow lane, commands, ingest
@@ -68,11 +66,11 @@ Electron main ── window (renderer: Next pages, React Flow canvas, mic captur
 
 ### Storage
 
-Each napkin is a plain folder, so Claude Code and other tools can read it directly and a later share or export is a copy of a slice of it.
+Each mulch is a plain folder, so Claude Code and other tools can read it directly and a later share or export is a copy of a slice of it.
 
 ```
-~/Documents/mulch/<napkin-id>/
-  napkin.json            current board: meta, nodes, edges
+~/Documents/mulch/<mulch-id>/
+  mulch.json            current board: meta, nodes, edges
   transcript.jsonl       speech segments with timestamps
   events.jsonl           append-only op log (who, when, which op)
   history/<ts>.json.gz   checkpoints (content-hash deduped)
@@ -82,7 +80,7 @@ Each napkin is a plain folder, so Claude Code and other tools can read it direct
   jobs.json              pending and running jobs (for resume)
 ```
 
-Writes go through `atomicWrite`. The list of napkins is the list of folders.
+Writes go through `atomicWrite`. The list of mulches is the list of folders.
 
 ### Board model
 
@@ -101,16 +99,16 @@ Adapted from `board-doc.ts`. Node kinds:
 
 Every node carries `origin` (`user` | `speech:<segmentId>` | `agent:<jobId>`), `userTouched` (set when the user creates, moves or edits it), and `createdAt`. Edges carry an optional label and `origin`.
 
-### Agent tools (napkin-specific)
+### Agent tools (mulch-specific)
 
-`get_napkin` (structured state with `spatialDigest`), `add_nodes` (with `near` / `group` hints, never raw coordinates in the fast lane), `connect`, `update_node`, `remove_nodes`, `group` / `arrange` (LLM grouping → deterministic geometry), `write_doc`, `read_asset`, `reply` (status line shown on canvas). `WebSearch` / `WebFetch` are enabled only for slow-lane and command jobs. For folder ingestion, read-only `Read` / `Glob` / `Grep` are scoped to the chosen folder.
+`get_mulch` (structured state with `spatialDigest`), `add_nodes` (with `near` / `group` hints, never raw coordinates in the fast lane), `connect`, `update_node`, `remove_nodes`, `group` / `arrange` (LLM grouping → deterministic geometry), `write_doc`, `read_asset`, `reply` (status line shown on canvas). `WebSearch` / `WebFetch` are enabled only for slow-lane and command jobs. For folder ingestion, read-only `Read` / `Glob` / `Grep` are scoped to the chosen folder.
 
 ### Live pipeline
 
 1. Renderer captures the mic (`MediaRecorder`), cuts chunks on silence or at about 10 s, and posts them to `/api/transcribe`.
 2. Server sends each chunk to Groq (`whisper-large-v3-turbo`), appends a segment to `transcript.jsonl`, and streams it back as a live transcript strip.
-3. **Fast lane:** one serialized job per napkin batches the new segments. The model either extracts ideas and connections (`add_nodes`, `connect`, no web tools) or recognises a command and hands it to the command lane. To avoid cold-start latency per turn, keep one long-lived Claude session per open napkin (SDK streaming input / `resume`).
-4. **Slow lane:** for each new batch of ideas, an enrichment job with web tools adds search results, definitions, examples, questions and cross-links. Limited concurrency, pausable, budgeted per napkin.
+3. **Fast lane:** one serialized job per mulch batches the new segments. The model either extracts ideas and connections (`add_nodes`, `connect`, no web tools) or recognises a command and hands it to the command lane. To avoid cold-start latency per turn, keep one long-lived Claude session per open mulch (SDK streaming input / `resume`).
+4. **Slow lane:** for each new batch of ideas, an enrichment job with web tools adds search results, definitions, examples, questions and cross-links. Limited concurrency, pausable, budgeted per mulch.
 5. **Commands** ("organize this", "clean up", "write a summary"): a separate job with full tools. Write-ups land as `writeup` nodes and files in `docs/`.
 
 Model per lane is configurable (fast: small model; slow and commands: larger).
@@ -120,7 +118,7 @@ Model per lane is configurable (fast: small model; slow and commands: larger).
 - Files dropped on the canvas: copied to `assets/`, text extracted locally (pdf via `unpdf`, docx via `mammoth`, md/txt as is, images described by the model). Firecrawl `/v2/parse` is used when a key is set.
 - URLs: `WebFetch` through the agent, or Firecrawl when a key is set. Content is validated before use.
 - After extraction, an ingest job digests the content (briefbuster `digestDoc` prompt) and places nodes linked to the source.
-- Folder: native picker → an agent job with read-only file tools explores the folder and builds a napkin. Files it references are copied into `assets/`.
+- Folder: native picker → an agent job with read-only file tools explores the folder and builds a mulch. Files it references are copied into `assets/`.
 
 ### History
 
@@ -140,10 +138,10 @@ Each milestone ends with something usable and tested (Vitest for logic; Playwrig
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | Scaffold: Next 16 + Electron shell from node-banana, renamed, mic permission, `THIRD_PARTY_NOTICES.md`, Vitest, lint, `npm run dev` / `npm run electron:dev` | App window opens on an empty home screen |
-| M1 | Napkin list + canvas + storage: create/open/rename/delete napkins, React Flow canvas with node kinds, manual add/edit/move/connect, autosave to folder, undo | A hand-made napkin survives a restart |
+| M1 | Mulch list + canvas + storage: create/open/rename/delete mulches, React Flow canvas with node kinds, manual add/edit/move/connect, autosave to folder, undo | A hand-made mulch survives a restart |
 | M2 | Agent harness: port Claude and Codex harnesses, settings screen, text box that sends input to the fast lane, graph ops streamed onto the canvas | Typing a paragraph produces idea nodes and connections live |
 | M3 | Voice: `Transcriber` interface, Groq implementation, chunking, live transcript strip | Speaking produces the same result as typing |
-| M4 | Slow lane enrichment: search, definitions, examples, questions, cross-links; pause control; per-napkin budget | Enrichment arrives after the fast lane without moving user items |
+| M4 | Slow lane enrichment: search, definitions, examples, questions, cross-links; pause control; per-mulch budget | Enrichment arrives after the fast lane without moving user items |
 | M5 | Drops and folders: files, links, folder ingestion | Dropping a PDF, a URL, or picking a folder adds linked nodes |
 | M6 | Commands and write-ups: organize, clean up, summarize; markdown side panel | "Write a summary" produces a `writeup` node and a `.md` file |
 | M7 | History: checkpoints, timeline slider, restore | Can go back to any checkpoint and restore it |
@@ -155,7 +153,7 @@ Next candidates, after testing: packaged signed app (non-technical users), opt-i
 ## Risks and open items
 
 - **Subscription limits.** Live mode uses many turns. Mitigation: batching, a small model in the fast lane, the slow lane budget, and the existing node-banana guard against overage.
-- **Turn latency.** Spawning a Claude process per turn may take seconds. Mitigation: a long-lived session per napkin. Measure in M2 before building M3.
+- **Turn latency.** Spawning a Claude process per turn may take seconds. Mitigation: a long-lived session per mulch. Measure in M2 before building M3.
 - **Command vs content.** Telling "organize this" apart from an idea that mentions organizing. Start with the fast-lane model classifying; add a held key or a spoken prefix if it misfires.
 - **Distribution terms.** Anthropic restricts third-party apps from offering Claude subscription login. Check before distributing beyond personal use.
 - **UI copy.** All on-screen text uses plain functional words; any sentence-level copy is supplied by George.

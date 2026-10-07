@@ -3,19 +3,19 @@
 import { log } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { checkSameOrigin } from "@/lib/agent/server/sameOrigin";
-import { NapkinNotFoundError } from "@/lib/napkin/store";
+import { MulchNotFoundError } from "@/lib/mulch/store";
 
 export function jsonError(status: number, error: string) {
   return NextResponse.json({ error }, { status });
 }
 
-/** Map thrown errors to responses: unknown napkin → 404, anything else → 500. */
+/** Map thrown errors to responses: unknown mulch → 404, anything else → 500. */
 export async function handle<T>(work: () => Promise<T>): Promise<NextResponse> {
   try {
     const result = await work();
     return result instanceof NextResponse ? result : NextResponse.json(result ?? { ok: true });
   } catch (error) {
-    if (error instanceof NapkinNotFoundError) return jsonError(404, error.message);
+    if (error instanceof MulchNotFoundError) return jsonError(404, error.message);
     log.error("api", "request failed", { error });
     return jsonError(500, error instanceof Error ? error.message : String(error));
   }

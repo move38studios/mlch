@@ -155,7 +155,7 @@ export async function modelSchema(endpoint: string): Promise<FalSchema> {
 
 /* ── uploads ───────────────────────────────────────────────────── */
 
-/** Upload a napkin file so a model can use it as input; returns its URL. */
+/** Upload a mulch file so a model can use it as input; returns its URL. */
 export async function uploadFile(bytes: Buffer, contentType: string, fileName: string): Promise<string> {
   const initiate = await json<{ upload_url?: string; file_url?: string }>(
     await falFetch("https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3", {

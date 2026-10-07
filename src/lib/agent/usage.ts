@@ -9,7 +9,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { libraryDir } from "@/lib/desktop/server";
-import { atomicWriteFile } from "@/lib/napkin/store";
+import { atomicWriteFile } from "@/lib/mulch/store";
 import { today } from "@/lib/media/spend";
 
 export interface UsageTotals {

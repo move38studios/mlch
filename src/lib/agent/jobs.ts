@@ -1,5 +1,5 @@
 /**
- * Agent jobs per napkin, in lanes. Server-only.
+ * Agent jobs per mulch, in lanes. Server-only.
  *
  *   input ──▶ fast lane (one at a time; segments that arrive meanwhile are batched)
  *                │ new ideas
@@ -15,24 +15,24 @@
 import { log } from "@/lib/log";
 import { getHarness } from "@/lib/agent/server/harnesses";
 import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/agent/types";
-import type { JobLane, JobStatus, TranscriptSegment } from "@/lib/napkin/events";
-import { newClientId } from "@/lib/napkin/ids";
-import { checkpoint } from "@/lib/napkin/history";
-import { applyToNapkin, emit, getNapkin, napkinDir, setJob } from "@/lib/napkin/store";
+import type { JobLane, JobStatus, TranscriptSegment } from "@/lib/mulch/events";
+import { newClientId } from "@/lib/mulch/ids";
+import { checkpoint } from "@/lib/mulch/history";
+import { applyToMulch, emit, getMulch, mulchDir, setJob } from "@/lib/mulch/store";
 import { modelFor, readSettings, type Lane } from "@/lib/settings";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { adoptArtifact } from "@/lib/artifacts/artifacts";
 import { privateDirs } from "./files";
-import { placeNear } from "@/lib/napkin/place";
-import { artifactHeight, NODE_WIDTH } from "@/lib/napkin/sizes";
+import { placeNear } from "@/lib/mulch/place";
+import { artifactHeight, NODE_WIDTH } from "@/lib/mulch/sizes";
 import { commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
 import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
 import { search } from "@/lib/search";
 import { exaAvailable } from "@/lib/search/exa";
-import { createNapkinTools, describeNapkin, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
+import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
 
 /** Sources longer than this are read in part; the rest is found by search. */
 const LONG_SOURCE = 60_000;
@@ -47,7 +47,7 @@ interface Work {
   run(job: JobStatus, signal: AbortSignal): Promise<void>;
 }
 
-interface NapkinJobs {
+interface MulchJobs {
   queues: Record<JobLane, Work[]>;
   running: Partial<Record<JobLane, { job: JobStatus; controller: AbortController }>>;
   /** Fast lane: segments not yet captured. */
@@ -58,20 +58,20 @@ interface NapkinJobs {
 }
 
 interface JobsState {
-  napkins: Map<string, NapkinJobs>;
+  mulches: Map<string, MulchJobs>;
   status?: { at: number; value: AgentHarnessStatus };
 }
 
 const globalState = globalThis as typeof globalThis & { __mulchJobs?: JobsState };
 function state(): JobsState {
-  return (globalState.__mulchJobs ??= { napkins: new Map() });
+  return (globalState.__mulchJobs ??= { mulches: new Map() });
 }
 
-function jobsFor(napkinId: string): NapkinJobs {
-  let entry = state().napkins.get(napkinId);
+function jobsFor(mulchId: string): MulchJobs {
+  let entry = state().mulches.get(mulchId);
   if (!entry) {
     entry = { queues: { fast: [], slow: [], command: [], ingest: [] }, running: {}, pendingSegments: [], pendingEnrich: [], paused: false };
-    state().napkins.set(napkinId, entry);
+    state().mulches.set(mulchId, entry);
   }
   return entry;
 }
@@ -79,7 +79,7 @@ function jobsFor(napkinId: string): NapkinJobs {
 /* ── running one agent turn ────────────────────────────────────── */
 
 interface TurnSpec {
-  napkinId: string;
+  mulchId: string;
   job: JobStatus;
   signal: AbortSignal;
   lane: Lane;
@@ -117,7 +117,7 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
   await harnessReady();
   const settings = await readSettings();
   const ctx = {
-    napkinId: spec.napkinId,
+    mulchId: spec.mulchId,
     jobId: spec.job.id,
     tools: spec.tools,
     allowUserEdits: spec.allowUserEdits,
@@ -137,7 +137,7 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     history: [],
     prompt: spec.prompt,
     systemPrompt: spec.systemPrompt,
-    tools: createNapkinTools(ctx),
+    tools: createMulchTools(ctx),
     model: modelFor(settings, spec.lane),
     webAccess: spec.webAccess,
     workspace: spec.workspace,
@@ -147,10 +147,10 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     if (event.type === "session") ctx.session.id = event.sessionId;
     if (event.type === "usage") {
       void recordUsage(settings.harness, spec.lane, event.inputTokens ?? 0, event.outputTokens ?? 0);
-      log.info("agent", "turn usage", { napkinId: spec.napkinId, jobId: spec.job.id, harness: settings.harness, lane: spec.lane, model: modelFor(settings, spec.lane), inputTokens: event.inputTokens, outputTokens: event.outputTokens });
+      log.info("agent", "turn usage", { mulchId: spec.mulchId, jobId: spec.job.id, harness: settings.harness, lane: spec.lane, model: modelFor(settings, spec.lane), inputTokens: event.inputTokens, outputTokens: event.outputTokens });
     }
     if (event.type === "error") {
-      log.warn("agent", "turn error", { napkinId: spec.napkinId, jobId: spec.job.id, harness: settings.harness, code: event.code, message: event.message });
+      log.warn("agent", "turn error", { mulchId: spec.mulchId, jobId: spec.job.id, harness: settings.harness, code: event.code, message: event.message });
       // A refused or failed turn invalidates the cached status.
       state().status = undefined;
       throw new JobError(event.message);
@@ -165,13 +165,13 @@ async function runTurn(spec: TurnSpec): Promise<string[]> {
 
 /* ── the queue ─────────────────────────────────────────────────── */
 
-async function update(napkinId: string, job: JobStatus, patch: Partial<JobStatus>): Promise<void> {
+async function update(mulchId: string, job: JobStatus, patch: Partial<JobStatus>): Promise<void> {
   Object.assign(job, patch);
-  await setJob(napkinId, { ...job });
+  await setJob(mulchId, { ...job });
 }
 
-function pump(napkinId: string, lane: JobLane): void {
-  const entry = jobsFor(napkinId);
+function pump(mulchId: string, lane: JobLane): void {
+  const entry = jobsFor(mulchId);
   if (entry.running[lane]) return;
   if (lane === "slow" && entry.paused) return;
   const work = entry.queues[lane].shift();
@@ -182,29 +182,29 @@ function pump(napkinId: string, lane: JobLane): void {
   entry.running[lane] = { job, controller };
   void (async () => {
     try {
-      await setJob(napkinId, { ...job });
-      log.info("jobs", "job started", { napkinId, jobId: job.id, lane, label: work.label });
+      await setJob(mulchId, { ...job });
+      log.info("jobs", "job started", { mulchId, jobId: job.id, lane, label: work.label });
       await work.run(job, controller.signal);
-      log.info("jobs", controller.signal.aborted ? "job cancelled" : "job finished", { napkinId, jobId: job.id, lane, ms: Date.now() - (job.startedAt ?? Date.now()) });
-      await update(napkinId, job, { state: controller.signal.aborted ? "cancelled" : "done", finishedAt: Date.now() });
+      log.info("jobs", controller.signal.aborted ? "job cancelled" : "job finished", { mulchId, jobId: job.id, lane, ms: Date.now() - (job.startedAt ?? Date.now()) });
+      await update(mulchId, job, { state: controller.signal.aborted ? "cancelled" : "done", finishedAt: Date.now() });
     } catch (error) {
       const cancelled = controller.signal.aborted && !(controller.signal.reason instanceof Error && controller.signal.reason.message === "Timed out");
       const message = error instanceof Error ? error.message : String(error);
-      await update(napkinId, job, { state: cancelled ? "cancelled" : "failed", error: cancelled ? undefined : message, finishedAt: Date.now() }).catch(() => {});
-      if (!cancelled) await emit(napkinId, { type: "notice", level: "error", message }).catch(() => {});
-      if (!cancelled) log.error("jobs", "job failed", { napkinId, jobId: job.id, lane, label: work.label, ms: Date.now() - (job.startedAt ?? Date.now()), error });
+      await update(mulchId, job, { state: cancelled ? "cancelled" : "failed", error: cancelled ? undefined : message, finishedAt: Date.now() }).catch(() => {});
+      if (!cancelled) await emit(mulchId, { type: "notice", level: "error", message }).catch(() => {});
+      if (!cancelled) log.error("jobs", "job failed", { mulchId, jobId: job.id, lane, label: work.label, ms: Date.now() - (job.startedAt ?? Date.now()), error });
     } finally {
       clearTimeout(timer);
-      await checkpoint(napkinId, "job", work.label).catch((error) => log.error("history", "checkpoint failed", { napkinId, error }));
+      await checkpoint(mulchId, "job", work.label).catch((error) => log.error("history", "checkpoint failed", { mulchId, error }));
       entry.running[lane] = undefined;
-      pump(napkinId, lane);
+      pump(mulchId, lane);
     }
   })();
 }
 
-function enqueue(napkinId: string, work: Work): void {
-  jobsFor(napkinId).queues[work.lane].push(work);
-  pump(napkinId, work.lane);
+function enqueue(mulchId: string, work: Work): void {
+  jobsFor(mulchId).queues[work.lane].push(work);
+  pump(mulchId, work.lane);
 }
 
 /* ── lanes ─────────────────────────────────────────────────────── */
@@ -214,37 +214,37 @@ function inputBlock(segments: TranscriptSegment[]): string {
 }
 
 /** New input from the person: capture it (fast lane), then enrich (slow lane). */
-export function submitInput(napkinId: string, segment: TranscriptSegment): void {
-  const entry = jobsFor(napkinId);
+export function submitInput(mulchId: string, segment: TranscriptSegment): void {
+  const entry = jobsFor(mulchId);
   entry.pendingSegments.push(segment);
   // One queued fast job drains everything pending when it starts.
   if (entry.queues.fast.length) return;
-  enqueue(napkinId, {
+  enqueue(mulchId, {
     lane: "fast",
     label: "Capturing",
     async run(job, signal) {
       const segments = entry.pendingSegments.splice(0);
       const text = inputBlock(segments);
       if (!text) return;
-      const napkin = await getNapkin(napkinId);
+      const mulch = await getMulch(mulchId);
       const added = await runTurn({
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "fast",
         systemPrompt: fastPrompt(),
-        prompt: `<napkin>\n${await napkinContext(napkinId, text, 140)}\n</napkin>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
-        tools: napkin.title === "Untitled" ? ["add_nodes", "connect", "hand_off", "set_title"] : ["add_nodes", "connect", "hand_off"],
+        prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
+        tools: mulch.title === "Untitled" ? ["add_nodes", "connect", "hand_off", "set_title"] : ["add_nodes", "connect", "hand_off"],
         origin: `speech:${job.id}`,
-        onHandOff: (instruction) => submitCommand(napkinId, instruction),
+        onHandOff: (instruction) => submitCommand(mulchId, instruction),
       });
-      if (added.length) requestEnrichment(napkinId, added);
+      if (added.length) requestEnrichment(mulchId, added);
     },
   });
 }
 
-export function requestEnrichment(napkinId: string, ids: string[]): void {
-  const entry = jobsFor(napkinId);
+export function requestEnrichment(mulchId: string, ids: string[]): void {
+  const entry = jobsFor(mulchId);
   entry.pendingEnrich.push(...ids);
   if (entry.queues.slow.length) return;
   entry.queues.slow.push({
@@ -252,69 +252,69 @@ export function requestEnrichment(napkinId: string, ids: string[]): void {
     label: "Enriching",
     async run(job, signal) {
       const ids = [...new Set(entry.pendingEnrich.splice(0))];
-      const napkin = await getNapkin(napkinId);
-      const items = ids.map((id) => napkin.nodes[id]).filter(Boolean);
+      const mulch = await getMulch(mulchId);
+      const items = ids.map((id) => mulch.nodes[id]).filter(Boolean);
       if (!items.length) return;
       const settings = await readSettings();
       if (!settings.enrich.length) return;
       const web = settings.enrich.includes("search");
       const about = items.map((n) => `${n.title ?? ""} ${n.text}`).join(" ").slice(0, 1000);
       await runTurn({
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "slow",
         systemPrompt: slowPrompt(settings.enrich, web),
-        prompt: `<napkin>\n${await napkinContext(napkinId, about, 160)}\n</napkin>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>`,
+        prompt: `<mulch>\n${await mulchContext(mulchId, about, 160)}\n</mulch>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>`,
         tools: [
           "add_nodes", "connect", "say",
-          ...(settings.enrich.includes("napkins") ? (["search_all_napkins", "bring_in"] as ToolName[]) : []),
+          ...(settings.enrich.includes("mulches") ? (["search_all_mulches", "bring_in"] as ToolName[]) : []),
           ...(web && exaAvailable() ? (["exa_search"] as ToolName[]) : []),
         ],
         webAccess: web,
       });
     },
   });
-  pump(napkinId, "slow");
+  pump(mulchId, "slow");
 }
 
 const COMMAND_TOOLS: ToolName[] = [
-  "get_napkin", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
+  "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
-  "search_napkin", "search_all_napkins", "read_source", "focus", "bring_in", "research", "read_page",
+  "search_mulch", "search_all_mulches", "read_source", "focus", "bring_in", "research", "read_page",
 ];
 
 const RESEARCH_TOOLS: ToolName[] = [
-  "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "get_napkin", "search_napkin",
+  "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "get_mulch", "search_mulch",
 ];
 
 /**
  * A research job: many searches and reading, then sources, a comparison table
- * and a write-up on the napkin. If the turn ends without the table or the
+ * and a write-up on the canvas. If the turn ends without the table or the
  * write-up, the same session is resumed once with what is missing.
  */
-export function submitResearch(napkinId: string, brief: string): void {
-  enqueue(napkinId, {
+export function submitResearch(mulchId: string, brief: string): void {
+  enqueue(mulchId, {
     lane: "command",
     label: `Researching: ${brief.length > 46 ? `${brief.slice(0, 43)}…` : brief}`,
     async run(job, signal) {
       const exa = exaAvailable();
       const spec: TurnSpec = {
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "command",
         systemPrompt: researchPrompt(exa),
-        prompt: `<napkin>\n${await napkinContext(napkinId, brief, 300)}\n</napkin>\n\n<brief>\n${brief}\n</brief>`,
+        prompt: `<mulch>\n${await mulchContext(mulchId, brief, 300)}\n</mulch>\n\n<brief>\n${brief}\n</brief>`,
         tools: exa ? [...RESEARCH_TOOLS, "exa_search"] : RESEARCH_TOOLS,
         webAccess: true,
         brief,
       };
       const first = await runTurnWithSession(spec);
       const made = async () => {
-        const napkin = await getNapkin(napkinId);
-        const mine = Object.values(napkin.nodes).filter((n) => n.origin === `agent:${job.id}`);
+        const mulch = await getMulch(mulchId);
+        const mine = Object.values(mulch.nodes).filter((n) => n.origin === `agent:${job.id}`);
         return {
           sources: mine.filter((n) => n.kind === "search").length,
           table: mine.some((n) => n.kind === "artifact"),
@@ -328,7 +328,7 @@ export function submitResearch(napkinId: string, brief: string): void {
         outcome.table ? "" : "the comparison table (write_artifact, html)",
         outcome.writeup ? "" : "the write-up (write_doc)",
       ].filter(Boolean);
-      log.info("jobs", "research incomplete, continuing", { napkinId, jobId: job.id, missing });
+      log.info("jobs", "research incomplete, continuing", { mulchId, jobId: job.id, missing });
       await runTurnWithSession({
         ...spec,
         sessionId: first.sessionId,
@@ -344,42 +344,42 @@ function withKeyTools(tools: ToolName[]): ToolName[] {
 }
 
 /**
- * The napkin as the agent sees it in a prompt: everything when it is small;
+ * The mulch as the agent sees it in a prompt: everything when it is small;
  * when it is big, the newest items plus the ones that match what this turn
  * is about (the agent can search for more).
  */
-async function napkinContext(napkinId: string, about: string, textLimit: number): Promise<string> {
-  const napkin = await getNapkin(napkinId);
-  const count = Object.keys(napkin.nodes).length;
-  if (count <= 150) return describeNapkin(napkin, { textLimit });
-  const recent = describeNapkin(napkin, { textLimit, maxNodes: 80 });
-  const hits = about.trim() ? await search(about, { napkinIds: [napkinId], limit: 25 }).catch(() => []) : [];
+async function mulchContext(mulchId: string, about: string, textLimit: number): Promise<string> {
+  const mulch = await getMulch(mulchId);
+  const count = Object.keys(mulch.nodes).length;
+  if (count <= 150) return describeMulch(mulch, { textLimit });
+  const recent = describeMulch(mulch, { textLimit, maxNodes: 80 });
+  const hits = about.trim() ? await search(about, { mulchIds: [mulchId], limit: 25 }).catch(() => []) : [];
   const relevant = hits.length
-    ? `\n\nOlder items related to this turn (from search; use search_napkin for more):\n${hits.map((h) => `${h.nodeId} [${h.kind}]${h.title ? ` "${h.title}"` : ""}${h.page ? ` p.${h.page}` : ""}: ${h.snippet}`).join("\n")}`
+    ? `\n\nOlder items related to this turn (from search; use search_mulch for more):\n${hits.map((h) => `${h.nodeId} [${h.kind}]${h.title ? ` "${h.title}"` : ""}${h.page ? ` p.${h.page}` : ""}: ${h.snippet}`).join("\n")}`
     : "";
   return recent + relevant;
 }
 
 /** A long generation finished that its turn asked to review: resume that session to check it. */
-function submitReview(napkinId: string, record: GenerationRecord): void {
+function submitReview(mulchId: string, record: GenerationRecord): void {
   const review = record.review!;
-  enqueue(napkinId, {
+  enqueue(mulchId, {
     lane: "command",
     label: `Checking ${record.title}`,
     async run(job, signal) {
-      const napkin = await getNapkin(napkinId);
+      const mulch = await getMulch(mulchId);
       const outcome =
         record.status === "done"
           ? `finished: item ${record.nodeId}${record.extraNodeIds.length ? ` (more outputs: ${record.extraNodeIds.join(", ")})` : ""}. Look at it with media_view.`
           : `${record.status}${record.error ? `: ${record.error}` : ""}.`;
       await runTurn({
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "command",
         systemPrompt: commandPrompt(),
         prompt:
-          `<napkin>\n${describeNapkin(napkin, { textLimit: 300 })}\n</napkin>\n\n` +
+          `<mulch>\n${describeMulch(mulch, { textLimit: 300 })}\n</mulch>\n\n` +
           `Generation ${record.id} "${record.title}" (${record.endpoint}) ${outcome}\n` +
           `It was for: ${review.brief}\n\n` +
           `Check it against what was asked. If it clearly misses (wrong content, artefacts, wrong length or style), generate again with a better prompt or model, ` +
@@ -391,34 +391,34 @@ function submitReview(napkinId: string, record: GenerationRecord): void {
         brief: review.brief,
         reviewRound: review.round,
         ...(review.sessionId ? { sessionId: review.sessionId } : {}),
-        onMake: (brief) => submitMake(napkinId, brief),
-        onResearch: (brief) => submitResearch(napkinId, brief),
+        onMake: (brief) => submitMake(mulchId, brief),
+        onResearch: (brief) => submitResearch(mulchId, brief),
       });
     },
   });
 }
 
 onFinished((record) => {
-  if (record.review && record.status !== "cancelled") submitReview(record.napkinId, record);
+  if (record.review && record.status !== "cancelled") submitReview(record.mulchId, record);
 });
 
-export function submitCommand(napkinId: string, instruction: string): void {
-  enqueue(napkinId, {
+export function submitCommand(mulchId: string, instruction: string): void {
+  enqueue(mulchId, {
     lane: "command",
     label: instruction.length > 60 ? `${instruction.slice(0, 57)}…` : instruction,
     async run(job, signal) {
-      await getNapkin(napkinId); // a missing napkin fails the job here
+      await getMulch(mulchId); // a missing mulch fails the job here
       await runTurn({
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "command",
         systemPrompt: commandPrompt(),
-        prompt: `<napkin>\n${await napkinContext(napkinId, instruction, 400)}\n</napkin>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
+        prompt: `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
         tools: withKeyTools(COMMAND_TOOLS),
         brief: instruction,
-        onResearch: (brief) => submitResearch(napkinId, brief),
-        onMake: (brief) => submitMake(napkinId, brief),
+        onResearch: (brief) => submitResearch(mulchId, brief),
+        onMake: (brief) => submitMake(mulchId, brief),
         webAccess: true,
         allowUserEdits: true,
         // Instructions may read the person's files ("look at my dev/briefbuster folder"), read-only.
@@ -428,28 +428,28 @@ export function submitCommand(napkinId: string, instruction: string): void {
   });
 }
 
-/** Digest a document or link already on the napkin into items around it. */
-export function submitIngest(napkinId: string, sourceId: string, label: string, content: string): void {
-  enqueue(napkinId, {
+/** Digest a document or link already on the canvas into items around it. */
+export function submitIngest(mulchId: string, sourceId: string, label: string, content: string): void {
+  enqueue(mulchId, {
     lane: "ingest",
     label,
     async run(job, signal) {
-      await getNapkin(napkinId); // a missing napkin fails the job here
+      await getMulch(mulchId); // a missing mulch fails the job here
       const added = await runTurn({
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "slow",
         systemPrompt: ingestPrompt(),
         prompt:
-          `<napkin>\n${await napkinContext(napkinId, content.slice(0, 1000), 140)}\n</napkin>\n\n` +
+          `<mulch>\n${await mulchContext(mulchId, content.slice(0, 1000), 140)}\n</mulch>\n\n` +
           (content.length > LONG_SOURCE
-            ? `This source is long (${Math.round(content.length / 1000)}k characters; the opening is below). Add at most 8 items: what it is, its main argument or structure, and the parts most relevant to this napkin. Its full text is searchable with search_napkin and read_source, so do not summarise it all.\n\n`
+            ? `This source is long (${Math.round(content.length / 1000)}k characters; the opening is below). Add at most 8 items: what it is, its main argument or structure, and the parts most relevant to this canvas. Its full text is searchable with search_mulch and read_source, so do not summarise it all.\n\n`
             : "") +
           `<source id="${sourceId}">\n${content.slice(0, LONG_SOURCE)}\n</source>`,
-        tools: ["add_nodes", "connect", "search_napkin", "read_source"],
+        tools: ["add_nodes", "connect", "search_mulch", "read_source"],
       });
-      if (added.length) requestEnrichment(napkinId, added.slice(0, 6));
+      if (added.length) requestEnrichment(mulchId, added.slice(0, 6));
     },
   });
 }
@@ -460,8 +460,8 @@ const MAKER_HOSTS = [
   "release-assets.githubusercontent.com", "cdn.jsdelivr.net", "fonts.googleapis.com", "fonts.gstatic.com",
 ];
 
-function makerWorkspace(napkinId: string): AgentWorkspace {
-  const dir = napkinDir(napkinId);
+function makerWorkspace(mulchId: string): AgentWorkspace {
+  const dir = mulchDir(mulchId);
   const cwd = path.join(dir, "work");
   const cache = path.join(cwd, ".cache");
   return {
@@ -481,14 +481,14 @@ function makerWorkspace(napkinId: string): AgentWorkspace {
   };
 }
 
-/** Files in artifacts/ changed since `since`, as napkin-relative paths (renamed safe). */
-async function newArtifacts(napkinId: string, since: number): Promise<string[]> {
-  const dir = path.join(napkinDir(napkinId), "artifacts");
+/** Files in artifacts/ changed since `since`, as mulch-relative paths (renamed safe). */
+async function newArtifacts(mulchId: string, since: number): Promise<string[]> {
+  const dir = path.join(mulchDir(mulchId), "artifacts");
   const found: string[] = [];
   for (const name of await fs.readdir(dir).catch(() => [] as string[])) {
     const stat = await fs.stat(path.join(dir, name)).catch(() => undefined);
     if (!stat?.isFile() || stat.mtimeMs < since - 1000) continue;
-    const adopted = await adoptArtifact(napkinId, name);
+    const adopted = await adoptArtifact(mulchId, name);
     if (adopted) found.push(adopted);
   }
   return found;
@@ -496,68 +496,68 @@ async function newArtifacts(napkinId: string, since: number): Promise<string[]> 
 
 /**
  * Make files with the CLI's own tools in its OS sandbox (python-pptx decks,
- * documents, charts). Whatever it saves in artifacts/ lands on the napkin.
+ * documents, charts). Whatever it saves in artifacts/ lands on the canvas.
  */
-export function submitMake(napkinId: string, brief: string): void {
-  enqueue(napkinId, {
+export function submitMake(mulchId: string, brief: string): void {
+  enqueue(mulchId, {
     lane: "command",
     label: `Making: ${brief.length > 50 ? `${brief.slice(0, 47)}…` : brief}`,
     async run(job, signal) {
       const started = Date.now();
-      const workspace = makerWorkspace(napkinId);
+      const workspace = makerWorkspace(mulchId);
       await fs.mkdir(workspace.cwd, { recursive: true });
       await fs.mkdir(workspace.writable[0], { recursive: true });
-      const napkin = await getNapkin(napkinId);
+      const mulch = await getMulch(mulchId);
       const settings = await readSettings();
       await runTurn({
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "command",
         systemPrompt: makerPrompt(settings.harness),
         prompt:
-          `<napkin>\n${describeNapkin(napkin, { textLimit: 2000 })}\n</napkin>\n\n` +
+          `<mulch>\n${describeMulch(mulch, { textLimit: 2000 })}\n</mulch>\n\n` +
           `Working folder (scratch): ${workspace.cwd}\nSave finished files in: ${workspace.writable[0]}\n` +
-          `Napkin files (images, documents) are in: ${path.join(napkinDir(napkinId), "assets")}\n\n<brief>\n${brief}\n</brief>`,
-        tools: ["get_napkin", "view_image", "present_file", "preview_artifact", "say"],
+          `Mulch files (images, documents) are in: ${path.join(mulchDir(mulchId), "assets")}\n\n<brief>\n${brief}\n</brief>`,
+        tools: ["get_mulch", "view_image", "present_file", "preview_artifact", "say"],
         workspace,
         webAccess: true,
       });
-      // Codex makes files without our tools, and Claude may forget one: put any new file on the napkin.
-      const current = await getNapkin(napkinId);
-      const onNapkin = new Set(Object.values(current.nodes).map((node) => node.docPath));
-      const fresh = (await newArtifacts(napkinId, started)).filter((docPath) => !onNapkin.has(docPath));
-      for (const docPath of fresh) await addArtifactNode(napkinId, job.id, docPath);
+      // Codex makes files without our tools, and Claude may forget one: put any new file on the canvas.
+      const current = await getMulch(mulchId);
+      const onMulch = new Set(Object.values(current.nodes).map((node) => node.docPath));
+      const fresh = (await newArtifacts(mulchId, started)).filter((docPath) => !onMulch.has(docPath));
+      for (const docPath of fresh) await addArtifactNode(mulchId, job.id, docPath);
     },
   });
 }
 
-async function addArtifactNode(napkinId: string, jobId: string, docPath: string): Promise<void> {
-  const napkin = await getNapkin(napkinId);
+async function addArtifactNode(mulchId: string, jobId: string, docPath: string): Promise<void> {
+  const mulch = await getMulch(mulchId);
   const id = newClientId("n");
   const name = path.basename(docPath);
-  const position = placeNear(napkin, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, { seed: id });
-  await applyToNapkin(
-    napkinId,
+  const position = placeNear(mulch, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, { seed: id });
+  await applyToMulch(
+    mulchId,
     [{ op: "addNode", node: { id, kind: "artifact", x: position.x, y: position.y, title: name.replace(/\.[a-z0-9]+$/, "").replace(/[-_]+/g, " "), text: "", docPath, fileName: name, origin: `agent:${jobId}`, createdAt: Date.now() } }],
     `agent:${jobId}`,
   );
 }
 
-/** Look at a dropped image: caption it and add what it brings to the napkin. */
-export function submitImage(napkinId: string, nodeId: string, label: string): void {
-  enqueue(napkinId, {
+/** Look at a dropped image: caption it and add what it brings to the canvas. */
+export function submitImage(mulchId: string, nodeId: string, label: string): void {
+  enqueue(mulchId, {
     lane: "ingest",
     label,
     async run(job, signal) {
-      const napkin = await getNapkin(napkinId);
+      const mulch = await getMulch(mulchId);
       await runTurn({
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "slow",
         systemPrompt: imagePrompt(),
-        prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 140, maxNodes: 120 })}\n</napkin>\n\nNew image: ${nodeId}`,
+        prompt: `<mulch>\n${describeMulch(mulch, { textLimit: 140, maxNodes: 120 })}\n</mulch>\n\nNew image: ${nodeId}`,
         tools: ["view_image", "caption_image", "add_nodes", "connect"],
       });
     },
@@ -565,13 +565,13 @@ export function submitImage(napkinId: string, nodeId: string, label: string): vo
 }
 
 /** Explore a folder and build items from it. */
-export function submitFolder(napkinId: string, folder: string): void {
-  enqueue(napkinId, {
+export function submitFolder(mulchId: string, folder: string): void {
+  enqueue(mulchId, {
     lane: "ingest",
     label: `Exploring ${folder.split("/").pop()}`,
     async run(job, signal) {
       await runTurn({
-        napkinId,
+        mulchId,
         job,
         signal,
         lane: "command",
@@ -584,15 +584,15 @@ export function submitFolder(napkinId: string, folder: string): void {
   });
 }
 
-export function setEnrichmentPaused(napkinId: string, paused: boolean): void {
-  const entry = jobsFor(napkinId);
+export function setEnrichmentPaused(mulchId: string, paused: boolean): void {
+  const entry = jobsFor(mulchId);
   entry.paused = paused;
   if (paused) entry.running.slow?.controller.abort();
-  else pump(napkinId, "slow");
+  else pump(mulchId, "slow");
 }
 
-export function cancelJobs(napkinId: string): void {
-  const entry = jobsFor(napkinId);
+export function cancelJobs(mulchId: string): void {
+  const entry = jobsFor(mulchId);
   entry.pendingSegments = [];
   entry.pendingEnrich = [];
   for (const lane of Object.keys(entry.queues) as JobLane[]) entry.queues[lane] = [];

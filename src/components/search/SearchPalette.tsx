@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 
 export interface SearchResult {
-  napkinId: string;
-  napkinTitle: string;
+  mulchId: string;
+  mulchTitle: string;
   nodeId: string;
   kind: string;
   title?: string;
@@ -14,8 +14,8 @@ export interface SearchResult {
   page?: number;
 }
 
-/** Results for a query, debounced. `napkinId` limits to one napkin. */
-export function useSearch(query: string, napkinId?: string) {
+/** Results for a query, debounced. `mulchId` limits to one mulch. */
+export function useSearch(query: string, mulchId?: string) {
   const [results, setResults] = useState<SearchResult[]>();
   const [loading, setLoading] = useState(false);
   useEffect(() => {
@@ -28,7 +28,7 @@ export function useSearch(query: string, napkinId?: string) {
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(q)}${napkinId ? `&napkin=${napkinId}` : ""}`);
+        const response = await fetch(`/api/search?q=${encodeURIComponent(q)}${mulchId ? `&mulch=${mulchId}` : ""}`);
         const body = (await response.json()) as { hits?: SearchResult[] };
         if (!cancelled) setResults(body.hits ?? []);
       } finally {
@@ -39,7 +39,7 @@ export function useSearch(query: string, napkinId?: string) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, napkinId]);
+  }, [query, mulchId]);
   return { results, loading };
 }
 
@@ -59,18 +59,18 @@ const KIND_LABEL: Record<string, string> = {
   note: "Note",
 };
 
-export function ResultList({ results, showNapkin, onPick }: { results: SearchResult[]; showNapkin: boolean; onPick(result: SearchResult): void }) {
+export function ResultList({ results, showMulch, onPick }: { results: SearchResult[]; showMulch: boolean; onPick(result: SearchResult): void }) {
   if (!results.length) return <p className="px-4 py-3 text-sm text-ink-3">Nothing found.</p>;
   return (
     <ul className="max-h-[60vh] overflow-auto py-1">
       {results.map((result, i) => (
-        <li key={`${result.napkinId}/${result.nodeId}/${i}`}>
+        <li key={`${result.mulchId}/${result.nodeId}/${i}`}>
           <button onClick={() => onPick(result)} className="w-full text-left px-4 py-2 hover:bg-paper-2 focus:bg-paper-2 outline-none">
             <div className="flex items-baseline gap-2 text-[11px] text-ink-3">
               <span className="uppercase tracking-wider font-medium">{KIND_LABEL[result.kind] ?? result.kind}</span>
               {result.title && <span className="truncate">{result.title}</span>}
               {result.page && <span>p.{result.page}</span>}
-              {showNapkin && <span className="ml-auto truncate">{result.napkinTitle}</span>}
+              {showMulch && <span className="ml-auto truncate">{result.mulchTitle}</span>}
             </div>
             <p className="text-sm text-ink line-clamp-2">{result.snippet}</p>
           </button>
@@ -80,14 +80,14 @@ export function ResultList({ results, showNapkin, onPick }: { results: SearchRes
   );
 }
 
-/** Cmd+K on a napkin: search this napkin or all of them. */
-export function SearchPalette({ napkinId, onFocus }: { napkinId: string; onFocus(result: SearchResult): void }) {
+/** Cmd+K on a mulch: search this mulch or all of them. */
+export function SearchPalette({ mulchId, onFocus }: { mulchId: string; onFocus(result: SearchResult): void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [all, setAll] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const { results, loading } = useSearch(open ? query : "", all ? undefined : napkinId);
+  const { results, loading } = useSearch(open ? query : "", all ? undefined : mulchId);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -104,8 +104,8 @@ export function SearchPalette({ napkinId, onFocus }: { napkinId: string; onFocus
   if (!open) return null;
   const pick = (result: SearchResult) => {
     setOpen(false);
-    if (result.napkinId === napkinId) onFocus(result);
-    else router.push(`/n/${result.napkinId}?focus=${result.nodeId}${result.page ? `&page=${result.page}` : ""}`);
+    if (result.mulchId === mulchId) onFocus(result);
+    else router.push(`/n/${result.mulchId}?focus=${result.nodeId}${result.page ? `&page=${result.page}` : ""}`);
   };
   return (
     <div className="absolute inset-0 z-40 bg-ink/10 flex justify-center pt-[12vh]" onMouseDown={() => setOpen(false)}>
@@ -136,7 +136,7 @@ export function SearchPalette({ napkinId, onFocus }: { napkinId: string; onFocus
           </button>
         </div>
         {loading && !results && <p className="px-4 py-3 text-sm text-ink-3">Searching</p>}
-        {results && <ResultList results={results} showNapkin={all} onPick={pick} />}
+        {results && <ResultList results={results} showMulch={all} onPick={pick} />}
       </div>
     </div>
   );

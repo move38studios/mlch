@@ -50,7 +50,7 @@ async function fail(error) {
 function documentsDir() { try { return app.getPath('documents'); } catch { return path.join(os.homedir(), 'Documents'); } }
 function libraryDir() {
   if (process.env.MULCH_LIBRARY) return path.resolve(process.env.MULCH_LIBRARY);
-  if (process.env.MULCH_ELECTRON_USER_DATA) return path.join(app.getPath('userData'), 'napkins');
+  if (process.env.MULCH_ELECTRON_USER_DATA) return path.join(app.getPath('userData'), 'mulches');
   return path.join(documentsDir(), 'Mulch');
 }
 function openExternal(url) { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(log); }
@@ -153,11 +153,11 @@ async function createWindow() {
 // Mulch: the agent's eyes on an HTML artifact. Loads it in a hidden window (the
 // server sends the same sandboxing CSP), captures the first slides, pressing
 // ArrowRight between them, and reports script errors.
-const ARTIFACT_URL = /^\/api\/napkins\/[a-z0-9-]+\/(artifacts\/[a-z0-9][a-z0-9._-]*\.(html|svg)|model-view\/[a-f0-9]{64}\.(glb|gltf))$/;
+const ARTIFACT_URL = /^\/api\/mulches\/[a-z0-9-]+\/(artifacts\/[a-z0-9][a-z0-9._-]*\.(html|svg)|model-view\/[a-f0-9]{64}\.(glb|gltf))$/;
 async function renderArtifact(url, steps = 1) {
   let parsed;
   try { parsed = new URL(url, origin); } catch { throw new Error('Invalid page.'); }
-  if (parsed.origin !== origin || !ARTIFACT_URL.test(parsed.pathname)) throw new Error('Only napkin artifacts and models can be rendered.');
+  if (parsed.origin !== origin || !ARTIFACT_URL.test(parsed.pathname)) throw new Error('Only mulch artifacts and models can be rendered.');
   const view = new BrowserWindow({ show: false, width: 1280, height: 720, webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false } });
   const errors = [];
   view.webContents.on('console-message', (event) => { if (event.level === 'error' || event.level === 'warning') errors.push(String(event.message).slice(0, 300)); });

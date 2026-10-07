@@ -15,7 +15,7 @@ const config = [
     rules: { "@typescript-eslint/no-explicit-any": "off" },
   },
   {
-    // Syncing local React Flow state from the napkin store, and loading on
+    // Syncing local React Flow state from the mulch store, and loading on
     // mount, set state in effects on purpose.
     rules: { "react-hooks/set-state-in-effect": "off" },
   },

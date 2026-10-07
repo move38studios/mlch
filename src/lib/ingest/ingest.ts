@@ -1,9 +1,9 @@
 /**
- * Files and links coming into a napkin. Server-only.
+ * Files and links coming into a mulch. Server-only.
  *
- * Files are stored content-addressed in the napkin's assets/ folder as
+ * Files are stored content-addressed in the mulch's assets/ folder as
  * <sha256>.<ext>, with the extracted text beside them as <sha256>.md, so a
- * napkin folder carries everything it shows. Links keep their extracted text
+ * mulch folder carries everything it shows. Links keep their extracted text
  * the same way, so they survive link rot.
  */
 
@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getCredential } from "@/lib/desktop/server";
-import { atomicWriteFile, napkinDir } from "@/lib/napkin/store";
+import { atomicWriteFile, mulchDir } from "@/lib/mulch/store";
 import { extractFromBuffer, IMAGE_EXTENSIONS } from "./extract";
 
 export const ASSET_ID = /^[a-f0-9]{64}\.[a-z0-9]{1,8}$/;
@@ -35,9 +35,9 @@ export function mimeFor(assetId: string): string {
   return MIME[path.extname(assetId).toLowerCase()] ?? "application/octet-stream";
 }
 
-export function assetPath(napkinId: string, assetId: string): string {
+export function assetPath(mulchId: string, assetId: string): string {
   if (!ASSET_ID.test(assetId)) throw new Error("Invalid asset id.");
-  return path.join(napkinDir(napkinId), "assets", assetId);
+  return path.join(mulchDir(mulchId), "assets", assetId);
 }
 
 /** The extracted-text file for an asset. */
@@ -54,10 +54,10 @@ export function isImage(fileName: string): boolean {
   return IMAGE_EXTENSIONS.has(path.extname(fileName).toLowerCase());
 }
 
-export async function saveAsset(napkinId: string, bytes: Buffer, fileName: string): Promise<string> {
+export async function saveAsset(mulchId: string, bytes: Buffer, fileName: string): Promise<string> {
   const sha = createHash("sha256").update(bytes).digest("hex");
   const assetId = `${sha}${extensionOf(fileName)}`;
-  const file = assetPath(napkinId, assetId);
+  const file = assetPath(mulchId, assetId);
   try {
     await fs.access(file);
   } catch {
@@ -66,9 +66,9 @@ export async function saveAsset(napkinId: string, bytes: Buffer, fileName: strin
   return assetId;
 }
 
-export async function saveText(napkinId: string, assetId: string, text: string): Promise<string> {
+export async function saveText(mulchId: string, assetId: string, text: string): Promise<string> {
   const id = textAssetId(assetId);
-  await atomicWriteFile(assetPath(napkinId, id), text);
+  await atomicWriteFile(assetPath(mulchId, id), text);
   return id;
 }
 
@@ -219,9 +219,9 @@ export function isHttpUrl(value: string): boolean {
   }
 }
 
-export async function readAssetText(napkinId: string, assetId: string): Promise<string | undefined> {
+export async function readAssetText(mulchId: string, assetId: string): Promise<string | undefined> {
   try {
-    return await fs.readFile(assetPath(napkinId, textAssetId(assetId)), "utf8");
+    return await fs.readFile(assetPath(mulchId, textAssetId(assetId)), "utf8");
   } catch {
     return undefined;
   }

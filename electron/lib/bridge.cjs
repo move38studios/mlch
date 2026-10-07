@@ -13,7 +13,7 @@ const PICKER_TIMEOUT_MS = 600_000;
 
 const PICKER_TITLES = { ingest: INGEST_PICKER_TITLE };
 
-// GET /api/browse-directory?purpose=ingest picks a folder to build a napkin
+// GET /api/browse-directory?purpose=ingest picks a folder to build a mulch
 // from; any other purpose keeps main's default title.
 function browseDirectoryTitle(searchParams) {
   const purpose = searchParams.get('purpose');

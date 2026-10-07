@@ -61,7 +61,7 @@ Run on 2026-10-07. Exa: 11 calls, about $0.07 in total ($0.007 per search with 1
 | Latency | Seconds; extended mode is slower | 0.3–5 s |
 | Cost | Bundled in the model or plan | ~$0.004–0.007 per call, so trivial |
 
-## Recommendation for npkn
+## Recommendation for Mulch
 
 1. **Add Exa (yes, it is worth a key).** Expose it as an extra agent tool (`exa_search`, optionally `exa_answer`), with the agent's built-in search kept as the default for general questions.
    - **Competitor or product scans:** use Exa search with `category:"company"` and a *descriptive* query ("an app that does X"). This was the biggest gain of the test.

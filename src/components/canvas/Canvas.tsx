@@ -20,34 +20,34 @@ import {
   type OnSelectionChangeParams,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { newClientId } from "@/lib/napkin/ids";
-import { useNapkin } from "@/lib/napkin/client";
-import { applyOps } from "@/lib/napkin/ops";
-import { fittedGroupBox } from "@/lib/napkin/place";
-import { NODE_WIDTH } from "@/lib/napkin/sizes";
-import type { Napkin, NapkinOp } from "@/lib/napkin/types";
-import { FloatingEdge, type NapkinFlowEdge } from "./FloatingEdge";
+import { newClientId } from "@/lib/mulch/ids";
+import { useMulch } from "@/lib/mulch/client";
+import { applyOps } from "@/lib/mulch/ops";
+import { fittedGroupBox } from "@/lib/mulch/place";
+import { NODE_WIDTH } from "@/lib/mulch/sizes";
+import type { Mulch, MulchOp } from "@/lib/mulch/types";
+import { FloatingEdge, type MulchFlowEdge } from "./FloatingEdge";
 import { GroupView, type GroupFlowNode } from "./GroupView";
-import { NodeView, type NapkinFlowNode } from "./NodeView";
+import { NodeView, type MulchFlowNode } from "./NodeView";
 import { useCanvasUi } from "./ui";
 
-type FlowNode = NapkinFlowNode | GroupFlowNode;
+type FlowNode = MulchFlowNode | GroupFlowNode;
 
-const nodeTypes = { napkin: NodeView, napkinGroup: GroupView };
+const nodeTypes = { mulch: NodeView, mulchGroup: GroupView };
 const edgeTypes = { floating: FloatingEdge };
 const GROUP_PREFIX = "group:";
 /** How long a node added by the AI keeps its entrance class. */
 const FRESH_MS = 1200;
 
-function toFlowNodes(napkin: Napkin, previous: FlowNode[], fresh: Record<string, number>): FlowNode[] {
+function toFlowNodes(mulch: Mulch, previous: FlowNode[], fresh: Record<string, number>): FlowNode[] {
   const prev = new Map(previous.map((node) => [node.id, node]));
   const now = Date.now();
-  const groups: FlowNode[] = Object.values(napkin.groups).map((group) => {
+  const groups: FlowNode[] = Object.values(mulch.groups).map((group) => {
     const id = GROUP_PREFIX + group.id;
     const old = prev.get(id);
     return {
       id,
-      type: "napkinGroup",
+      type: "mulchGroup",
       position: old?.dragging ? old.position : { x: group.x, y: group.y },
       width: group.w,
       height: group.h,
@@ -57,35 +57,35 @@ function toFlowNodes(napkin: Napkin, previous: FlowNode[], fresh: Record<string,
       data: { group },
     };
   });
-  const nodes: FlowNode[] = Object.values(napkin.nodes).map((node) => {
+  const nodes: FlowNode[] = Object.values(mulch.nodes).map((node) => {
     const old = prev.get(node.id);
     return {
       id: node.id,
-      type: "napkin",
+      type: "mulch",
       position: old?.dragging ? old.position : { x: node.x, y: node.y },
       width: node.w ?? NODE_WIDTH[node.kind],
       selected: old?.selected,
       dragging: old?.dragging,
       measured: old?.measured,
-      data: { node, napkinId: napkin.id, fresh: !!fresh[node.id] && now - fresh[node.id] < FRESH_MS },
+      data: { node, mulchId: mulch.id, fresh: !!fresh[node.id] && now - fresh[node.id] < FRESH_MS },
     };
   });
   return [...groups, ...nodes];
 }
 
 /** updateGroup ops that refit these groups (not ones the person moved) around their members. */
-function groupFits(napkin: Napkin, groupIds: Iterable<string>): NapkinOp[] {
-  const ops: NapkinOp[] = [];
+function groupFits(mulch: Mulch, groupIds: Iterable<string>): MulchOp[] {
+  const ops: MulchOp[] = [];
   for (const groupId of groupIds) {
-    if (!napkin.groups[groupId] || napkin.groups[groupId].userTouched) continue;
-    const box = fittedGroupBox(napkin, groupId);
+    if (!mulch.groups[groupId] || mulch.groups[groupId].userTouched) continue;
+    const box = fittedGroupBox(mulch, groupId);
     if (box) ops.push({ op: "updateGroup", id: groupId, patch: box });
   }
   return ops;
 }
 
-function toFlowEdges(napkin: Napkin, selected: Set<string>): NapkinFlowEdge[] {
-  return Object.values(napkin.edges).map((edge) => ({
+function toFlowEdges(mulch: Mulch, selected: Set<string>): MulchFlowEdge[] {
+  return Object.values(mulch.edges).map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
@@ -95,11 +95,11 @@ function toFlowEdges(napkin: Napkin, selected: Set<string>): NapkinFlowEdge[] {
   }));
 }
 
-function CanvasInner({ napkin }: { napkin: Napkin }) {
-  const apply = useNapkin((s) => s.apply);
-  const undo = useNapkin((s) => s.undo);
-  const redo = useNapkin((s) => s.redo);
-  const fresh = useNapkin((s) => s.fresh);
+function CanvasInner({ mulch }: { mulch: Mulch }) {
+  const apply = useMulch((s) => s.apply);
+  const undo = useMulch((s) => s.undo);
+  const redo = useMulch((s) => s.redo);
+  const fresh = useMulch((s) => s.fresh);
   const editingId = useCanvasUi((s) => s.editingId);
   const readOnly = useCanvasUi((s) => s.readOnly);
   const setEditing = useCanvasUi((s) => s.setEditing);
@@ -110,39 +110,39 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   const dragStart = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   useEffect(() => {
-    setNodes((previous) => toFlowNodes(napkin, previous, fresh));
-  }, [napkin, fresh]);
+    setNodes((previous) => toFlowNodes(mulch, previous, fresh));
+  }, [mulch, fresh]);
 
   // Clear the entrance class after it has played.
   useEffect(() => {
     const ids = Object.keys(fresh);
     if (!ids.length) return;
-    const timer = setTimeout(() => setNodes((previous) => toFlowNodes(napkin, previous, fresh)), FRESH_MS + 50);
+    const timer = setTimeout(() => setNodes((previous) => toFlowNodes(mulch, previous, fresh)), FRESH_MS + 50);
     return () => clearTimeout(timer);
-  }, [fresh, napkin]);
+  }, [fresh, mulch]);
 
-  const edges = useMemo(() => toFlowEdges(napkin, selectedEdges), [napkin, selectedEdges]);
+  const edges = useMemo(() => toFlowEdges(mulch, selectedEdges), [mulch, selectedEdges]);
 
-  // Measured sizes go back to the napkin so placement uses real boxes.
+  // Measured sizes go back to the mulch so placement uses real boxes.
   const onNodesChange = useCallback(
     (changes: NodeChange<FlowNode>[]) => {
       setNodes((current) => applyNodeChanges(changes, current));
-      const sizes: NapkinOp[] = [];
+      const sizes: MulchOp[] = [];
       const touchedGroups = new Set<string>();
       for (const change of changes) {
         if (change.type !== "dimensions" || !change.dimensions || change.resizing) continue;
         if (change.id.startsWith(GROUP_PREFIX)) continue;
-        const node = napkin.nodes[change.id];
+        const node = mulch.nodes[change.id];
         if (!node) continue;
         if (node.groupId) touchedGroups.add(node.groupId);
         const h = Math.round(change.dimensions.height);
         if (h > 0 && Math.abs((node.h ?? 0) - h) > 2) sizes.push({ op: "updateNode", id: node.id, patch: { h } });
       }
       // Groups the AI laid out follow their members' real sizes.
-      const fits = groupFits(applyOps(napkin, sizes), touchedGroups);
+      const fits = groupFits(applyOps(mulch, sizes), touchedGroups);
       if (sizes.length || fits.length) apply([...sizes, ...fits], { undoable: false });
     },
-    [apply, napkin],
+    [apply, mulch],
   );
 
   const onNodeDragStart = useCallback(
@@ -153,13 +153,13 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
         // Dragging a group drags its members.
         if (node.id.startsWith(GROUP_PREFIX)) {
           const groupId = node.id.slice(GROUP_PREFIX.length);
-          for (const member of Object.values(napkin.nodes)) {
+          for (const member of Object.values(mulch.nodes)) {
             if (member.groupId === groupId) dragStart.current.set(member.id, { x: member.x, y: member.y });
           }
         }
       }
     },
-    [napkin],
+    [mulch],
   );
 
   const onNodeDrag = useCallback((_event: unknown, _node: FlowNode, dragged: FlowNode[]) => {
@@ -174,7 +174,7 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
         const dx = group.position.x - start.x;
         const dy = group.position.y - start.y;
         for (const node of current) {
-          if (node.type === "napkin" && (node as NapkinFlowNode).data.node.groupId === groupId) offsets.set(node.id, { dx, dy });
+          if (node.type === "mulch" && (node as MulchFlowNode).data.node.groupId === groupId) offsets.set(node.id, { dx, dy });
         }
       }
       return current.map((node) => {
@@ -189,7 +189,7 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   const onNodeDragStop = useCallback(
     (_event: unknown, _node: FlowNode, dragged: FlowNode[]) => {
       const current = new Map(flow.getNodes().map((node) => [node.id, node]));
-      const ops: NapkinOp[] = [];
+      const ops: MulchOp[] = [];
       for (const [id, start] of dragStart.current) {
         const node = current.get(id);
         if (!node) continue;
@@ -198,10 +198,10 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
         if (x === Math.round(start.x) && y === Math.round(start.y)) continue;
         if (id.startsWith(GROUP_PREFIX)) ops.push({ op: "updateGroup", id: id.slice(GROUP_PREFIX.length), patch: { x, y, userTouched: true } });
         else {
-          const patch: Extract<NapkinOp, { op: "updateNode" }>["patch"] = { x, y, userTouched: true };
+          const patch: Extract<MulchOp, { op: "updateNode" }>["patch"] = { x, y, userTouched: true };
           // A node dragged on its own out of its group's box leaves the group.
-          const member = napkin.nodes[id];
-          const group = member?.groupId ? napkin.groups[member.groupId] : undefined;
+          const member = mulch.nodes[id];
+          const group = member?.groupId ? mulch.groups[member.groupId] : undefined;
           if (group && dragged.some((d) => d.id === id) && !dragged.some((d) => d.id === GROUP_PREFIX + group.id)) {
             const w = member.w ?? NODE_WIDTH[member.kind];
             const cx = x + w / 2;
@@ -213,16 +213,16 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
       }
       dragStart.current = new Map();
       // Members moved inside (or out of) an AI-laid-out group: refit it.
-      const after = applyOps(napkin, ops);
+      const after = applyOps(mulch, ops);
       const groups = new Set<string>();
       for (const op of ops) {
         if (op.op !== "updateNode") continue;
-        const before = napkin.nodes[op.id]?.groupId;
+        const before = mulch.nodes[op.id]?.groupId;
         if (before) groups.add(before);
       }
       apply([...ops, ...groupFits(after, groups)]);
     },
-    [apply, flow, napkin],
+    [apply, flow, mulch],
   );
 
   const onConnect = useCallback(
@@ -260,9 +260,9 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
 
   const onDelete = useCallback(
     ({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) => {
-      const ops: NapkinOp[] = [
-        ...edges.map((edge): NapkinOp => ({ op: "removeEdge", id: edge.id })),
-        ...nodes.map((node): NapkinOp =>
+      const ops: MulchOp[] = [
+        ...edges.map((edge): MulchOp => ({ op: "removeEdge", id: edge.id })),
+        ...nodes.map((node): MulchOp =>
           node.id.startsWith(GROUP_PREFIX) ? { op: "removeGroup", id: node.id.slice(GROUP_PREFIX.length) } : { op: "removeNode", id: node.id },
         ),
       ];
@@ -296,27 +296,27 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   }, [apply, draft]);
 
   // Files, links and text dropped or pasted onto the canvas.
-  const napkinId = napkin.id;
+  const mulchId = mulch.id;
   const ingest = useCallback(
     async (kind: "files" | "links" | "paste", at: { x: number; y: number }, payload: File | string) => {
       try {
         const response =
           kind === "files"
-            ? await fetch(`/api/napkins/${napkinId}/files?name=${encodeURIComponent((payload as File).name)}&x=${Math.round(at.x)}&y=${Math.round(at.y)}`, {
+            ? await fetch(`/api/mulches/${mulchId}/files?name=${encodeURIComponent((payload as File).name)}&x=${Math.round(at.x)}&y=${Math.round(at.y)}`, {
                 method: "POST",
                 body: payload as File,
               })
-            : await fetch(`/api/napkins/${napkinId}/${kind}`, {
+            : await fetch(`/api/mulches/${mulchId}/${kind}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ...(kind === "links" ? { url: payload } : { text: payload }), x: at.x, y: at.y }),
               });
         if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error || `Failed (${response.status})`);
       } catch (error) {
-        useNapkin.setState({ notice: { level: "error", message: (error as Error).message, at: Date.now() } });
+        useMulch.setState({ notice: { level: "error", message: (error as Error).message, at: Date.now() } });
       }
     },
-    [napkinId],
+    [mulchId],
   );
 
   const onDrop = useCallback(
@@ -362,16 +362,16 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   }, [flow, ingest, readOnly]);
 
   // Show what the agent or a search result points at.
-  const focus = useNapkin((s) => s.focus);
+  const focus = useMulch((s) => s.focus);
   const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!focus) return;
-    const ids = focus.ids.filter((id) => napkin.nodes[id]);
+    const ids = focus.ids.filter((id) => mulch.nodes[id]);
     if (!ids.length) return;
     void flow.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.35, maxZoom: 1.1, duration: 600 });
     setNodes((current) => current.map((node) => ({ ...node, selected: ids.includes(node.id) })));
     setHighlighted(new Set(ids));
-    const one = ids.length === 1 ? napkin.nodes[ids[0]] : undefined;
+    const one = ids.length === 1 ? mulch.nodes[ids[0]] : undefined;
     if (one && (focus.page || focus.quote || ["doc", "link", "writeup"].includes(one.kind))) {
       useCanvasUi.getState().setHighlight({ quote: focus.quote, page: focus.page });
       useCanvasUi.getState().setOpen(one.id);
@@ -398,7 +398,7 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   }, [undo, redo, readOnly]);
 
   const shownNodes = useMemo(
-    () => (highlighted.size ? nodes.map((node) => (highlighted.has(node.id) ? { ...node, className: "napkin-focused" } : node)) : nodes),
+    () => (highlighted.size ? nodes.map((node) => (highlighted.has(node.id) ? { ...node, className: "mulch-focused" } : node)) : nodes),
     [nodes, highlighted],
   );
 
@@ -463,10 +463,10 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   );
 }
 
-export function Canvas({ napkin }: { napkin: Napkin }) {
+export function Canvas({ mulch }: { mulch: Mulch }) {
   return (
     <ReactFlowProvider>
-      <CanvasInner napkin={napkin} />
+      <CanvasInner mulch={mulch} />
     </ReactFlowProvider>
   );
 }

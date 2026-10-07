@@ -3,7 +3,7 @@
 import { memo } from "react";
 import { BaseEdge, EdgeLabelRenderer, useInternalNode, type Edge, type EdgeProps, type InternalNode } from "@xyflow/react";
 
-export type NapkinFlowEdge = Edge<{ label?: string; ai: boolean }, "floating">;
+export type MulchFlowEdge = Edge<{ label?: string; ai: boolean }, "floating">;
 
 /** Where the line from a node's centre towards `toward` leaves the node's box. */
 function borderPoint(node: InternalNode, toward: { x: number; y: number }) {
@@ -25,7 +25,7 @@ function centreOf(node: InternalNode) {
   };
 }
 
-function FloatingEdgeImpl({ id, source, target, data, selected, markerEnd }: EdgeProps<NapkinFlowEdge>) {
+function FloatingEdgeImpl({ id, source, target, data, selected, markerEnd }: EdgeProps<MulchFlowEdge>) {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
   if (!sourceNode || !targetNode) return null;

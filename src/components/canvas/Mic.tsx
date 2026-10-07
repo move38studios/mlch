@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Mic as MicIcon, Square } from "lucide-react";
 import { create } from "zustand";
 import { desktop } from "@/lib/desktop/client";
-import { useNapkin } from "@/lib/napkin/client";
+import { useMulch } from "@/lib/mulch/client";
 import { Recorder } from "@/lib/voice/recorder";
 
 interface VoiceState {
@@ -18,11 +18,11 @@ interface VoiceState {
 export const useVoice = create<VoiceState>(() => ({ recording: false, level: 0, speaking: false, pending: 0 }));
 
 function notify(message: string) {
-  useNapkin.setState({ notice: { level: "error", message, at: Date.now() } });
+  useMulch.setState({ notice: { level: "error", message, at: Date.now() } });
 }
 
 /** Mic toggle. Chunks are uploaded in order, one at a time. */
-export function MicButton({ napkinId }: { napkinId: string }) {
+export function MicButton({ mulchId }: { mulchId: string }) {
   const recorder = useRef<Recorder | undefined>(undefined);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const recording = useVoice((s) => s.recording);
@@ -35,7 +35,7 @@ export function MicButton({ napkinId }: { napkinId: string }) {
     useVoice.setState((s) => ({ pending: s.pending + 1 }));
     queue.current = queue.current.then(async () => {
       try {
-        const response = await fetch(`/api/napkins/${napkinId}/transcribe?at=${startedAt}`, { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
+        const response = await fetch(`/api/mulches/${mulchId}/transcribe?at=${startedAt}`, { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
         if (!response.ok) {
           const body = (await response.json().catch(() => ({}))) as { error?: string };
           notify(body.error || `Transcription failed (${response.status})`);
@@ -97,7 +97,7 @@ export function MicButton({ napkinId }: { napkinId: string }) {
 
 /** The last few things said, above the input bar, while speaking. */
 export function TranscriptStrip() {
-  const transcript = useNapkin((s) => s.transcript);
+  const transcript = useMulch((s) => s.transcript);
   const recording = useVoice((s) => s.recording);
   const speaking = useVoice((s) => s.speaking);
   const pending = useVoice((s) => s.pending);

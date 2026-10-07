@@ -6,11 +6,11 @@ import { Plus, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { ResultList, useSearch } from "@/components/search/SearchPalette";
 import { formatDateTime } from "@/lib/format";
-import type { NapkinSummary } from "@/lib/napkin/types";
+import type { MulchSummary } from "@/lib/mulch/types";
 
 export function Home() {
   const router = useRouter();
-  const [napkins, setNapkins] = useState<NapkinSummary[] | undefined>();
+  const [mulches, setMulches] = useState<MulchSummary[] | undefined>();
   const [error, setError] = useState<string>();
   const [confirming, setConfirming] = useState<string>();
   const [creating, setCreating] = useState(false);
@@ -19,10 +19,10 @@ export function Home() {
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/napkins");
-      const body = (await response.json()) as { napkins?: NapkinSummary[]; error?: string };
+      const response = await fetch("/api/mulches");
+      const body = (await response.json()) as { mulches?: MulchSummary[]; error?: string };
       if (!response.ok) throw new Error(body.error);
-      setNapkins(body.napkins ?? []);
+      setMulches(body.mulches ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -35,10 +35,10 @@ export function Home() {
   async function create() {
     setCreating(true);
     try {
-      const response = await fetch("/api/napkins", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      const body = (await response.json()) as { napkin?: { id: string }; error?: string };
-      if (!response.ok || !body.napkin) throw new Error(body.error);
-      router.push(`/n/${body.napkin.id}`);
+      const response = await fetch("/api/mulches", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const body = (await response.json()) as { mulch?: { id: string }; error?: string };
+      if (!response.ok || !body.mulch) throw new Error(body.error);
+      router.push(`/n/${body.mulch.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setCreating(false);
@@ -47,7 +47,7 @@ export function Home() {
 
   async function remove(id: string) {
     setConfirming(undefined);
-    await fetch(`/api/napkins/${id}`, { method: "DELETE" });
+    await fetch(`/api/mulches/${id}`, { method: "DELETE" });
     await load();
   }
 
@@ -80,27 +80,27 @@ export function Home() {
         />
         {results && (
           <div className="mb-8 rounded-lg border border-line bg-white overflow-hidden">
-            <ResultList results={results} showNapkin onPick={(hit) => router.push(`/n/${hit.napkinId}?focus=${hit.nodeId}${hit.page ? `&page=${hit.page}` : ""}`)} />
+            <ResultList results={results} showMulch onPick={(hit) => router.push(`/n/${hit.mulchId}?focus=${hit.nodeId}${hit.page ? `&page=${hit.page}` : ""}`)} />
           </div>
         )}
         {error && <p className="text-sm text-accent mb-4">{error}</p>}
-        {napkins && napkins.length === 0 && <p className="text-sm text-ink-3">Nothing yet.</p>}
+        {mulches && mulches.length === 0 && <p className="text-sm text-ink-3">Nothing yet.</p>}
         <ul className="divide-y divide-line border-y border-line">
-          {napkins?.map((napkin) => (
-            <li key={napkin.id} className="group flex items-center">
-              <Link href={`/n/${napkin.id}`} className="flex-1 min-w-0 flex items-baseline gap-4 py-3 px-1 hover:bg-paper-2/60">
-                <span className="truncate font-medium">{napkin.title}</span>
-                <span className="text-xs text-ink-3 shrink-0">{napkin.nodeCount} items</span>
+          {mulches?.map((mulch) => (
+            <li key={mulch.id} className="group flex items-center">
+              <Link href={`/n/${mulch.id}`} className="flex-1 min-w-0 flex items-baseline gap-4 py-3 px-1 hover:bg-paper-2/60">
+                <span className="truncate font-medium">{mulch.title}</span>
+                <span className="text-xs text-ink-3 shrink-0">{mulch.nodeCount} items</span>
                 <span className="flex-1" />
-                <span className="text-xs text-ink-3 shrink-0 tabular-nums">{formatDateTime(napkin.updatedAt)}</span>
+                <span className="text-xs text-ink-3 shrink-0 tabular-nums">{formatDateTime(mulch.updatedAt)}</span>
               </Link>
-              {confirming === napkin.id ? (
-                <button onClick={() => remove(napkin.id)} className="ml-2 text-xs px-2 py-1 rounded bg-accent text-white">
+              {confirming === mulch.id ? (
+                <button onClick={() => remove(mulch.id)} className="ml-2 text-xs px-2 py-1 rounded bg-accent text-white">
                   Delete
                 </button>
               ) : (
                 <button
-                  onClick={() => setConfirming(napkin.id)}
+                  onClick={() => setConfirming(mulch.id)}
                   className="ml-2 p-1.5 rounded text-ink-3 opacity-0 group-hover:opacity-100 hover:text-accent"
                   aria-label="Delete"
                   title="Delete"

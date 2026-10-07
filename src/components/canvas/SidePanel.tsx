@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink, FolderOpen, X } from "lucide-react";
 import { desktop } from "@/lib/desktop/client";
-import { useNapkin } from "@/lib/napkin/client";
+import { useMulch } from "@/lib/mulch/client";
 import { KIND_STYLES } from "./kinds";
 import { MediaPlayer } from "./MediaBody";
 import { useCanvasUi } from "./ui";
@@ -14,16 +14,16 @@ import { useCanvasUi } from "./ui";
 export function SidePanel() {
   const openId = useCanvasUi((s) => s.openId);
   const setOpen = useCanvasUi((s) => s.setOpen);
-  const napkinId = useNapkin((s) => s.id);
-  const node = useNapkin((s) => (openId ? s.napkin?.nodes[openId] : undefined));
+  const mulchId = useMulch((s) => s.id);
+  const node = useMulch((s) => (openId ? s.mulch?.nodes[openId] : undefined));
   const [full, setFull] = useState<{ assetId: string; text: string }>();
   const textAsset = node?.assetId && (node.kind === "doc" || node.kind === "link") ? `${node.assetId.split(".")[0]}.md` : undefined;
 
   // Documents and links show their whole extracted text, which lives beside the file.
   useEffect(() => {
-    if (!textAsset || !napkinId) return;
+    if (!textAsset || !mulchId) return;
     let cancelled = false;
-    fetch(`/api/napkins/${napkinId}/assets/${textAsset}`)
+    fetch(`/api/mulches/${mulchId}/assets/${textAsset}`)
       .then((response) => (response.ok ? response.text() : undefined))
       .then((text) => {
         if (!cancelled && text) setFull({ assetId: textAsset, text });
@@ -32,7 +32,7 @@ export function SidePanel() {
     return () => {
       cancelled = true;
     };
-  }, [napkinId, textAsset]);
+  }, [mulchId, textAsset]);
 
   const highlight = useCanvasUi((s) => s.highlight);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -62,7 +62,7 @@ export function SidePanel() {
   const body = full && full.assetId === textAsset ? full.text : node.text;
   const revealable = desktop() && ((node.assetId && node.kind !== "link") || node.docPath);
   const reveal = () =>
-    fetch(`/api/napkins/${napkinId}/reveal`, {
+    fetch(`/api/mulches/${mulchId}/reveal`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(node.docPath ? { docPath: node.docPath } : { assetId: node.assetId }),
@@ -89,9 +89,9 @@ export function SidePanel() {
         </button>
       </div>
       <div ref={contentRef} className="flex-1 overflow-auto px-6 py-5">
-        {node.kind === "media" && napkinId && (
+        {node.kind === "media" && mulchId && (
           <div className="-mx-6 -mt-5 mb-4 bg-paper-2">
-            <MediaPlayer node={node} napkinId={napkinId} large />
+            <MediaPlayer node={node} mulchId={mulchId} large />
           </div>
         )}
         {node.title && <h2 className="text-lg font-semibold mb-3">{node.title}</h2>}
@@ -102,7 +102,7 @@ export function SidePanel() {
             {node.gen.error && ` · ${node.gen.error}`}
           </p>
         )}
-        <div className="napkin-md napkin-md-full text-[14px] leading-relaxed">
+        <div className="mulch-md mulch-md-full text-[14px] leading-relaxed">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
         </div>
       </div>

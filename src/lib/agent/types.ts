@@ -3,11 +3,11 @@
  *
  * Adapted from node-banana's agent (MIT, © William Falloon). Each turn runs on
  * the user's own Claude Code or Codex login through the official CLI, never on
- * API credits. The CLI calls our tools; the tools edit the napkin on the
+ * API credits. The CLI calls our tools; the tools edit the mulch on the
  * server, which logs and broadcasts the resulting ops to open windows.
  */
 
-import type { NapkinOp } from "@/lib/napkin/types";
+import type { MulchOp } from "@/lib/mulch/types";
 
 // ---------------------------------------------------------------------------
 // Harnesses
@@ -210,8 +210,8 @@ export interface AgentToolResult {
   text: string;
   /** One short line for the chat UI, e.g. "Added 4 nodes and 3 connections". */
   summary: string;
-  /** Napkin changes the tool made, in order. Empty for read-only tools and failures. */
-  ops: NapkinOp[];
+  /** Mulch changes the tool made, in order. Empty for read-only tools and failures. */
+  ops: MulchOp[];
   /** Images returned to the model with the text (base64, no data: prefix). */
   images?: Array<{ data: string; mimeType: string }>;
 }

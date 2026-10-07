@@ -42,10 +42,10 @@ body {
 
 /* ── canvas ─────────────────────────────────────────────────────── */
 
-.react-flow__node-napkin {
+.react-flow__node-mulch {
   cursor: grab;
 }
-.napkin-node {
+.mulch-node {
   transition: box-shadow 120ms ease;
 }
 @keyframes node-enter {
@@ -61,7 +61,7 @@ body {
 .node-enter {
   animation: node-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.napkin-ai::before {
+.mulch-ai::before {
   content: "";
   position: absolute;
   left: -1px;
@@ -74,7 +74,7 @@ body {
 }
 
 /* Connection handle: a dot on the right, shown on hover. */
-.react-flow__handle.napkin-handle {
+.react-flow__handle.mulch-handle {
   width: 10px;
   height: 10px;
   right: -5px;
@@ -83,19 +83,19 @@ body {
   opacity: 0;
   transition: opacity 120ms;
 }
-.napkin-node:hover .react-flow__handle.napkin-handle {
+.mulch-node:hover .react-flow__handle.mulch-handle {
   opacity: 1;
 }
 /* The whole node accepts a connection; the target handle stays invisible. */
-.react-flow__handle.napkin-handle-target {
+.react-flow__handle.mulch-handle-target {
   opacity: 0;
   pointer-events: none;
 }
-.napkin-resize.react-flow__resize-control.line.right {
+.mulch-resize.react-flow__resize-control.line.right {
   border-right-width: 3px;
   border-color: transparent;
 }
-.napkin-resize.react-flow__resize-control.line.right:hover {
+.mulch-resize.react-flow__resize-control.line.right:hover {
   border-color: rgba(210, 73, 31, 0.4);
 }
 
@@ -111,67 +111,67 @@ body {
 }
 
 /* Markdown inside cards and the side panel. */
-.napkin-md > * + * {
+.mulch-md > * + * {
   margin-top: 0.45em;
 }
-.napkin-md ul {
+.mulch-md ul {
   list-style: disc;
   padding-left: 1.2em;
 }
-.napkin-md ol {
+.mulch-md ol {
   list-style: decimal;
   padding-left: 1.2em;
 }
-.napkin-md a {
+.mulch-md a {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.napkin-md h1,
-.napkin-md h2,
-.napkin-md h3 {
+.mulch-md h1,
+.mulch-md h2,
+.mulch-md h3 {
   font-weight: 600;
 }
-.napkin-md code {
+.mulch-md code {
   font-size: 0.92em;
   background: var(--paper-2);
   padding: 0 0.25em;
   border-radius: 3px;
 }
-.napkin-md-full h1 {
+.mulch-md-full h1 {
   font-size: 1.35em;
   margin-top: 1em;
 }
-.napkin-md-full h2 {
+.mulch-md-full h2 {
   font-size: 1.15em;
   margin-top: 1em;
 }
-.napkin-md-full h3 {
+.mulch-md-full h3 {
   margin-top: 0.8em;
 }
-.napkin-md-full > * + * {
+.mulch-md-full > * + * {
   margin-top: 0.7em;
 }
-.napkin-md-full blockquote {
+.mulch-md-full blockquote {
   border-left: 3px solid var(--line);
   padding-left: 0.8em;
   color: var(--ink-2);
 }
-.napkin-md-full table {
+.mulch-md-full table {
   border-collapse: collapse;
 }
-.napkin-md-full td,
-.napkin-md-full th {
+.mulch-md-full td,
+.mulch-md-full th {
   border: 1px solid var(--line);
   padding: 0.25em 0.5em;
 }
 
 /* Items the agent or a search points at. */
-@keyframes napkin-focus {
+@keyframes mulch-focus {
   0%, 100% { box-shadow: 0 0 0 0 rgba(210, 73, 31, 0); }
   30% { box-shadow: 0 0 0 6px rgba(210, 73, 31, 0.35); }
 }
-.napkin-focused .napkin-node {
-  animation: napkin-focus 1.2s ease-in-out 2;
+.mulch-focused .mulch-node {
+  animation: mulch-focus 1.2s ease-in-out 2;
 }
 ::highlight(mulch-find) {
   background-color: rgba(248, 229, 140, 0.9);

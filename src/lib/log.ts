@@ -1,7 +1,7 @@
 /**
  * Structured logging for the Mulch server. Server-only.
  *
- *   log.info("jobs", "job finished", { napkinId, jobId, ms: 5200 })
+ *   log.info("jobs", "job finished", { mulchId, jobId, ms: 5200 })
  *
  * One JSON object per line in <logs>/mulch.jsonl (the app's logs folder, see
  * electron/main.cjs; ~/Library/Logs/mulch in browser development), rotated at

@@ -12,7 +12,7 @@ type PptxSlide = ReturnType<PptxGenJSType["addSlide"]>;
 
 export const slideSchema = z.object({
   layout: z.enum(["title", "section", "bullets", "two-column", "quote", "statement", "image"]).describe(
-    "title: deck opener. section: divider. bullets: heading + points. two-column: heading + left/right lists. quote: a quote with attribution. statement: one big sentence. image: heading + a napkin image.",
+    "title: deck opener. section: divider. bullets: heading + points. two-column: heading + left/right lists. quote: a quote with attribution. statement: one big sentence. image: heading + a canvas image.",
   ),
   title: z.string().max(200).optional(),
   subtitle: z.string().max(300).optional(),
@@ -23,7 +23,7 @@ export const slideSchema = z.object({
   rightTitle: z.string().max(80).optional(),
   quote: z.string().max(600).optional(),
   attribution: z.string().max(200).optional(),
-  imageId: z.string().optional().describe("Id of an image item on the napkin (image layout)."),
+  imageId: z.string().optional().describe("Id of an image item on the canvas (image layout)."),
   notes: z.string().max(3000).optional().describe("Speaker notes."),
 });
 

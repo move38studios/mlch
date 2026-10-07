@@ -43,7 +43,7 @@ export async function desktopRequest(type: "reveal" | "open" | "choose-directory
   return bridge.request(type, payload);
 }
 
-/** Where napkin folders live. */
+/** Where mulch folders live. */
 export function libraryDir(): string {
   return process.env.MULCH_LIBRARY ? path.resolve(process.env.MULCH_LIBRARY) : path.join(os.homedir(), "Documents", "Mulch");
 }

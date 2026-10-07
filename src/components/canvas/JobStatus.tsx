@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, Pause, Play, Square } from "lucide-react";
-import { useNapkin } from "@/lib/napkin/client";
-import type { JobStatus as Job } from "@/lib/napkin/events";
+import { useMulch } from "@/lib/mulch/client";
+import type { JobStatus as Job } from "@/lib/mulch/events";
 
 const LANE_LABEL: Record<Job["lane"], string> = { fast: "Capture", slow: "Enrich", command: "Instruction", ingest: "Reading" };
 
 /** Running agent work, the agent's last status line, and pause / stop. */
-export function JobStatus({ napkinId }: { napkinId: string }) {
-  const jobs = useNapkin((s) => s.jobs);
-  const paused = useNapkin((s) => s.paused);
-  const say = useNapkin((s) => s.say);
+export function JobStatus({ mulchId }: { mulchId: string }) {
+  const jobs = useMulch((s) => s.jobs);
+  const paused = useMulch((s) => s.paused);
+  const say = useMulch((s) => s.say);
   const [showSay, setShowSay] = useState(false);
   const running = Object.values(jobs).filter((job) => job.state === "running" || job.state === "queued");
 
@@ -23,7 +23,7 @@ export function JobStatus({ napkinId }: { napkinId: string }) {
   }, [say]);
 
   const post = (path: string, body?: unknown) =>
-    fetch(`/api/napkins/${napkinId}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+    fetch(`/api/mulches/${mulchId}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
 
   return (
     <div className="flex items-center gap-2 text-xs text-ink-2">

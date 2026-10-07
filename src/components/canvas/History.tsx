@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
-import type { Napkin } from "@/lib/napkin/types";
+import type { Mulch } from "@/lib/mulch/types";
 
 interface Checkpoint {
   at: number;
@@ -16,23 +16,23 @@ const KIND_LABEL: Record<Checkpoint["kind"], string> = { edit: "Edits", job: "AI
 
 /**
  * The timeline: a slider over checkpoints. Moving it shows that moment
- * (read-only) through `onPreview`; Restore makes it the current napkin.
+ * (read-only) through `onPreview`; Restore makes it the current mulch.
  */
-export function HistoryBar({ napkinId, onPreview, onClose }: { napkinId: string; onPreview(napkin?: Napkin): void; onClose(): void }) {
+export function HistoryBar({ mulchId, onPreview, onClose }: { mulchId: string; onPreview(mulch?: Mulch): void; onClose(): void }) {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>();
   const [index, setIndex] = useState(0);
   const [restoring, setRestoring] = useState(false);
-  const cache = useMemo(() => new Map<number, Napkin>(), []);
+  const cache = useMemo(() => new Map<number, Mulch>(), []);
 
   useEffect(() => {
-    void fetch(`/api/napkins/${napkinId}/history`)
+    void fetch(`/api/mulches/${mulchId}/history`)
       .then((r) => r.json())
       .then((body: { checkpoints?: Checkpoint[] }) => {
         const list = body.checkpoints ?? [];
         setCheckpoints(list);
         setIndex(list.length);
       });
-  }, [napkinId]);
+  }, [mulchId]);
 
   // index === checkpoints.length means "now".
   const selected = checkpoints && index < checkpoints.length ? checkpoints[index] : undefined;
@@ -48,22 +48,22 @@ export function HistoryBar({ napkinId, onPreview, onClose }: { napkinId: string;
       return;
     }
     let cancelled = false;
-    void fetch(`/api/napkins/${napkinId}/history/${selected.at}`)
+    void fetch(`/api/mulches/${mulchId}/history/${selected.at}`)
       .then((r) => r.json())
-      .then((body: { napkin?: Napkin }) => {
-        if (!body.napkin) return;
-        cache.set(selected.at, body.napkin);
-        if (!cancelled) onPreview(body.napkin);
+      .then((body: { mulch?: Mulch }) => {
+        if (!body.mulch) return;
+        cache.set(selected.at, body.mulch);
+        if (!cancelled) onPreview(body.mulch);
       });
     return () => {
       cancelled = true;
     };
-  }, [selected, napkinId, cache, onPreview]);
+  }, [selected, mulchId, cache, onPreview]);
 
   async function restore() {
     if (!selected) return;
     setRestoring(true);
-    await fetch(`/api/napkins/${napkinId}/history/${selected.at}`, { method: "POST" });
+    await fetch(`/api/mulches/${mulchId}/history/${selected.at}`, { method: "POST" });
     setRestoring(false);
     onClose();
   }

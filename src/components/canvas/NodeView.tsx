@@ -5,17 +5,17 @@ import { Handle, NodeResizeControl, Position, ResizeControlVariant, type NodePro
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink, FileText, Maximize2 } from "lucide-react";
-import { useNapkin } from "@/lib/napkin/client";
-import { jitter } from "@/lib/napkin/place";
-import type { NapkinNode } from "@/lib/napkin/types";
+import { useMulch } from "@/lib/mulch/client";
+import { jitter } from "@/lib/mulch/place";
+import type { MulchNode } from "@/lib/mulch/types";
 import { KIND_STYLES } from "./kinds";
 import { MediaBody } from "./MediaBody";
 import { useCanvasUi } from "./ui";
 
-export type NapkinFlowNode = Node<{ node: NapkinNode; napkinId: string; fresh: boolean }, "napkin">;
+export type MulchFlowNode = Node<{ node: MulchNode; mulchId: string; fresh: boolean }, "mulch">;
 
 /** Added by the AI rather than said, typed or dropped by the user, and not since edited. */
-function isAiMade(node: NapkinNode): boolean {
+function isAiMade(node: MulchNode): boolean {
   return node.origin.startsWith("agent:") && !node.userTouched;
 }
 
@@ -27,8 +27,8 @@ function hostOf(url: string): string {
   }
 }
 
-function Editor({ node, onDone }: { node: NapkinNode; onDone: () => void }) {
-  const apply = useNapkin((s) => s.apply);
+function Editor({ node, onDone }: { node: MulchNode; onDone: () => void }) {
+  const apply = useMulch((s) => s.apply);
   const [text, setText] = useState(node.text);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -61,15 +61,15 @@ function Editor({ node, onDone }: { node: NapkinNode; onDone: () => void }) {
   );
 }
 
-export async function openFile(napkinId: string, docPath: string, action: "open" | "reveal") {
-  await fetch(`/api/napkins/${napkinId}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docPath }) });
+export async function openFile(mulchId: string, docPath: string, action: "open" | "reveal") {
+  await fetch(`/api/mulches/${mulchId}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docPath }) });
 }
 
-function ArtifactBody({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
+function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   const setViewer = useCanvasUi((s) => s.setViewer);
   const ext = node.docPath?.split(".").pop() ?? "";
   const viewable = ext === "html" || ext === "svg";
-  const src = node.docPath ? `/api/napkins/${napkinId}/${node.docPath}` : undefined;
+  const src = node.docPath ? `/api/mulches/${mulchId}/${node.docPath}` : undefined;
   const label = ext === "pptx" ? "PowerPoint" : ext.toUpperCase();
   return (
     <div>
@@ -100,11 +100,11 @@ function ArtifactBody({ node, napkinId }: { node: NapkinNode; napkinId: string }
                 Open
               </button>
             ) : (
-              <button onClick={() => openFile(napkinId, node.docPath!, "open")} className="px-2 py-1 rounded bg-ink text-paper text-xs">
+              <button onClick={() => openFile(mulchId, node.docPath!, "open")} className="px-2 py-1 rounded bg-ink text-paper text-xs">
                 Open
               </button>
             )}
-            <button onClick={() => openFile(napkinId, node.docPath!, "reveal")} className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2">
+            <button onClick={() => openFile(mulchId, node.docPath!, "reveal")} className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2">
               Show in Finder
             </button>
           </div>
@@ -114,15 +114,15 @@ function ArtifactBody({ node, napkinId }: { node: NapkinNode; napkinId: string }
   );
 }
 
-function Body({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
+function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   const style = KIND_STYLES[node.kind];
-  if (node.kind === "artifact") return <ArtifactBody node={node} napkinId={napkinId} />;
-  if (node.kind === "media") return <MediaBody node={node} napkinId={napkinId} />;
+  if (node.kind === "artifact") return <ArtifactBody node={node} mulchId={mulchId} />;
+  if (node.kind === "media") return <MediaBody node={node} mulchId={mulchId} />;
   if (node.kind === "image" && node.assetId) {
     return (
       <div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/api/napkins/${napkinId}/assets/${node.assetId}`} alt={node.text || node.fileName || ""} className="block w-full rounded-t-[inherit]" draggable={false} />
+        <img src={`/api/mulches/${mulchId}/assets/${node.assetId}`} alt={node.text || node.fileName || ""} className="block w-full rounded-t-[inherit]" draggable={false} />
         {(node.title || node.fileName || node.text) && (
           <div className="px-3 py-2">
             <div className="text-ink-2 font-medium truncate">{node.title || node.fileName}</div>
@@ -147,9 +147,9 @@ function Body({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
         </div>
       )}
       {node.title && <div className="font-semibold mb-1 leading-snug">{node.title}</div>}
-      <div className="napkin-text overflow-hidden" style={{ maxHeight: `${style.clamp * 1.45}em` }}>
+      <div className="mulch-text overflow-hidden" style={{ maxHeight: `${style.clamp * 1.45}em` }}>
         {style.markdown ? (
-          <div className="napkin-md">
+          <div className="mulch-md">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{node.text}</ReactMarkdown>
           </div>
         ) : (
@@ -160,33 +160,33 @@ function Body({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
   );
 }
 
-function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
-  const { node, napkinId, fresh } = data;
+function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
+  const { node, mulchId, fresh } = data;
   const style = KIND_STYLES[node.kind];
   const editing = useCanvasUi((s) => s.editingId === node.id);
   const readOnly = useCanvasUi((s) => s.readOnly);
   const setEditing = useCanvasUi((s) => s.setEditing);
   const setOpen = useCanvasUi((s) => s.setOpen);
-  const apply = useNapkin((s) => s.apply);
+  const apply = useMulch((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
   const long = node.text.length > 400 || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || (node.kind === "link" && !!node.assetId);
 
   return (
     <div
-      className={`napkin-node group relative rounded-[6px] text-ink ${style.card} ${selected ? "ring-2 ring-accent/70" : ""} ${fresh ? "node-enter" : ""} ${isAiMade(node) ? "napkin-ai" : ""}`}
+      className={`mulch-node group relative rounded-[6px] text-ink ${style.card} ${selected ? "ring-2 ring-accent/70" : ""} ${fresh ? "node-enter" : ""} ${isAiMade(node) ? "mulch-ai" : ""}`}
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
       }}
     >
-      <Handle type="target" position={Position.Left} className="napkin-handle-target" isConnectableStart={false} />
+      <Handle type="target" position={Position.Left} className="mulch-handle-target" isConnectableStart={false} />
       {editing ? (
         <div className="px-3.5 py-3">
           <Editor node={node} onDone={() => setEditing(undefined)} />
         </div>
       ) : (
-        <Body node={node} napkinId={napkinId} />
+        <Body node={node} mulchId={mulchId} />
       )}
       {long && !editing && (
         <button
@@ -198,7 +198,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
           <Maximize2 size={12} />
         </button>
       )}
-      <Handle type="source" position={Position.Right} className="napkin-handle" />
+      <Handle type="source" position={Position.Right} className="mulch-handle" />
       {selected && !editing && !readOnly && (
         <NodeResizeControl
           position="right"
@@ -206,7 +206,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
           resizeDirection="horizontal"
           minWidth={140}
           maxWidth={900}
-          className="napkin-resize"
+          className="mulch-resize"
           onResizeEnd={(_event, params) =>
             apply([{ op: "updateNode", id: node.id, patch: { w: Math.round(params.width), x: Math.round(params.x), userTouched: true } }])
           }

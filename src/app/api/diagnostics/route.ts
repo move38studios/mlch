@@ -8,7 +8,7 @@ import { usageToday } from "@/lib/agent/usage";
 import { desktopRequest, getCredential, libraryDir } from "@/lib/desktop/server";
 import { log, logFile, logsDir, redact } from "@/lib/log";
 import { spentToday } from "@/lib/media/spend";
-import { listNapkins } from "@/lib/napkin/store";
+import { listMulches } from "@/lib/mulch/store";
 import { readSettings } from "@/lib/settings";
 import packageJson from "../../../../package.json";
 
@@ -55,13 +55,13 @@ export async function POST() {
           : `${s.label} ${s.version ?? "?"}: installed=${s.installed} signedIn=${s.signedIn} billing=${s.billing} plan=${s.account?.plan ?? "?"}${s.problem ? ` problem="${s.problem}"` : ""}`;
       }),
     );
-    const napkins = await listNapkins();
+    const mulches = await listMulches();
     const sections: Array<[string, string]> = [
       ["App", `mulch ${packageJson.version} · Electron ${process.versions.electron ?? "-"} · Node ${process.versions.node} · macOS ${os.release()} ${os.arch()} · ${new Date().toISOString()}`],
       ["AI", harnesses.join("\n")],
       ["Settings", JSON.stringify({ ...settings }, null, 2)],
       ["Keys set", ["groq", "firecrawl", "fal", "exa"].map((k) => `${k}=${getCredential(k as "groq") ? "yes" : "no"}`).join(" ")],
-      ["Library", `${libraryDir()} · ${napkins.length} mulches`],
+      ["Library", `${libraryDir()} · ${mulches.length} mulches`],
       ["Today", `generation spend $${(await spentToday()).toFixed(2)} · usage ${JSON.stringify(await usageToday())}`],
       ["Crash reports (7 days)", await crashReports()],
       ["Log (mulch.jsonl, last 400 lines)", await tail(logFile(), 400)],

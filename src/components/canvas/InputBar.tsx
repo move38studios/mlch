@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ArrowUp } from "lucide-react";
-import { useNapkin } from "@/lib/napkin/client";
+import { useMulch } from "@/lib/mulch/client";
 import { MicButton, TranscriptStrip } from "./Mic";
 
 async function post(path: string, body: unknown): Promise<void> {
@@ -14,10 +14,10 @@ async function post(path: string, body: unknown): Promise<void> {
 }
 
 /**
- * Typing into the napkin. "Thought" goes through the fast lane like speech;
+ * Typing into the mulch. "Thought" goes through the fast lane like speech;
  * "Instruction" goes straight to the command lane.
  */
-export function InputBar({ napkinId, children }: { napkinId: string; children?: React.ReactNode }) {
+export function InputBar({ mulchId, children }: { mulchId: string; children?: React.ReactNode }) {
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"thought" | "instruction">("thought");
   const [sending, setSending] = useState(false);
@@ -27,11 +27,11 @@ export function InputBar({ napkinId, children }: { napkinId: string; children?: 
     if (!value || sending) return;
     setSending(true);
     try {
-      if (mode === "instruction") await post(`/api/napkins/${napkinId}/command`, { instruction: value });
-      else await post(`/api/napkins/${napkinId}/input`, { text: value });
+      if (mode === "instruction") await post(`/api/mulches/${mulchId}/command`, { instruction: value });
+      else await post(`/api/mulches/${mulchId}/input`, { text: value });
       setText("");
     } catch (error) {
-      useNapkin.setState({ notice: { level: "error", message: (error as Error).message, at: Date.now() } });
+      useMulch.setState({ notice: { level: "error", message: (error as Error).message, at: Date.now() } });
     } finally {
       setSending(false);
     }
@@ -41,7 +41,7 @@ export function InputBar({ napkinId, children }: { napkinId: string; children?: 
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 w-[min(680px,calc(100%-380px))] min-w-[360px]">
       <TranscriptStrip />
       <div className="flex items-end gap-2 rounded-xl border border-line bg-white/95 backdrop-blur shadow-lg px-2 py-2">
-        <MicButton napkinId={napkinId} />
+        <MicButton mulchId={mulchId} />
         {children}
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex gap-1 px-1 pb-1 text-[11px]">

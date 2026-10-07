@@ -1,4 +1,4 @@
-import type { NodeKind } from "@/lib/napkin/types";
+import type { NodeKind } from "@/lib/mulch/types";
 
 export interface KindStyle {
   /** Small label shown on the card; absent for kinds that speak for themselves. */

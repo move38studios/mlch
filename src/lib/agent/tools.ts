@@ -1,7 +1,7 @@
 /**
- * The napkin tools the agent calls. Server-only.
+ * The mulch tools the agent calls. Server-only.
  *
- * Every call that changes the napkin is applied straight to the live napkin
+ * Every call that changes the canvas is applied straight to the live mulch
  * as one batch (one undo step in the window), with origin `agent:<jobId>`.
  * The model never gives coordinates: it names what a new item belongs near,
  * and place.ts finds the space. It cannot move, rewrite or remove anything
@@ -11,11 +11,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { newClientId } from "@/lib/napkin/ids";
-import { arrangeGroups, boundsOf, placeNear } from "@/lib/napkin/place";
-import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/napkin/sizes";
-import { applyToNapkin, atomicWriteFile, emit, getNapkin, listNapkins, napkinDir } from "@/lib/napkin/store";
-import { NODE_KINDS, type Napkin, type NapkinNode, type NapkinOp, type NodeKind } from "@/lib/napkin/types";
+import { newClientId } from "@/lib/mulch/ids";
+import { arrangeGroups, boundsOf, placeNear } from "@/lib/mulch/place";
+import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/mulch/sizes";
+import { applyToMulch, atomicWriteFile, emit, getMulch, listMulches, mulchDir } from "@/lib/mulch/store";
+import { NODE_KINDS, type Mulch, type MulchNode, type MulchOp, type NodeKind } from "@/lib/mulch/types";
 import { assetPath, isHttpUrl, isImage, readLink } from "@/lib/ingest/ingest";
 import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
 import { desktopRequest } from "@/lib/desktop/server";
@@ -30,7 +30,7 @@ import { hiddenEntry, imageForModel, resolveReadable } from "./files";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime } from "./types";
 
 export type ToolName =
-  | "get_napkin"
+  | "get_mulch"
   | "add_nodes"
   | "connect"
   | "update_node"
@@ -55,8 +55,8 @@ export type ToolName =
   | "media_generate"
   | "media_wait"
   | "media_view"
-  | "search_napkin"
-  | "search_all_napkins"
+  | "search_mulch"
+  | "search_all_mulches"
   | "read_source"
   | "focus"
   | "bring_in"
@@ -65,7 +65,7 @@ export type ToolName =
   | "read_page";
 
 export interface ToolContext {
-  napkinId: string;
+  mulchId: string;
   jobId: string;
   tools: ToolName[];
   /** An explicit command may change what the user made. */
@@ -90,12 +90,12 @@ export interface ToolContext {
   origin?: string;
 }
 
-/* ── describing the napkin to the model ────────────────────────── */
+/* ── describing the canvas to the model ────────────────────────── */
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max).trimEnd()}…` : text);
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
-function nodeLine(node: NapkinNode, textLimit: number): string {
+function nodeLine(node: MulchNode, textLimit: number): string {
   const r = rectOf(node);
   const flags = [
     node.userTouched || node.origin === "user" ? "user" : node.origin.startsWith("speech:") ? "said" : undefined,
@@ -106,24 +106,24 @@ function nodeLine(node: NapkinNode, textLimit: number): string {
   return `${head}: ${body}`;
 }
 
-/** Compact text form of the napkin for prompts and get_napkin. */
-export function describeNapkin(napkin: Napkin, options: { textLimit?: number; maxNodes?: number } = {}): string {
+/** Compact text form of the canvas for prompts and get_mulch. */
+export function describeMulch(mulch: Mulch, options: { textLimit?: number; maxNodes?: number } = {}): string {
   const textLimit = options.textLimit ?? 220;
-  const nodes = Object.values(napkin.nodes).sort((a, b) => a.createdAt - b.createdAt);
+  const nodes = Object.values(mulch.nodes).sort((a, b) => a.createdAt - b.createdAt);
   const shown = options.maxNodes && nodes.length > options.maxNodes ? nodes.slice(-options.maxNodes) : nodes;
-  const lines = [`Napkin "${napkin.title}" — ${nodes.length} items, ${Object.keys(napkin.edges).length} connections.`];
-  if (shown.length < nodes.length) lines.push(`(Showing the newest ${shown.length}; call get_napkin for all.)`);
+  const lines = [`Mulch "${mulch.title}" — ${nodes.length} items, ${Object.keys(mulch.edges).length} connections.`];
+  if (shown.length < nodes.length) lines.push(`(Showing the newest ${shown.length}; call get_mulch for all.)`);
   const bounds = boundsOf(nodes.map(rectOf));
   if (bounds) lines.push(`Bounds: ${Math.round(bounds.x)},${Math.round(bounds.y)} to ${Math.round(bounds.x + bounds.w)},${Math.round(bounds.y + bounds.h)}`);
   if (!nodes.length) lines.push("(empty)");
   lines.push("", "Items:");
   for (const node of shown) lines.push(nodeLine(node, textLimit));
-  const edges = Object.values(napkin.edges);
+  const edges = Object.values(mulch.edges);
   if (edges.length) {
     lines.push("", "Connections:");
     for (const edge of edges) lines.push(`${edge.source} -> ${edge.target}${edge.label ? ` (${edge.label})` : ""}`);
   }
-  const groups = Object.values(napkin.groups);
+  const groups = Object.values(mulch.groups);
   if (groups.length) {
     lines.push("", "Groups:");
     for (const group of groups) {
@@ -155,10 +155,10 @@ const edgeShape = z.object({
 });
 
 const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
-  get_napkin: {
-    name: "get_napkin",
-    title: "Read napkin",
-    description: "The whole napkin: every item with id, kind, position, size, who made it, and text; connections; groups.",
+  get_mulch: {
+    name: "get_mulch",
+    title: "Read mulch",
+    description: "The whole mulch: every item with id, kind, position, size, who made it, and text; connections; groups.",
     inputShape: {},
     readOnly: true,
   },
@@ -166,7 +166,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     name: "add_nodes",
     title: "Add items",
     description:
-      "Add items to the napkin and optionally connect them, in one call. Never give coordinates: name what each item belongs `near` " +
+      "Add items to the canvas and optionally connect them, in one call. Never give coordinates: name what each item belongs `near` " +
       "(existing ids or refs from this call) and it is placed in free space there. Items without `near` go beside the most recent items.",
     inputShape: {
       nodes: z.array(newNodeShape).min(1).max(20),
@@ -216,7 +216,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   write_doc: {
     name: "write_doc",
     title: "Write document",
-    description: "Write a markdown document (summary, write-up, outline) and put it on the napkin as a write-up card, saved as a file in the napkin's docs folder.",
+    description: "Write a markdown document (summary, write-up, outline) and put it on the canvas as a write-up card, saved as a file in the canvas's docs folder.",
     inputShape: {
       title: z.string().max(120),
       markdown: z.string().max(100000),
@@ -227,7 +227,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   say: {
     name: "say",
     title: "Status",
-    description: "Show the user one short status line (under 15 words). Not for content; content goes on the napkin.",
+    description: "Show the user one short status line (under 15 words). Not for content; content goes on the canvas.",
     inputShape: { text: z.string().max(200) },
     readOnly: true,
   },
@@ -242,8 +242,8 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   },
   set_title: {
     name: "set_title",
-    title: "Name napkin",
-    description: "Name the napkin: 2-5 plain words for what it is about.",
+    title: "Name mulch",
+    description: "Name the canvas: 2-5 plain words for what it is about.",
     inputShape: { title: z.string().min(1).max(60) },
     readOnly: false,
   },
@@ -251,7 +251,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     name: "write_artifact",
     title: "Make file",
     description:
-      "Save a file you wrote (an HTML page or slide deck, SVG, markdown, CSV, JSON, text) in the napkin's artifacts folder and put a card for it on the napkin. " +
+      "Save a file you wrote (an HTML page or slide deck, SVG, markdown, CSV, JSON, text) in the canvas's artifacts folder and put a card for it on the canvas. " +
       "HTML opens full-window inside Mulch and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
       "images only as data: URIs. It cannot fetch anything at runtime and cannot open other pages.",
     inputShape: {
@@ -276,7 +276,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   make_pptx: {
     name: "make_pptx",
     title: "Make PowerPoint",
-    description: "Build a PowerPoint (.pptx) deck from a list of slides, save it in the napkin's artifacts folder and put a card for it on the napkin. Layout and styling are done for you.",
+    description: "Build a PowerPoint (.pptx) deck from a list of slides, save it in the canvas's artifacts folder and put a card for it on the canvas. Layout and styling are done for you.",
     inputShape: {
       title: z.string().max(120),
       slides: z.array(slideSchema).min(1).max(60),
@@ -286,12 +286,12 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     },
     readOnly: false,
   },
-  search_napkin: {
-    name: "search_napkin",
-    title: "Search napkin",
+  search_mulch: {
+    name: "search_mulch",
+    title: "Search mulch",
     description:
-      "Search everything on this napkin by meaning and by words: items, the full text of documents and links (with page numbers), write-ups, artifacts, captions, media prompts, and what the person said. " +
-      "Use it for \"find that image where…\", \"the quote about…\", and before answering about anything not in the napkin summary. Returns passages with item ids.",
+      "Search everything on this canvas by meaning and by words: items, the full text of documents and links (with page numbers), write-ups, artifacts, captions, media prompts, and what the person said. " +
+      "Use it for \"find that image where…\", \"the quote about…\", and before answering about anything not in the canvas summary. Returns passages with item ids.",
     inputShape: {
       query: z.string().min(1).max(500),
       kinds: z.array(z.string()).max(10).optional().describe("Only these item kinds (idea, doc, link, image, media, writeup, artifact, transcript, …)."),
@@ -299,10 +299,10 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     },
     readOnly: true,
   },
-  search_all_napkins: {
-    name: "search_all_napkins",
-    title: "Search all napkins",
-    description: "Search every napkin of the person's (same as search_napkin, across all). Results name the napkin. Bring an item over with bring_in.",
+  search_all_mulches: {
+    name: "search_all_mulches",
+    title: "Search all canvases",
+    description: "Search every canvas of the person's (same as search_mulch, across all). Results name the canvas. Bring an item over with bring_in.",
     inputShape: { query: z.string().min(1).max(500), limit: z.number().int().min(1).max(30).optional() },
     readOnly: true,
   },
@@ -343,7 +343,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     title: "Research",
     description:
       "Start a research job for anything that needs many searches and reading: competitor or market scans, prior art, literature reviews, landscape overviews. " +
-      "It runs for several minutes and puts sources, a comparison table and a write-up on the napkin. Give a complete brief: the question, what to compare, what matters.",
+      "It runs for several minutes and puts sources, a comparison table and a write-up on the canvas. Give a complete brief: the question, what to compare, what matters.",
     inputShape: { brief: z.string().min(10).max(8000) },
     readOnly: true,
   },
@@ -357,8 +357,8 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   bring_in: {
     name: "bring_in",
     title: "Bring in",
-    description: "Copy an item from another napkin into this one (with its file), noting where it came from.",
-    inputShape: { napkin_id: z.string(), item_id: z.string(), near: z.array(z.string()).max(6).optional() },
+    description: "Copy an item from another mulch into this one (with its file), noting where it came from.",
+    inputShape: { mulch_id: z.string(), item_id: z.string(), near: z.array(z.string()).max(6).optional() },
     readOnly: false,
   },
   media_search: {
@@ -381,8 +381,8 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     name: "media_generate",
     title: "Generate",
     description:
-      "Start a generation on fal. Puts a card on the napkin right away that shows progress; returns the generation id without waiting. " +
-      "To use napkin items as inputs (an image to animate or edit, audio, video), put \"napkin:<item id>\" where the schema wants a URL. " +
+      "Start a generation on fal. Puts a card on the canvas right away that shows progress; returns the generation id without waiting. " +
+      "To use mulch items as inputs (an image to animate or edit, audio, video), put \"item:<item id>\" where the schema wants a URL. " +
       "Costs money: give estimated_cost_usd from the price. Use media_wait to see results within this turn, or review: true for long jobs (video, 3D) to be called back when done.",
     inputShape: {
       endpoint: z.string().max(200),
@@ -407,7 +407,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   media_view: {
     name: "media_view",
     title: "Look at media",
-    description: "See a media or image item on the napkin (images as images, video as frames, speech transcribed, 3D from four sides).",
+    description: "See a media or image item on the canvas (images as images, video as frames, speech transcribed, 3D from four sides).",
     inputShape: { id: z.string() },
     readOnly: true,
   },
@@ -416,15 +416,15 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     title: "Make with tools",
     description:
       "Start a making job: Claude Code or Codex with its own shell and file tools in a sandbox (Python, python-pptx, node, and so on), for files that need real tools: " +
-      "PowerPoint decks, Word or PDF documents, spreadsheets, charts. It saves results in the napkin's artifacts folder and they appear on the napkin. " +
-      "Give a complete brief: what to make, for whom, the format, and which napkin items it should draw on.",
+      "PowerPoint decks, Word or PDF documents, spreadsheets, charts. It saves results in the canvas's artifacts folder and they appear on the canvas. " +
+      "Give a complete brief: what to make, for whom, the format, and which mulch items it should draw on.",
     inputShape: { brief: z.string().min(10).max(8000) },
     readOnly: true,
   },
   present_file: {
     name: "present_file",
-    title: "Put file on napkin",
-    description: "Put a card on the napkin for a file you saved in the artifacts folder (path relative to it, e.g. deck.pptx).",
+    title: "Put file on mulch",
+    description: "Put a card on the canvas for a file you saved in the artifacts folder (path relative to it, e.g. deck.pptx).",
     inputShape: {
       path: z.string().max(300),
       title: z.string().max(120),
@@ -459,7 +459,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   view_image: {
     name: "view_image",
     title: "Look at image",
-    description: "See an image item on the napkin (by id).",
+    description: "See an image item on the canvas (by id).",
     inputShape: { id: z.string() },
     readOnly: true,
   },
@@ -474,11 +474,11 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
 
 /* ── execution ─────────────────────────────────────────────────── */
 
-const ok = (text: string, summary: string, ops: NapkinOp[] = []): AgentToolResult => ({ ok: true, text, summary, ops });
+const ok = (text: string, summary: string, ops: MulchOp[] = []): AgentToolResult => ({ ok: true, text, summary, ops });
 const fail = (text: string): AgentToolResult => ({ ok: false, text, summary: "Failed", ops: [] });
 
 /** Made, said or touched by the person. */
-function isUserOwned(node: NapkinNode): boolean {
+function isUserOwned(node: MulchNode): boolean {
   return node.origin === "user" || node.origin.startsWith("speech:") || !!node.userTouched;
 }
 
@@ -502,22 +502,22 @@ function hitLine(hit: SearchHit): string {
 const READ_LIMIT = 30_000;
 const SKIP_DIRS = new Set(["node_modules", ".git", ".next", "dist", "build", "__pycache__", ".venv"]);
 
-export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
+export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
   const origin = ctx.origin ?? `agent:${ctx.jobId}`;
   const definitions = ctx.tools.map((name) => DEFINITIONS[name]);
   const schemas = new Map(definitions.map((definition) => [definition.name, z.object(definition.inputShape)]));
 
-  async function commit(ops: NapkinOp[]) {
-    if (ops.length) await applyToNapkin(ctx.napkinId, ops, origin);
+  async function commit(ops: MulchOp[]) {
+    if (ops.length) await applyToMulch(ctx.mulchId, ops, origin);
   }
 
-  function resolver(napkin: Napkin, refs: Map<string, string>) {
-    return (key: string) => refs.get(key) ?? (napkin.nodes[key] ? key : undefined);
+  function resolver(mulch: Mulch, refs: Map<string, string>) {
+    return (key: string) => refs.get(key) ?? (mulch.nodes[key] ? key : undefined);
   }
 
-  function edgeOps(napkin: Napkin, edges: z.infer<typeof edgeShape>[], resolve: (key: string) => string | undefined, problems: string[]) {
-    const ops: NapkinOp[] = [];
-    const existing = new Set(Object.values(napkin.edges).map((edge) => `${edge.source}>${edge.target}`));
+  function edgeOps(mulch: Mulch, edges: z.infer<typeof edgeShape>[], resolve: (key: string) => string | undefined, problems: string[]) {
+    const ops: MulchOp[] = [];
+    const existing = new Set(Object.values(mulch.edges).map((edge) => `${edge.source}>${edge.target}`));
     for (const edge of edges) {
       const source = resolve(edge.from);
       const target = resolve(edge.to);
@@ -533,10 +533,10 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
   }
 
   async function addArtifactCard(title: string, description: string, docPath: string, near?: string[]): Promise<string> {
-    const napkin = await getNapkin(ctx.napkinId);
+    const mulch = await getMulch(ctx.mulchId);
     const id = newClientId("n");
-    const anchors = (near ?? []).filter((key) => napkin.nodes[key]);
-    const position = placeNear(napkin, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, { anchorIds: anchors, seed: id });
+    const anchors = (near ?? []).filter((key) => mulch.nodes[key]);
+    const position = placeNear(mulch, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, { anchorIds: anchors, seed: id });
     await commit([
       { op: "addNode", node: { id, kind: "artifact", x: position.x, y: position.y, title, text: description, docPath, fileName: path.basename(docPath), origin, createdAt: Date.now() } },
     ]);
@@ -545,39 +545,39 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
   }
 
   async function viewNode(id: string): Promise<{ text: string; images: NonNullable<AgentToolResult["images"]> }> {
-    const node = (await getNapkin(ctx.napkinId)).nodes[id];
+    const node = (await getMulch(ctx.mulchId)).nodes[id];
     if (!node?.assetId) return { text: `${id} has no media file${node?.gen ? ` (generation ${node.gen.status})` : ""}.`, images: [] };
-    return viewForModel(assetPath(ctx.napkinId, node.assetId), node.mime, `/api/napkins/${ctx.napkinId}/model-view/${node.assetId}`);
+    return viewForModel(assetPath(ctx.mulchId, node.assetId), node.mime, `/api/mulches/${ctx.mulchId}/model-view/${node.assetId}`);
   }
 
   const handlers: Record<ToolName, (args: Record<string, unknown>) => Promise<AgentToolResult>> = {
-    async get_napkin() {
-      return ok(describeNapkin(await getNapkin(ctx.napkinId)), "Read the napkin");
+    async get_mulch() {
+      return ok(describeMulch(await getMulch(ctx.mulchId)), "Read the canvas");
     },
 
     async add_nodes(args) {
       const input = args as { nodes: z.infer<typeof newNodeShape>[]; edges?: z.infer<typeof edgeShape>[] };
-      let napkin = await getNapkin(ctx.napkinId);
+      let mulch = await getMulch(ctx.mulchId);
       const refs = new Map<string, string>();
       const problems: string[] = [];
-      const ops: NapkinOp[] = [];
+      const ops: MulchOp[] = [];
       const pending: Rect[] = [];
-      const created: NapkinNode[] = [];
+      const created: MulchNode[] = [];
       for (const item of input.nodes) {
         const id = newClientId("n");
         if (item.ref) refs.set(item.ref, id);
-        const resolve = resolver(napkin, refs);
+        const resolve = resolver(mulch, refs);
         const anchors = (item.near ?? []).map(resolve).filter((x): x is string => !!x);
         const unknown = (item.near ?? []).filter((key) => !resolve(key));
         if (unknown.length) problems.push(`near: unknown ${unknown.join(", ")} (placed anyway).`);
-        // Anchors added earlier in this call are not on the napkin yet; use their pending boxes.
-        const view: Napkin = { ...napkin, nodes: { ...napkin.nodes, ...Object.fromEntries(created.map((n) => [n.id, n])) } };
+        // Anchors added earlier in this call are not on the canvas yet; use their pending boxes.
+        const view: Mulch = { ...mulch, nodes: { ...mulch.nodes, ...Object.fromEntries(created.map((n) => [n.id, n])) } };
         const w = NODE_WIDTH[item.kind];
         const h = estimateHeight(item.kind, item.text, item.title);
-        const group = item.group && napkin.groups[item.group] ? item.group : undefined;
+        const group = item.group && mulch.groups[item.group] ? item.group : undefined;
         const position = placeNear(view, { w, h }, { anchorIds: anchors, seed: id, taken: pending });
         pending.push({ ...position, w, h });
-        const node: NapkinNode = {
+        const node: MulchNode = {
           id,
           kind: item.kind,
           x: position.x,
@@ -592,8 +592,8 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
         created.push(node);
         ops.push({ op: "addNode", node });
       }
-      napkin = { ...napkin, nodes: { ...napkin.nodes, ...Object.fromEntries(created.map((n) => [n.id, n])) } };
-      ops.push(...edgeOps(napkin, input.edges ?? [], resolver(napkin, refs), problems));
+      mulch = { ...mulch, nodes: { ...mulch.nodes, ...Object.fromEntries(created.map((n) => [n.id, n])) } };
+      ops.push(...edgeOps(mulch, input.edges ?? [], resolver(mulch, refs), problems));
       await commit(ops);
       ctx.added.push(...created.map((node) => node.id));
       const mapping = input.nodes.map((item, i) => `${item.ref ?? `#${i + 1}`} = ${created[i].id}`).join(", ");
@@ -606,33 +606,33 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
     },
 
     async connect(args) {
-      const napkin = await getNapkin(ctx.napkinId);
+      const mulch = await getMulch(ctx.mulchId);
       const problems: string[] = [];
-      const ops = edgeOps(napkin, (args as { edges: z.infer<typeof edgeShape>[] }).edges, resolver(napkin, new Map()), problems);
+      const ops = edgeOps(mulch, (args as { edges: z.infer<typeof edgeShape>[] }).edges, resolver(mulch, new Map()), problems);
       await commit(ops);
       return ok(`Made ${ops.length} connections.${problems.length ? ` ${problems.join(" ")}` : ""}`, `Connected ${ops.length}`, ops);
     },
 
     async update_node(args) {
       const { id, title, text } = args as { id: string; title?: string; text?: string };
-      const napkin = await getNapkin(ctx.napkinId);
-      const node = napkin.nodes[id];
-      if (!node) return fail(`No item ${id}. Call get_napkin for current ids.`);
+      const mulch = await getMulch(ctx.mulchId);
+      const node = mulch.nodes[id];
+      if (!node) return fail(`No item ${id}. Call get_mulch for current ids.`);
       if (isUserOwned(node) && !ctx.allowUserEdits) return fail(`${id} was made or edited by the user; leave it as it is unless they ask you to change it.`);
       if (title === undefined && text === undefined) return fail("Give a new title or text.");
-      const ops: NapkinOp[] = [{ op: "updateNode", id, patch: { ...(title !== undefined ? { title } : {}), ...(text !== undefined ? { text } : {}), updatedAt: Date.now() } }];
+      const ops: MulchOp[] = [{ op: "updateNode", id, patch: { ...(title !== undefined ? { title } : {}), ...(text !== undefined ? { text } : {}), updatedAt: Date.now() } }];
       await commit(ops);
       return ok(`Updated ${id}.`, "Edited an item", ops);
     },
 
     async remove_nodes(args) {
       const { ids } = args as { ids: string[] };
-      const napkin = await getNapkin(ctx.napkinId);
+      const mulch = await getMulch(ctx.mulchId);
       const refused: string[] = [];
       const missing: string[] = [];
-      const ops: NapkinOp[] = [];
+      const ops: MulchOp[] = [];
       for (const id of ids) {
-        const node = napkin.nodes[id];
+        const node = mulch.nodes[id];
         if (!node) missing.push(id);
         else if (isUserOwned(node) && !ctx.allowUserEdits) refused.push(id);
         else ops.push({ op: "removeNode", id });
@@ -647,18 +647,18 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
 
     async arrange(args) {
       const { groups } = args as { groups: Array<{ title: string; ids: string[] }> };
-      const napkin = await getNapkin(ctx.napkinId);
+      const mulch = await getMulch(ctx.mulchId);
       const ids = groups.flatMap((group) => group.ids);
-      const missing = ids.filter((id) => !napkin.nodes[id]);
-      const userMoved = ids.filter((id) => napkin.nodes[id] && isUserOwned(napkin.nodes[id]));
+      const missing = ids.filter((id) => !mulch.nodes[id]);
+      const userMoved = ids.filter((id) => mulch.nodes[id] && isUserOwned(mulch.nodes[id]));
       if (userMoved.length && !ctx.allowUserEdits) return fail(`The user placed ${userMoved.join(", ")}; leave them where they are unless they ask you to arrange.`);
-      const { moves, boxes } = arrangeGroups(napkin, groups.map((group) => ({ title: group.title, nodeIds: group.ids })));
-      if (!moves.length) return fail(`Nothing to arrange. Unknown ids: ${missing.join(", ")}. Call get_napkin for current ids.`);
+      const { moves, boxes } = arrangeGroups(mulch, groups.map((group) => ({ title: group.title, nodeIds: group.ids })));
+      if (!moves.length) return fail(`Nothing to arrange. Unknown ids: ${missing.join(", ")}. Call get_mulch for current ids.`);
       const moving = new Set(moves.map((move) => move.id));
-      const ops: NapkinOp[] = [];
+      const ops: MulchOp[] = [];
       // Groups whose members all move are replaced by the new boxes.
-      for (const group of Object.values(napkin.groups)) {
-        const members = Object.values(napkin.nodes).filter((node) => node.groupId === group.id);
+      for (const group of Object.values(mulch.groups)) {
+        const members = Object.values(mulch.nodes).filter((node) => node.groupId === group.id);
         if (members.every((node) => moving.has(node.id))) ops.push({ op: "removeGroup", id: group.id });
       }
       for (const box of boxes) {
@@ -679,19 +679,19 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
 
     async write_doc(args) {
       const { title, markdown, near } = args as { title: string; markdown: string; near?: string[] };
-      const napkin = await getNapkin(ctx.napkinId);
-      const docs = path.join(napkinDir(ctx.napkinId), "docs");
+      const mulch = await getMulch(ctx.mulchId);
+      const docs = path.join(mulchDir(ctx.mulchId), "docs");
       await fs.mkdir(docs, { recursive: true });
       let slug = slugify(title);
       const existing = new Set(await fs.readdir(docs).catch(() => [] as string[]));
       for (let i = 2; existing.has(`${slug}.md`); i++) slug = `${slugify(title)}-${i}`;
       const docPath = `docs/${slug}.md`;
-      await atomicWriteFile(path.join(napkinDir(ctx.napkinId), docPath), markdown.startsWith("#") ? markdown : `# ${title}\n\n${markdown}`);
+      await atomicWriteFile(path.join(mulchDir(ctx.mulchId), docPath), markdown.startsWith("#") ? markdown : `# ${title}\n\n${markdown}`);
       const id = newClientId("n");
-      const anchors = (near ?? []).filter((key) => napkin.nodes[key]);
+      const anchors = (near ?? []).filter((key) => mulch.nodes[key]);
       const w = NODE_WIDTH.writeup;
-      const position = placeNear(napkin, { w, h: 260 }, { anchorIds: anchors, seed: id });
-      const ops: NapkinOp[] = [
+      const position = placeNear(mulch, { w, h: 260 }, { anchorIds: anchors, seed: id });
+      const ops: MulchOp[] = [
         { op: "addNode", node: { id, kind: "writeup", x: position.x, y: position.y, title, text: markdown, docPath, origin, createdAt: Date.now() } },
       ];
       await commit(ops);
@@ -700,7 +700,7 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
     },
 
     async say(args) {
-      await emit(ctx.napkinId, { type: "say", text: (args as { text: string }).text, jobId: ctx.jobId });
+      await emit(ctx.mulchId, { type: "say", text: (args as { text: string }).text, jobId: ctx.jobId });
       return ok("Shown.", "Status");
     },
 
@@ -712,12 +712,12 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
     },
 
     async set_title(args) {
-      const napkin = await getNapkin(ctx.napkinId);
-      // Only names an unnamed napkin; the person's own title stays.
-      if (napkin.title !== "Untitled") return ok("The napkin already has a name.", "Kept name");
-      const ops: NapkinOp[] = [{ op: "setTitle", title: (args as { title: string }).title.trim() }];
+      const mulch = await getMulch(ctx.mulchId);
+      // Only names an unnamed mulch; the person's own title stays.
+      if (mulch.title !== "Untitled") return ok("The mulch already has a name.", "Kept name");
+      const ops: MulchOp[] = [{ op: "setTitle", title: (args as { title: string }).title.trim() }];
       await commit(ops);
-      return ok("Named.", "Named the napkin", ops);
+      return ok("Named.", "Named the canvas", ops);
     },
 
     async write_artifact(args) {
@@ -725,28 +725,28 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
         title: string; extension: string; content: string; description: string; near?: string[]; replace?: string;
       };
       if (replace) {
-        const napkin = await getNapkin(ctx.napkinId);
-        const node = Object.values(napkin.nodes).find((n) => n.kind === "artifact" && n.docPath === replace);
-        if (!node || !ARTIFACT_PATH.test(replace) || !replace.endsWith(`.${extension}`)) return fail(`No artifact ${replace} with extension ${extension} on the napkin.`);
+        const mulch = await getMulch(ctx.mulchId);
+        const node = Object.values(mulch.nodes).find((n) => n.kind === "artifact" && n.docPath === replace);
+        if (!node || !ARTIFACT_PATH.test(replace) || !replace.endsWith(`.${extension}`)) return fail(`No artifact ${replace} with extension ${extension} on the canvas.`);
         if (isUserOwned(node) && !ctx.allowUserEdits) return fail(`${replace} belongs to the person.`);
-        await atomicWriteFile(artifactFile(ctx.napkinId, replace), content);
+        await atomicWriteFile(artifactFile(ctx.mulchId, replace), content);
         await commit([{ op: "updateNode", id: node.id, patch: { title, text: description, updatedAt: Date.now() } }]);
         return ok(`Replaced ${replace}.`, `Revised ${title}`);
       }
-      const docPath = await saveArtifact(ctx.napkinId, title, extension, Buffer.from(content));
+      const docPath = await saveArtifact(ctx.mulchId, title, extension, Buffer.from(content));
       const id = await addArtifactCard(title, description, docPath, near);
       return ok(`Saved ${docPath} and added card ${id}.`, `Made ${title}`, []);
     },
 
     async make_pptx(args) {
       const { title, slides, accent, description, near } = args as { title: string; slides: Slide[]; accent?: string; description: string; near?: string[] };
-      const napkin = await getNapkin(ctx.napkinId);
+      const mulch = await getMulch(ctx.mulchId);
       const bytes = await buildPptx(title, slides, { accent: accent?.replace("#", "") }, async (imageId) => {
-        const node = napkin.nodes[imageId];
+        const node = mulch.nodes[imageId];
         if (node?.kind !== "image" || !node.assetId) return undefined;
-        return imageForModel(await fs.readFile(assetPath(ctx.napkinId, node.assetId)));
+        return imageForModel(await fs.readFile(assetPath(ctx.mulchId, node.assetId)));
       });
-      const docPath = await saveArtifact(ctx.napkinId, title, "pptx", bytes);
+      const docPath = await saveArtifact(ctx.mulchId, title, "pptx", bytes);
       const id = await addArtifactCard(title, `${description}\n\n${slides.length} slides`, docPath, near);
       return ok(`Saved ${docPath} (${slides.length} slides) and added card ${id}.`, `Made ${title}.pptx`, []);
     },
@@ -755,7 +755,7 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
       const { path: file, slides = 1 } = args as { path: string; slides?: number };
       const docPath = file.startsWith("artifacts/") ? file : `artifacts/${file}`;
       if (!ARTIFACT_PATH.test(docPath) || !/\.(html|svg)$/.test(docPath)) return fail("Only HTML and SVG artifacts can be previewed.");
-      const result = await desktopRequest("render", { url: `/api/napkins/${ctx.napkinId}/${docPath}`, steps: slides });
+      const result = await desktopRequest("render", { url: `/api/mulches/${ctx.mulchId}/${docPath}`, steps: slides });
       if (!result.ok) return fail(`Could not render it: ${result.error}`);
       const value = result.value as { images: string[]; errors: string[] };
       const errors = value.errors.length ? `Script errors and warnings:\n${value.errors.join("\n")}` : "No script errors.";
@@ -768,7 +768,7 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
     async research(args) {
       if (!ctx.onResearch) return fail("Not available here.");
       ctx.onResearch((args as { brief: string }).brief);
-      return ok("Research job queued; it will add its results to the napkin.", "Started research");
+      return ok("Research job queued; it will add its results to the canvas.", "Started research");
     },
 
     async read_page(args) {
@@ -789,54 +789,54 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
       );
     },
 
-    async search_napkin(args) {
+    async search_mulch(args) {
       const { query, kinds, limit } = args as { query: string; kinds?: string[]; limit?: number };
-      const hits = await search(query, { napkinIds: [ctx.napkinId], kinds, limit: limit ?? 10 });
+      const hits = await search(query, { mulchIds: [ctx.mulchId], kinds, limit: limit ?? 10 });
       if (!hits.length) return ok("Nothing found.", "Found nothing");
       return ok(hits.map(hitLine).join("\n\n"), `Found ${hits.length}`);
     },
 
-    async search_all_napkins(args) {
+    async search_all_mulches(args) {
       const { query, limit } = args as { query: string; limit?: number };
       const hits = await search(query, { limit: limit ?? 12 });
       if (!hits.length) return ok("Nothing found.", "Found nothing");
-      const titles = new Map((await listNapkins()).map((n) => [n.id, n.title]));
-      return ok(hits.map((hit) => `napkin ${hit.napkinId} "${titles.get(hit.napkinId) ?? ""}"${hit.napkinId === ctx.napkinId ? " (this one)" : ""} · ${hitLine(hit)}`).join("\n\n"), `Found ${hits.length}`);
+      const titles = new Map((await listMulches()).map((n) => [n.id, n.title]));
+      return ok(hits.map((hit) => `mulch ${hit.mulchId} "${titles.get(hit.mulchId) ?? ""}"${hit.mulchId === ctx.mulchId ? " (this one)" : ""} · ${hitLine(hit)}`).join("\n\n"), `Found ${hits.length}`);
     },
 
     async read_source(args) {
       const { id, page, offset } = args as { id: string; page?: number; offset?: number };
-      const text = await readAround(ctx.napkinId, id, { page, offset });
+      const text = await readAround(ctx.mulchId, id, { page, offset });
       return text ? ok(text, "Read source") : fail(`No item ${id}.`);
     },
 
     async focus(args) {
       const { ids, page, quote } = args as { ids: string[]; page?: number; quote?: string };
-      const napkin = await getNapkin(ctx.napkinId);
-      const found = ids.filter((id) => napkin.nodes[id]);
-      if (!found.length) return fail("None of those items are on this napkin.");
-      await emit(ctx.napkinId, { type: "focus", ids: found, ...(page ? { page } : {}), ...(quote ? { quote } : {}) });
+      const mulch = await getMulch(ctx.mulchId);
+      const found = ids.filter((id) => mulch.nodes[id]);
+      if (!found.length) return fail("None of those items are on this canvas.");
+      await emit(ctx.mulchId, { type: "focus", ids: found, ...(page ? { page } : {}), ...(quote ? { quote } : {}) });
       return ok(`Showing ${found.length} item(s).`, "Showed items");
     },
 
     async bring_in(args) {
-      const { napkin_id, item_id, near } = args as { napkin_id: string; item_id: string; near?: string[] };
-      if (napkin_id === ctx.napkinId) return fail("That item is already on this napkin.");
-      const source = await getNapkin(napkin_id).catch(() => undefined);
+      const { mulch_id, item_id, near } = args as { mulch_id: string; item_id: string; near?: string[] };
+      if (mulch_id === ctx.mulchId) return fail("That item is already on this canvas.");
+      const source = await getMulch(mulch_id).catch(() => undefined);
       const node = source?.nodes[item_id];
-      if (!source || !node) return fail(`No item ${item_id} in napkin ${napkin_id}.`);
+      if (!source || !node) return fail(`No item ${item_id} in mulch ${mulch_id}.`);
       // Files come along, so the copy works on its own.
       if (node.assetId) {
         for (const asset of [node.assetId, `${node.assetId.split(".")[0]}.md`]) {
-          await fs.mkdir(path.join(napkinDir(ctx.napkinId), "assets"), { recursive: true });
-          await fs.copyFile(assetPath(napkin_id, asset), assetPath(ctx.napkinId, asset)).catch(() => undefined);
+          await fs.mkdir(path.join(mulchDir(ctx.mulchId), "assets"), { recursive: true });
+          await fs.copyFile(assetPath(mulch_id, asset), assetPath(ctx.mulchId, asset)).catch(() => undefined);
         }
       }
-      const napkin = await getNapkin(ctx.napkinId);
+      const mulch = await getMulch(ctx.mulchId);
       const id = newClientId("n");
-      const anchors = (near ?? []).filter((key) => napkin.nodes[key]);
-      const position = placeNear(napkin, { w: NODE_WIDTH[node.kind], h: rectOf(node).h }, { anchorIds: anchors, seed: id });
-      const copy: NapkinNode = {
+      const anchors = (near ?? []).filter((key) => mulch.nodes[key]);
+      const position = placeNear(mulch, { w: NODE_WIDTH[node.kind], h: rectOf(node).h }, { anchorIds: anchors, seed: id });
+      const copy: MulchNode = {
         ...node,
         id,
         x: position.x,
@@ -849,7 +849,7 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
         userTouched: undefined,
         createdAt: Date.now(),
       };
-      const ops: NapkinOp[] = [{ op: "addNode", node: JSON.parse(JSON.stringify(copy)) }];
+      const ops: MulchOp[] = [{ op: "addNode", node: JSON.parse(JSON.stringify(copy)) }];
       await commit(ops);
       ctx.added.push(id);
       return ok(`Brought in as ${id}.`, "Brought in an item", ops);
@@ -886,7 +886,7 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
       if (!budget.ok) return fail(budget.message);
       const round = (ctx.reviewRound ?? 0) + 1;
       const record = await startGeneration({
-        napkinId: ctx.napkinId,
+        mulchId: ctx.mulchId,
         endpoint,
         input,
         title,
@@ -906,13 +906,13 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
 
     async media_wait(args) {
       const { ids, max_seconds = 120 } = args as { ids: string[]; max_seconds?: number };
-      const napkin = await getNapkin(ctx.napkinId);
+      const mulch = await getMulch(ctx.mulchId);
       const genIds: string[] = [];
       for (const id of ids) {
-        const gen = napkin.nodes[id]?.gen?.id ?? id;
+        const gen = mulch.nodes[id]?.gen?.id ?? id;
         genIds.push(gen);
       }
-      const records = await waitFor(ctx.napkinId, genIds, max_seconds * 1000);
+      const records = await waitFor(ctx.mulchId, genIds, max_seconds * 1000);
       const lines: string[] = [];
       const images: NonNullable<AgentToolResult["images"]> = [];
       for (const id of genIds) {
@@ -940,15 +940,15 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
     async make(args) {
       if (!ctx.onMake) return fail("Not available here.");
       ctx.onMake((args as { brief: string }).brief);
-      return ok("Making job queued. Its files will appear on the napkin when done.", "Started making");
+      return ok("Making job queued. Its files will appear on the canvas when done.", "Started making");
     },
 
     async present_file(args) {
       const { path: file, title, description, near } = args as { path: string; title: string; description: string; near?: string[] };
-      const docPath = await adoptArtifact(ctx.napkinId, file.replace(/^artifacts\//, "").split("/").pop() ?? "");
+      const docPath = await adoptArtifact(ctx.mulchId, file.replace(/^artifacts\//, "").split("/").pop() ?? "");
       if (!docPath) return fail(`No such file in the artifacts folder, or not a supported type (${ARTIFACT_EXTENSIONS.join(", ")}). Save it there first.`);
-      const napkin = await getNapkin(ctx.napkinId);
-      if (Object.values(napkin.nodes).some((node) => node.docPath === docPath)) return ok(`${docPath} is already on the napkin.`, "Already there");
+      const mulch = await getMulch(ctx.mulchId);
+      if (Object.values(mulch.nodes).some((node) => node.docPath === docPath)) return ok(`${docPath} is already on the canvas.`, "Already there");
       const id = await addArtifactCard(title, description, docPath, near);
       return ok(`Added card ${id} for ${docPath}.`, `Added ${title}`);
     },
@@ -1033,10 +1033,10 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
 
     async view_image(args) {
       const { id } = args as { id: string };
-      const node = (await getNapkin(ctx.napkinId)).nodes[id];
+      const node = (await getMulch(ctx.mulchId)).nodes[id];
       if (!node || node.kind !== "image" || !node.assetId) return fail(`${id} is not an image item. Image items have kind [image].`);
       try {
-        const bytes = await fs.readFile(assetPath(ctx.napkinId, node.assetId));
+        const bytes = await fs.readFile(assetPath(ctx.mulchId, node.assetId));
         return { ...ok(`Image ${id}${node.fileName ? ` (${node.fileName})` : ""}.`, "Looked at an image"), images: [await imageForModel(bytes)] };
       } catch (error) {
         return fail(`Could not open the image: ${(error as Error).message}`);
@@ -1045,10 +1045,10 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
 
     async caption_image(args) {
       const { id, title, text } = args as { id: string; title?: string; text: string };
-      const node = (await getNapkin(ctx.napkinId)).nodes[id];
+      const node = (await getMulch(ctx.mulchId)).nodes[id];
       if (!node || node.kind !== "image") return fail(`${id} is not an image item.`);
       if (node.text && !ctx.allowUserEdits) return fail(`${id} already has a caption; leave it unless the person asks.`);
-      const ops: NapkinOp[] = [{ op: "updateNode", id, patch: { text, ...(title ? { title } : {}) } }];
+      const ops: MulchOp[] = [{ op: "updateNode", id, patch: { text, ...(title ? { title } : {}) } }];
       await commit(ops);
       return ok(`Captioned ${id}.`, "Captioned an image", ops);
     },
