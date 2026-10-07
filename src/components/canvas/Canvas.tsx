@@ -88,6 +88,7 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   const redo = useNapkin((s) => s.redo);
   const fresh = useNapkin((s) => s.fresh);
   const editingId = useCanvasUi((s) => s.editingId);
+  const readOnly = useCanvasUi((s) => s.readOnly);
   const setEditing = useCanvasUi((s) => s.setEditing);
   const flow = useReactFlow<FlowNode, Edge>();
   const [nodes, setNodes] = useState<FlowNode[]>([]);
@@ -248,12 +249,13 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   // Double-click empty canvas: type a note there.
   const onPaneDoubleClick = useCallback(
     (event: React.MouseEvent) => {
+      if (readOnly) return;
       const target = event.target as HTMLElement;
       if (!target.classList.contains("react-flow__pane")) return;
       const position = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
       setDraft({ x: position.x - 20, y: position.y - 16, text: "" });
     },
-    [flow],
+    [flow, readOnly],
   );
 
   const commitDraft = useCallback(() => {
@@ -312,6 +314,7 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
   // Paste onto the canvas (not into a text field): files, links or text land in the middle of the view.
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
+      if (readOnly) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable)) return;
       const data = event.clipboardData;
@@ -331,11 +334,12 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [flow, ingest]);
+  }, [flow, ingest, readOnly]);
 
   // Undo / redo, unless typing.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (readOnly) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable)) return;
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
@@ -345,7 +349,7 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  }, [undo, redo, readOnly]);
 
   return (
     <ReactFlow<FlowNode, Edge>
@@ -362,7 +366,7 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
       onDelete={onDelete}
       onSelectionChange={onSelectionChange}
       onDoubleClick={onPaneDoubleClick}
-      onDrop={onDrop}
+      onDrop={readOnly ? undefined : onDrop}
       onDragOver={(event) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "copy";
@@ -371,7 +375,9 @@ function CanvasInner({ napkin }: { napkin: Napkin }) {
       connectionMode={ConnectionMode.Loose}
       connectionRadius={40}
       zoomOnDoubleClick={false}
-      deleteKeyCode={editingId || draft ? null : ["Backspace", "Delete"]}
+      deleteKeyCode={editingId || draft || readOnly ? null : ["Backspace", "Delete"]}
+      nodesDraggable={!readOnly}
+      nodesConnectable={!readOnly}
       minZoom={0.1}
       maxZoom={2}
       panOnScroll

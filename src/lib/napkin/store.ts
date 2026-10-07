@@ -37,8 +37,6 @@ interface OpenNapkin {
   paused: boolean;
   listeners: Set<Listener>;
   saveTimer?: ReturnType<typeof setTimeout>;
-  /** Ops batches applied since the last checkpoint. */
-  changedSinceCheckpoint: boolean;
 }
 
 interface StoreState {
@@ -186,7 +184,6 @@ export async function openNapkin(id: string): Promise<OpenNapkin> {
       jobs: new Map(),
       paused: false,
       listeners: new Set(),
-      changedSinceCheckpoint: false,
     };
     s.open.set(id, entry);
     return entry;
@@ -253,7 +250,6 @@ export async function applyToNapkin(
   const next = applyOps(entry.napkin, ops, now);
   if (next === entry.napkin) return undefined;
   entry.napkin = next;
-  entry.changedSinceCheckpoint = true;
   const batch: OpBatch = { id: newClientId("b"), napkinId: id, ops, origin, ...(clientId ? { clientId } : {}), at: now };
   await fs.appendFile(path.join(napkinDir(id), "events.jsonl"), JSON.stringify(batch) + "\n");
   scheduleSave(id, entry);
@@ -316,12 +312,4 @@ export async function subscribe(id: string, listener: Listener): Promise<() => v
   });
   entry.listeners.add(listener);
   return () => entry.listeners.delete(listener);
-}
-
-/** For the history module: was anything applied since the last checkpoint? Resets the flag. */
-export function takeChangedFlag(id: string): boolean {
-  const entry = state().open.get(id);
-  if (!entry?.changedSinceCheckpoint) return false;
-  entry.changedSinceCheckpoint = false;
-  return true;
 }

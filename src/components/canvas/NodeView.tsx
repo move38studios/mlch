@@ -103,6 +103,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
   const { node, napkinId, fresh } = data;
   const style = KIND_STYLES[node.kind];
   const editing = useCanvasUi((s) => s.editingId === node.id);
+  const readOnly = useCanvasUi((s) => s.readOnly);
   const setEditing = useCanvasUi((s) => s.setEditing);
   const setOpen = useCanvasUi((s) => s.setOpen);
   const apply = useNapkin((s) => s.apply);
@@ -115,7 +116,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        if (node.kind !== "image") setEditing(node.id);
+        if (node.kind !== "image" && !readOnly) setEditing(node.id);
       }}
     >
       <Handle type="target" position={Position.Left} className="napkin-handle-target" isConnectableStart={false} />
@@ -137,7 +138,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
         </button>
       )}
       <Handle type="source" position={Position.Right} className="napkin-handle" />
-      {selected && !editing && (
+      {selected && !editing && !readOnly && (
         <NodeResizeControl
           position="right"
           variant={ResizeControlVariant.Line}

@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ArrowLeft, FolderPlus, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, FolderPlus, History, X } from "lucide-react";
+import type { Napkin } from "@/lib/napkin/types";
+import { HistoryBar } from "./History";
+import { useCanvasUi } from "./ui";
 import { desktop } from "@/lib/desktop/client";
 import { useNapkin } from "@/lib/napkin/client";
 import { Canvas } from "./Canvas";
@@ -85,6 +88,18 @@ export function NapkinView({ id }: { id: string }) {
 
   useEffect(() => connect(id), [connect, id]);
 
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [preview, setPreview] = useState<Napkin>();
+  const onPreview = useCallback((past?: Napkin) => setPreview(past), []);
+  const closeHistory = useCallback(() => {
+    setHistoryOpen(false);
+    setPreview(undefined);
+  }, []);
+  useEffect(() => {
+    useCanvasUi.setState({ readOnly: !!preview, editingId: undefined });
+  }, [preview]);
+  const shown = preview ?? napkin;
+
   return (
     <main className="h-full flex flex-col">
       <header className="drag h-12 shrink-0 pl-20 pr-3 flex items-center gap-2 border-b border-line bg-paper z-10">
@@ -96,16 +111,27 @@ export function NapkinView({ id }: { id: string }) {
         {!connected && napkin && <span className="text-xs text-ink-3">Reconnecting</span>}
         {napkin && <JobStatus napkinId={id} />}
         {napkin && <AddFolder napkinId={id} />}
+        {napkin && (
+          <button
+            onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
+            className={`p-1.5 rounded-md hover:bg-paper-2 ${historyOpen ? "text-accent" : "text-ink-2"}`}
+            title="History"
+            aria-label="History"
+          >
+            <History size={16} />
+          </button>
+        )}
       </header>
+      {historyOpen && <HistoryBar napkinId={id} onPreview={onPreview} onClose={closeHistory} />}
       <div className="relative flex-1 min-h-0 flex">
         <div className="relative flex-1 min-w-0">
           <Notice />
           {error ? (
             <p className="p-8 text-sm text-ink-2">{error}</p>
-          ) : napkin ? (
+          ) : shown ? (
             <>
-              <Canvas napkin={napkin} />
-              <InputBar napkinId={id} />
+              <Canvas napkin={shown} />
+              {!preview && <InputBar napkinId={id} />}
             </>
           ) : null}
         </div>

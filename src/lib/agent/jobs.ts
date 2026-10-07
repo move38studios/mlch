@@ -16,6 +16,7 @@ import { getHarness } from "@/lib/agent/server/harnesses";
 import type { AgentHarnessStatus, HarnessEvent } from "@/lib/agent/types";
 import type { JobLane, JobStatus, TranscriptSegment } from "@/lib/napkin/events";
 import { newClientId } from "@/lib/napkin/ids";
+import { checkpoint } from "@/lib/napkin/history";
 import { emit, getNapkin, setJob } from "@/lib/napkin/store";
 import { modelFor, readSettings, type Lane } from "@/lib/settings";
 import { commandPrompt, fastPrompt, folderPrompt, ingestPrompt, slowPrompt } from "./prompts";
@@ -152,6 +153,7 @@ function pump(napkinId: string, lane: JobLane): void {
       if (!(error instanceof JobError) && !cancelled) console.error(`[jobs] ${lane} job failed`, error);
     } finally {
       clearTimeout(timer);
+      await checkpoint(napkinId, "job", work.label).catch((error) => console.error("[jobs] checkpoint failed", error));
       entry.running[lane] = undefined;
       pump(napkinId, lane);
     }
