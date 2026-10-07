@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f6f4ef;
+  --paper-2: #efece4;
+  --ink: #1d1b17;
+  --ink-2: #5d5850;
+  --ink-3: #9a948a;
+  --line: #ddd8cc;
+  --accent: #d2491f;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The window has no title bar; this strip drags it. */
+.drag {
+  -webkit-app-region: drag;
+}
+.drag button,
+.drag a,
+.drag input {
+  -webkit-app-region: no-drag;
+}

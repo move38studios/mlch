@@ -4,3 +4,8 @@ out/
 dist/
 .env*
 .DS_Store
+.next-electron/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.claude/*.lock
