@@ -17,7 +17,8 @@ const DENIED_FILES = /(^|\/)(\.env(\..*)?|\.npmrc|\.pypirc|\.netrc|\.git-credent
 
 /** The private folders under the home folder, as absolute paths. */
 export function privateDirs(): string[] {
-  return DENIED_DIRS.map((dir) => path.join(os.homedir(), dir));
+  // Run-time paths in the home folder; nothing for the bundler to trace.
+  return DENIED_DIRS.map((dir) => path.join(/*turbopackIgnore: true*/ os.homedir(), dir));
 }
 
 /** Absolute path for `relative` inside `root`, or undefined if it escapes or is private. */
