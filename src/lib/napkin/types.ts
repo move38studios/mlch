@@ -119,8 +119,10 @@ export interface NapkinSummary {
   nodeCount: number;
 }
 
-type NodePatch = Partial<Omit<NapkinNode, "id" | "createdAt">>;
-type GroupPatch = Partial<Omit<NapkinGroup, "id" | "createdAt">>;
+/** A field set to null is cleared. */
+type Patch<T> = { [K in keyof T]?: T[K] | null };
+export type NodePatch = Patch<Omit<NapkinNode, "id" | "createdAt">>;
+export type GroupPatch = Patch<Omit<NapkinGroup, "id" | "createdAt">>;
 
 export type NapkinOp =
   | { op: "addNode"; node: NapkinNode }
@@ -129,7 +131,7 @@ export type NapkinOp =
   /** Also removes the node's edges. */
   | { op: "removeNode"; id: string }
   | { op: "addEdge"; edge: NapkinEdge }
-  | { op: "updateEdge"; id: string; patch: { label?: string } }
+  | { op: "updateEdge"; id: string; patch: { label?: string | null } }
   | { op: "removeEdge"; id: string }
   | { op: "addGroup"; group: NapkinGroup }
   | { op: "updateGroup"; id: string; patch: GroupPatch }
