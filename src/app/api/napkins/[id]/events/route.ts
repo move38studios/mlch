@@ -1,5 +1,6 @@
 import { jsonError } from "@/lib/http";
 import type { ServerEvent } from "@/lib/napkin/events";
+import { resumeGenerations } from "@/lib/media/generations";
 import { getNapkin, NapkinNotFoundError, subscribe } from "@/lib/napkin/store";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ export async function GET(request: Request, { params }: Params) {
   try {
     // A missing napkin is a 404, not a stream that errors.
     await getNapkin(id);
+    // Generations still running from before a restart pick up again.
+    await resumeGenerations(id).catch((error) => console.error("[generations] resume failed", error));
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         const send = (event: ServerEvent) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));

@@ -28,6 +28,8 @@ export type NodeKind =
   | "writeup"
   /** A file the AI made: an HTML page or deck, a PowerPoint, … (in artifacts/). */
   | "artifact"
+  /** Generated image, video, audio or 3D model (fal). */
+  | "media"
   /** Free text the user typed onto the canvas. */
   | "note";
 
@@ -42,6 +44,7 @@ export const NODE_KINDS: readonly NodeKind[] = [
   "image",
   "writeup",
   "artifact",
+  "media",
   "note",
 ];
 
@@ -70,6 +73,10 @@ export interface NapkinNode {
   /** File the item stands for, relative to the napkin folder (docs/<slug>.md, artifacts/<slug>.html). */
   docPath?: string;
   groupId?: string;
+  /** MIME type of the file in assetId (media items). */
+  mime?: string;
+  /** A generation in progress or finished (media items). */
+  gen?: GenerationState;
   origin: Origin;
   /**
    * The user created, moved or edited it. The AI never moves or rewrites a
@@ -78,6 +85,22 @@ export interface NapkinNode {
   userTouched?: boolean;
   createdAt: number;
   updatedAt?: number;
+}
+
+export interface GenerationState {
+  id: string;
+  /** fal endpoint, e.g. fal-ai/flux/schnell */
+  endpoint: string;
+  status: "queued" | "running" | "done" | "failed" | "cancelled";
+  /** Place in fal's queue while queued. */
+  position?: number;
+  /** Last log line while running. */
+  log?: string;
+  error?: string;
+  /** Estimated cost in USD. */
+  cost?: number;
+  startedAt: number;
+  finishedAt?: number;
 }
 
 export interface NapkinEdge {

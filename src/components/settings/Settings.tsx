@@ -11,10 +11,13 @@ interface SettingsData {
   harness: AgentHarnessId;
   models: Record<AgentHarnessId, Partial<Record<Lane, string>>>;
   enrich: string[];
+  dailySpendCapUsd: number;
 }
 interface SettingsView {
   settings: SettingsData;
-  keys: { groq: boolean; firecrawl: boolean };
+  keys: { groq: boolean; firecrawl: boolean; fal: boolean };
+  spentToday: number;
+  usageToday: Record<string, { turns: number; inputTokens: number; outputTokens: number }>;
   desktop: boolean;
   defaults: Record<AgentHarnessId, Partial<Record<Lane, string>>>;
 }
@@ -31,10 +34,51 @@ const ENRICH: Array<{ id: string; label: string }> = [
   { id: "related", label: "Related ideas" },
   { id: "questions", label: "Questions" },
 ];
-const KEYS: Array<{ id: "groq" | "firecrawl"; label: string }> = [
+const KEYS: Array<{ id: "groq" | "firecrawl" | "fal"; label: string }> = [
   { id: "groq", label: "Groq API key" },
   { id: "firecrawl", label: "Firecrawl API key" },
+  { id: "fal", label: "fal API key" },
 ];
+
+const WINDOW_NAMES: Record<string, string> = {
+  five_hour: "5 hours",
+  seven_day: "week",
+  seven_day_opus: "week, Opus",
+  seven_day_sonnet: "week, Sonnet",
+};
+
+const LANE_NAMES: Record<string, string> = { fast: "Capture", slow: "Enrich", command: "Instructions" };
+
+function UsageTable({ usage }: { usage: SettingsView["usageToday"] }) {
+  const rows = Object.entries(usage);
+  if (!rows.length) return <p className="text-sm text-ink-3">No AI turns today.</p>;
+  const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n));
+  return (
+    <table className="text-sm tabular-nums">
+      <thead className="text-ink-3 text-xs">
+        <tr>
+          <th className="text-left font-normal pr-6 pb-1"></th>
+          <th className="text-right font-normal pr-6 pb-1">Turns</th>
+          <th className="text-right font-normal pr-6 pb-1">Tokens in</th>
+          <th className="text-right font-normal pb-1">Tokens out</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(([key, value]) => {
+          const [harness, lane] = key.split("/");
+          return (
+            <tr key={key}>
+              <td className="pr-6">{harness === "claude" ? "Claude Code" : "Codex"} · {LANE_NAMES[lane] ?? lane}</td>
+              <td className="text-right pr-6">{value.turns}</td>
+              <td className="text-right pr-6">{k(value.inputTokens)}</td>
+              <td className="text-right">{k(value.outputTokens)}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -160,6 +204,11 @@ export function Settings() {
                       <>
                         Signed in{h.account?.plan ? `, ${h.account.plan}` : ""}
                         {h.account?.email ? ` (${h.account.email})` : ""}
+                        {h.planUsage?.length ? (
+                          <span className="block mt-0.5 text-ink-3">
+                            Plan used: {h.planUsage.map((w) => `${WINDOW_NAMES[w.name] ?? w.name} ${w.percent}%`).join(" · ")}
+                          </span>
+                        ) : null}
                       </>
                     )}
                   </div>
@@ -212,6 +261,30 @@ export function Settings() {
                 </label>
               ))}
             </div>
+          </Section>
+        )}
+        {view && settings && (
+          <Section title="Generation spend">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="w-40">Daily cap (USD)</span>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                defaultValue={settings.dailySpendCapUsd}
+                onBlur={(e) => {
+                  const value = Number(e.target.value);
+                  if (Number.isFinite(value) && value >= 0 && value !== settings.dailySpendCapUsd) void update({ dailySpendCapUsd: value });
+                }}
+                className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm"
+              />
+              <span className="text-ink-2">Today: ${view.spentToday.toFixed(2)}</span>
+            </div>
+          </Section>
+        )}
+        {view && (
+          <Section title="AI usage today">
+            <UsageTable usage={view.usageToday} />
           </Section>
         )}
         {view && (

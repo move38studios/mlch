@@ -9,6 +9,7 @@ import { useNapkin } from "@/lib/napkin/client";
 import { jitter } from "@/lib/napkin/place";
 import type { NapkinNode } from "@/lib/napkin/types";
 import { KIND_STYLES } from "./kinds";
+import { MediaBody } from "./MediaBody";
 import { useCanvasUi } from "./ui";
 
 export type NapkinFlowNode = Node<{ node: NapkinNode; napkinId: string; fresh: boolean }, "napkin">;
@@ -116,6 +117,7 @@ function ArtifactBody({ node, napkinId }: { node: NapkinNode; napkinId: string }
 function Body({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
   const style = KIND_STYLES[node.kind];
   if (node.kind === "artifact") return <ArtifactBody node={node} napkinId={napkinId} />;
+  if (node.kind === "media") return <MediaBody node={node} napkinId={napkinId} />;
   if (node.kind === "image" && node.assetId) {
     return (
       <div>
@@ -167,7 +169,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
   const setOpen = useCanvasUi((s) => s.setOpen);
   const apply = useNapkin((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
-  const long = node.text.length > 400 || node.kind === "writeup" || node.kind === "doc" || (node.kind === "link" && !!node.assetId);
+  const long = node.text.length > 400 || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || (node.kind === "link" && !!node.assetId);
 
   return (
     <div
@@ -175,7 +177,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        if (node.kind !== "image" && node.kind !== "artifact" && !readOnly) setEditing(node.id);
+        if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
       }}
     >
       <Handle type="target" position={Position.Left} className="napkin-handle-target" isConnectableStart={false} />

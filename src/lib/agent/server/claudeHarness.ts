@@ -153,6 +153,8 @@ export interface ClaudeHarnessState {
    * minutes after that, and dropped as soon as a turn shows extra usage is on.
    */
   extraUsageOffAt: number | null;
+  /** npkn: the plan windows from the last usage report, for display. */
+  planUsage?: NonNullable<AgentHarnessStatus["planUsage"]>;
 }
 
 export function createClaudeHarnessState(): ClaudeHarnessState {
@@ -532,7 +534,8 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
   }
 
   /** The CLI's verdict, corrected by what the last turns found out. */
-  function withTurnFindings(status: AgentHarnessStatus): AgentHarnessStatus {
+  function withTurnFindings(found: AgentHarnessStatus): AgentHarnessStatus {
+    const status = deps.state.planUsage ? { ...found, planUsage: deps.state.planUsage } : found;
     if (!isHarnessReady(status)) return status;
     if (currentRejection()) {
       return {
@@ -708,6 +711,15 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
       return { allowed: false, code: "usage_limit", message: USAGE_UNCONFIRMED };
     }
     const rateLimits = usage?.rate_limits_available ? (usage.rate_limits as Record<string, unknown> | null) : null;
+    // npkn: keep the windows for display.
+    if (rateLimits) {
+      deps.state.planUsage = Object.entries(rateLimits).flatMap(([name, value]) => {
+        const window = value as UsageWindow;
+        if (!window || typeof window.utilization !== "number") return [];
+        const resetsAt = window.resets_at ? Date.parse(window.resets_at) : undefined;
+        return [{ name, percent: Math.round(window.utilization), ...(Number.isFinite(resetsAt) ? { resetsAt } : {}), at: Date.now() }];
+      });
+    }
     if (!rateLimits) {
       // A setup-token login lacks the profile scope the report needs; that never changes by retrying.
       return deps.buildEnv().CLAUDE_CODE_OAUTH_TOKEN

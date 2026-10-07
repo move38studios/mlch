@@ -27,9 +27,11 @@ import { privateDirs } from "./files";
 import { placeNear } from "@/lib/napkin/place";
 import { artifactHeight, NODE_WIDTH } from "@/lib/napkin/sizes";
 import { commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, slowPrompt } from "./prompts";
-import { createNapkinTools, describeNapkin, type ToolName } from "./tools";
+import { onFinished, type GenerationRecord } from "@/lib/media/generations";
+import { recordUsage } from "./usage";
+import { createNapkinTools, describeNapkin, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
 
-const TIMEOUT_MS: Record<JobLane, number> = { fast: 120_000, slow: 300_000, command: 600_000, ingest: 600_000 };
+const TIMEOUT_MS: Record<JobLane, number> = { fast: 120_000, slow: 300_000, command: 900_000, ingest: 600_000 };
 /** Status is re-read at most this often before a job (a probe costs a CLI start). */
 const STATUS_TTL_MS = 60_000;
 
@@ -85,6 +87,11 @@ interface TurnSpec {
   onHandOff?: (instruction: string) => void;
   onMake?: (brief: string) => void;
   workspace?: AgentWorkspace;
+  /** The person's request (kept for review turns). */
+  brief?: string;
+  /** Resume this vendor session. */
+  sessionId?: string;
+  reviewRound?: number;
 }
 
 class JobError extends Error {}
@@ -111,10 +118,14 @@ async function runTurn(spec: TurnSpec): Promise<string[]> {
     onHandOff: spec.onHandOff,
     onMake: spec.onMake,
     origin: spec.origin,
+    brief: spec.brief,
+    reviewRound: spec.reviewRound,
+    session: { id: spec.sessionId } as { id?: string },
     added: [] as string[],
   };
   const harness = getHarness(settings.harness);
   const events: AsyncIterable<HarnessEvent> = harness.runTurn({
+    ...(spec.sessionId ? { sessionId: spec.sessionId } : {}),
     history: [],
     prompt: spec.prompt,
     systemPrompt: spec.systemPrompt,
@@ -125,6 +136,8 @@ async function runTurn(spec: TurnSpec): Promise<string[]> {
     signal: spec.signal,
   });
   for await (const event of events) {
+    if (event.type === "session") ctx.session.id = event.sessionId;
+    if (event.type === "usage") void recordUsage(settings.harness, spec.lane, event.inputTokens ?? 0, event.outputTokens ?? 0);
     if (event.type === "error") {
       // A refused or failed turn invalidates the cached status.
       state().status = undefined;
@@ -242,6 +255,53 @@ export function requestEnrichment(napkinId: string, ids: string[]): void {
   pump(napkinId, "slow");
 }
 
+const COMMAND_TOOLS: ToolName[] = [
+  "get_napkin", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
+  "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
+  "media_search", "media_schema", "media_generate", "media_wait", "media_view",
+];
+
+/** A long generation finished that its turn asked to review: resume that session to check it. */
+function submitReview(napkinId: string, record: GenerationRecord): void {
+  const review = record.review!;
+  enqueue(napkinId, {
+    lane: "command",
+    label: `Checking ${record.title}`,
+    async run(job, signal) {
+      const napkin = await getNapkin(napkinId);
+      const outcome =
+        record.status === "done"
+          ? `finished: item ${record.nodeId}${record.extraNodeIds.length ? ` (more outputs: ${record.extraNodeIds.join(", ")})` : ""}. Look at it with media_view.`
+          : `${record.status}${record.error ? `: ${record.error}` : ""}.`;
+      await runTurn({
+        napkinId,
+        job,
+        signal,
+        lane: "command",
+        systemPrompt: commandPrompt(),
+        prompt:
+          `<napkin>\n${describeNapkin(napkin, { textLimit: 300 })}\n</napkin>\n\n` +
+          `Generation ${record.id} "${record.title}" (${record.endpoint}) ${outcome}\n` +
+          `It was for: ${review.brief}\n\n` +
+          `Check it against what was asked. If it clearly misses (wrong content, artefacts, wrong length or style), generate again with a better prompt or model, ` +
+          `with review: true (this was round ${review.round} of ${MAX_REVIEW_ROUNDS}). If it is good, say so in one short line. Do not regenerate for small taste differences.`,
+        tools: COMMAND_TOOLS,
+        webAccess: true,
+        allowUserEdits: true,
+        readRoot: os.homedir(),
+        brief: review.brief,
+        reviewRound: review.round,
+        ...(review.sessionId ? { sessionId: review.sessionId } : {}),
+        onMake: (brief) => submitMake(napkinId, brief),
+      });
+    },
+  });
+}
+
+onFinished((record) => {
+  if (record.review && record.status !== "cancelled") submitReview(record.napkinId, record);
+});
+
 export function submitCommand(napkinId: string, instruction: string): void {
   enqueue(napkinId, {
     lane: "command",
@@ -255,10 +315,8 @@ export function submitCommand(napkinId: string, instruction: string): void {
         lane: "command",
         systemPrompt: commandPrompt(),
         prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 400 })}\n</napkin>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
-        tools: [
-          "get_napkin", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
-          "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
-        ],
+        tools: COMMAND_TOOLS,
+        brief: instruction,
         onMake: (brief) => submitMake(napkinId, brief),
         webAccess: true,
         allowUserEdits: true,

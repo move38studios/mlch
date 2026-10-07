@@ -1,6 +1,8 @@
 import { handle, jsonError } from "@/lib/http";
 import { DEFAULT_MODELS, readSettings, writeSettings } from "@/lib/settings";
 import { getCredential, isDesktop } from "@/lib/desktop/server";
+import { usageToday } from "@/lib/agent/usage";
+import { spentToday } from "@/lib/media/spend";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +10,9 @@ async function view() {
   return {
     settings: await readSettings(),
     // Whether a key is available (stored in the app or in .env.local); never the key.
-    keys: { groq: !!getCredential("groq"), firecrawl: !!getCredential("firecrawl") },
+    keys: { groq: !!getCredential("groq"), firecrawl: !!getCredential("firecrawl"), fal: !!getCredential("fal") },
+    spentToday: await spentToday(),
+    usageToday: await usageToday(),
     desktop: isDesktop(),
     defaults: DEFAULT_MODELS,
   };

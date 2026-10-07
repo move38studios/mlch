@@ -7,6 +7,18 @@ const id = z.string().min(1).max(80);
 const num = z.number().finite();
 const nullable = <T extends z.ZodType>(schema: T) => schema.nullable().optional();
 
+const gen = z.object({
+  id: z.string().max(80),
+  endpoint: z.string().max(200),
+  status: z.enum(["queued", "running", "done", "failed", "cancelled"]),
+  position: z.number().optional(),
+  log: z.string().max(500).optional(),
+  error: z.string().max(2000).optional(),
+  cost: z.number().optional(),
+  startedAt: num,
+  finishedAt: num.optional(),
+});
+
 const nodeFields = {
   kind: z.enum(NODE_KINDS as [string, ...string[]]),
   x: num,
@@ -20,6 +32,8 @@ const nodeFields = {
   fileName: z.string().max(500).optional(),
   docPath: z.string().max(500).optional(),
   groupId: id.optional(),
+  mime: z.string().max(100).optional(),
+  gen: gen.optional(),
   origin: z.string().max(120),
   userTouched: z.boolean().optional(),
   updatedAt: num.optional(),
@@ -40,6 +54,8 @@ const nodePatch = z.object({
   fileName: nullable(z.string().max(500)),
   docPath: nullable(z.string().max(500)),
   groupId: nullable(id),
+  mime: nullable(z.string().max(100)),
+  gen: nullable(gen),
   origin: z.string().max(120).optional(),
   userTouched: nullable(z.boolean()),
   updatedAt: nullable(num),

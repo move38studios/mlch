@@ -149,11 +149,11 @@ async function createWindow() {
 // npkn: the agent's eyes on an HTML artifact. Loads it in a hidden window (the
 // server sends the same sandboxing CSP), captures the first slides, pressing
 // ArrowRight between them, and reports script errors.
-const ARTIFACT_URL = /^\/api\/napkins\/[a-z0-9-]+\/artifacts\/[a-z0-9][a-z0-9._-]*\.(html|svg)$/;
+const ARTIFACT_URL = /^\/api\/napkins\/[a-z0-9-]+\/(artifacts\/[a-z0-9][a-z0-9._-]*\.(html|svg)|model-view\/[a-f0-9]{64}\.(glb|gltf))$/;
 async function renderArtifact(url, steps = 1) {
   let parsed;
   try { parsed = new URL(url, origin); } catch { throw new Error('Invalid page.'); }
-  if (parsed.origin !== origin || !ARTIFACT_URL.test(parsed.pathname)) throw new Error('Only napkin artifacts can be rendered.');
+  if (parsed.origin !== origin || !ARTIFACT_URL.test(parsed.pathname)) throw new Error('Only napkin artifacts and models can be rendered.');
   const view = new BrowserWindow({ show: false, width: 1280, height: 720, webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false } });
   const errors = [];
   view.webContents.on('console-message', (event) => { if (event.level === 'error' || event.level === 'warning') errors.push(String(event.message).slice(0, 300)); });
@@ -163,7 +163,8 @@ async function renderArtifact(url, steps = 1) {
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   try {
     await Promise.race([view.loadURL(parsed.href), wait(15_000)]);
-    await wait(900);
+    // 3D viewers load their model and libraries after the page itself.
+    await wait(parsed.pathname.includes('/model-view/') ? 4000 : 900);
     const images = [];
     const count = Math.max(1, Math.min(8, steps));
     for (let i = 0; i < count; i++) {

@@ -16,6 +16,7 @@ export const NODE_WIDTH: Record<NodeKind, number> = {
   image: 260,
   writeup: 320,
   artifact: 320,
+  media: 320,
   note: 220,
 };
 
@@ -30,6 +31,7 @@ const FALLBACK_HEIGHT: Record<NodeKind, number> = {
   image: 200,
   writeup: 220,
   artifact: 240,
+  media: 300,
   note: 70,
 };
 

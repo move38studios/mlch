@@ -19,6 +19,10 @@ import { NODE_KINDS, type Napkin, type NapkinNode, type NapkinOp, type NodeKind 
 import { assetPath, isImage } from "@/lib/ingest/ingest";
 import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
 import { desktopRequest } from "@/lib/desktop/server";
+import { modelSchema, searchModels } from "@/lib/media/fal";
+import { startGeneration, waitFor } from "@/lib/media/generations";
+import { viewForModel } from "@/lib/media/inspect";
+import { checkBudget, estimateCost } from "@/lib/media/spend";
 import { buildPptx, slideSchema, type Slide } from "@/lib/artifacts/pptx";
 import { hiddenEntry, imageForModel, resolveReadable } from "./files";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime } from "./types";
@@ -43,7 +47,12 @@ export type ToolName =
   | "make_pptx"
   | "make"
   | "present_file"
-  | "preview_artifact";
+  | "preview_artifact"
+  | "media_search"
+  | "media_schema"
+  | "media_generate"
+  | "media_wait"
+  | "media_view";
 
 export interface ToolContext {
   napkinId: string;
@@ -59,6 +68,12 @@ export interface ToolContext {
   onMake?: (brief: string) => void;
   /** Ids of nodes this job added, in order. */
   added: string[];
+  /** The person's request this job serves (for review turns after generations). */
+  brief?: string;
+  /** The vendor session of this turn, filled in as the turn starts. */
+  session?: { id?: string };
+  /** Review round when this job is itself a review (0 otherwise). */
+  reviewRound?: number;
   /** Origin stamped on what this job adds; default `agent:<jobId>`. The fast lane uses `speech:<jobId>`. */
   origin?: string;
 }
@@ -109,7 +124,7 @@ export function describeNapkin(napkin: Napkin, options: { textLimit?: number; ma
 
 /* ── definitions ───────────────────────────────────────────────── */
 
-const AI_KINDS = NODE_KINDS.filter((kind) => !["doc", "image", "note", "artifact", "writeup"].includes(kind)) as [NodeKind, ...NodeKind[]];
+const AI_KINDS = NODE_KINDS.filter((kind) => !["doc", "image", "note", "artifact", "writeup", "media"].includes(kind)) as [NodeKind, ...NodeKind[]];
 
 const newNodeShape = z.object({
   ref: z.string().max(40).optional().describe("Your temporary name for this item, to connect it to others in the same call."),
@@ -259,6 +274,56 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     },
     readOnly: false,
   },
+  media_search: {
+    name: "media_search",
+    title: "Find models",
+    description:
+      "Search fal's catalogue of generative models (image, video, speech, music, 3D, editing, upscaling…). Returns endpoint ids, what they do, how recent, and price. " +
+      "Filter by category (e.g. text-to-image, image-to-image, text-to-video, image-to-video, video-to-video, text-to-speech, text-to-audio, audio-to-audio, image-to-3d, text-to-3d) and/or a query. Prefer recent, well-known models.",
+    inputShape: { query: z.string().max(200).optional(), category: z.string().max(60).optional() },
+    readOnly: true,
+  },
+  media_schema: {
+    name: "media_schema",
+    title: "Model inputs",
+    description: "The input and output schema and price of a fal model (endpoint id from media_search). Read it before media_generate.",
+    inputShape: { endpoint: z.string().max(200) },
+    readOnly: true,
+  },
+  media_generate: {
+    name: "media_generate",
+    title: "Generate",
+    description:
+      "Start a generation on fal. Puts a card on the napkin right away that shows progress; returns the generation id without waiting. " +
+      "To use napkin items as inputs (an image to animate or edit, audio, video), put \"napkin:<item id>\" where the schema wants a URL. " +
+      "Costs money: give estimated_cost_usd from the price. Use media_wait to see results within this turn, or review: true for long jobs (video, 3D) to be called back when done.",
+    inputShape: {
+      endpoint: z.string().max(200),
+      input: z.record(z.string(), z.unknown()).describe("Input matching the model's schema."),
+      title: z.string().max(80).describe("Short card title."),
+      prompt: z.string().max(2000).describe("What this is, in plain words, for the card."),
+      estimated_cost_usd: z.number().min(0).max(100).optional(),
+      near: z.array(z.string()).max(6).optional(),
+      review: z.boolean().optional().describe("Call you back to check the result when it finishes (use for jobs over ~2 minutes)."),
+    },
+    readOnly: false,
+  },
+  media_wait: {
+    name: "media_wait",
+    title: "Wait for media",
+    description:
+      "Wait for generations to finish (up to max_seconds, at most 300) and see the results: images as images, video as sampled frames, speech transcribed, 3D rendered from four sides. " +
+      "Ids are generation ids or media item ids.",
+    inputShape: { ids: z.array(z.string()).min(1).max(8), max_seconds: z.number().int().min(5).max(300).optional() },
+    readOnly: true,
+  },
+  media_view: {
+    name: "media_view",
+    title: "Look at media",
+    description: "See a media or image item on the napkin (images as images, video as frames, speech transcribed, 3D from four sides).",
+    inputShape: { id: z.string() },
+    readOnly: true,
+  },
   make: {
     name: "make",
     title: "Make with tools",
@@ -340,6 +405,9 @@ function slugify(title: string): string {
   );
 }
 
+/** Review turns after a generation, per request. */
+export const MAX_REVIEW_ROUNDS = 3;
+
 const READ_LIMIT = 30_000;
 const SKIP_DIRS = new Set(["node_modules", ".git", ".next", "dist", "build", "__pycache__", ".venv"]);
 
@@ -383,6 +451,12 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
     ]);
     ctx.added.push(id);
     return id;
+  }
+
+  async function viewNode(id: string): Promise<{ text: string; images: NonNullable<AgentToolResult["images"]> }> {
+    const node = (await getNapkin(ctx.napkinId)).nodes[id];
+    if (!node?.assetId) return { text: `${id} has no media file${node?.gen ? ` (generation ${node.gen.status})` : ""}.`, images: [] };
+    return viewForModel(assetPath(ctx.napkinId, node.assetId), node.mime, `/api/napkins/${ctx.napkinId}/model-view/${node.assetId}`);
   }
 
   const handlers: Record<ToolName, (args: Record<string, unknown>) => Promise<AgentToolResult>> = {
@@ -598,6 +672,88 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
         ...ok(`${value.images.length} screenshot(s) of ${docPath}, in order. ${errors}`, `Looked at ${path.basename(docPath)}`),
         images: value.images.map((data) => ({ data, mimeType: "image/png" })),
       };
+    },
+
+    async media_search(args) {
+      const { query, category } = args as { query?: string; category?: string };
+      const models = await searchModels({ query, category, limit: 40 });
+      if (!models.length) return ok("No models found. Try a broader query or another category.", "Found none");
+      return ok(
+        models.map((m) => `${m.endpoint} — ${m.name} [${m.category}] ${m.updated}${m.price ? ` · ${m.price}` : ""}\n  ${m.description}`).join("\n"),
+        `Found ${models.length} models`,
+      );
+    },
+
+    async media_schema(args) {
+      const schema = await modelSchema((args as { endpoint: string }).endpoint);
+      return ok(
+        `${schema.endpoint}${schema.price ? ` · ${schema.price}` : " · no listed price"}\n\nInput:\n${JSON.stringify(schema.input)}\n\nOutput:\n${JSON.stringify(schema.output ?? {})}`.slice(0, 30_000),
+        "Read model inputs",
+      );
+    },
+
+    async media_generate(args) {
+      const { endpoint, input, title, prompt, estimated_cost_usd, near, review } = args as {
+        endpoint: string; input: Record<string, unknown>; title: string; prompt: string; estimated_cost_usd?: number; near?: string[]; review?: boolean;
+      };
+      const estimate = await estimateCost(endpoint, input);
+      const cost = Math.max(estimate.usd ?? 0, estimated_cost_usd ?? 0);
+      if (estimate.usd === undefined && estimated_cost_usd === undefined) {
+        return fail(`fal lists no price for ${endpoint} that can be estimated (${estimate.basis}). Give estimated_cost_usd from the model page or pick a model with a listed price.`);
+      }
+      const budget = await checkBudget(cost);
+      if (!budget.ok) return fail(budget.message);
+      const round = (ctx.reviewRound ?? 0) + 1;
+      const record = await startGeneration({
+        napkinId: ctx.napkinId,
+        endpoint,
+        input,
+        title,
+        prompt,
+        near,
+        origin,
+        cost,
+        ...(review && round <= MAX_REVIEW_ROUNDS ? { review: { brief: ctx.brief ?? prompt, round, sessionId: ctx.session?.id } } : {}),
+      });
+      ctx.added.push(record.nodeId);
+      if (record.status === "failed") return fail(`Generation failed to start: ${record.error}`);
+      return ok(
+        `Started ${record.id} (item ${record.nodeId}), estimated $${cost.toFixed(3)} (${estimate.basis}).${review ? (round <= MAX_REVIEW_ROUNDS ? " You will be called back to review it when it finishes." : " No more review rounds: check it with media_wait or leave it.") : " Use media_wait to see it."}`,
+        `Started ${title}`,
+      );
+    },
+
+    async media_wait(args) {
+      const { ids, max_seconds = 120 } = args as { ids: string[]; max_seconds?: number };
+      const napkin = await getNapkin(ctx.napkinId);
+      const genIds: string[] = [];
+      for (const id of ids) {
+        const gen = napkin.nodes[id]?.gen?.id ?? id;
+        genIds.push(gen);
+      }
+      const records = await waitFor(ctx.napkinId, genIds, max_seconds * 1000);
+      const lines: string[] = [];
+      const images: NonNullable<AgentToolResult["images"]> = [];
+      for (const id of genIds) {
+        const record = records.find((r) => r.id === id);
+        if (!record) {
+          lines.push(`${id}: unknown generation.`);
+          continue;
+        }
+        if (record.status !== "done") {
+          lines.push(`${record.id} (item ${record.nodeId}): ${record.status}${record.error ? ` — ${record.error}` : ""}`);
+          continue;
+        }
+        const view = await viewNode(record.nodeId);
+        lines.push(`${record.id} (item ${record.nodeId}${record.extraNodeIds.length ? ` and ${record.extraNodeIds.join(", ")}` : ""}): done. ${view.text}`);
+        images.push(...view.images.slice(0, Math.max(0, 12 - images.length)));
+      }
+      return { ...ok(lines.join("\n"), "Checked media"), images };
+    },
+
+    async media_view(args) {
+      const view = await viewNode((args as { id: string }).id);
+      return { ...ok(view.text, "Looked at media"), images: view.images };
     },
 
     async make(args) {

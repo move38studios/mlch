@@ -25,6 +25,8 @@ export const settingsSchema = z.object({
     .object({ claude: lanes.default({}), codex: lanes.default({}) })
     .default({ claude: {}, codex: {} }),
   enrich: z.array(z.enum(ENRICHMENTS)).default([...ENRICHMENTS]),
+  /** Paid generation (fal) stops for the day at this many US dollars. */
+  dailySpendCapUsd: z.number().min(0).max(1000).default(10),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;

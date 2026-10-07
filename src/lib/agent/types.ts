@@ -87,6 +87,8 @@ export interface AgentHarnessStatus {
   };
   /** The terminal command that signs in with the vendor's own flow. */
   signInCommand: string;
+  /** npkn: the plan's usage windows at the last check (percent used), when the vendor reports them. */
+  planUsage?: Array<{ name: string; percent: number; resetsAt?: number; at: number }>;
 }
 
 /** Options for {@link AgentHarness.startSignIn}. */

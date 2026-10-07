@@ -7,6 +7,7 @@ import { ExternalLink, FolderOpen, X } from "lucide-react";
 import { desktop } from "@/lib/desktop/client";
 import { useNapkin } from "@/lib/napkin/client";
 import { KIND_STYLES } from "./kinds";
+import { MediaPlayer } from "./MediaBody";
 import { useCanvasUi } from "./ui";
 
 /** The full content of one node: long write-ups, documents, search results. */
@@ -64,7 +65,19 @@ export function SidePanel() {
         </button>
       </div>
       <div className="flex-1 overflow-auto px-6 py-5">
+        {node.kind === "media" && napkinId && (
+          <div className="-mx-6 -mt-5 mb-4 bg-paper-2">
+            <MediaPlayer node={node} napkinId={napkinId} large />
+          </div>
+        )}
         {node.title && <h2 className="text-lg font-semibold mb-3">{node.title}</h2>}
+        {node.gen && (
+          <p className="text-xs text-ink-3 mb-3">
+            {node.gen.endpoint}
+            {node.gen.cost !== undefined && ` · about $${node.gen.cost.toFixed(3)}`}
+            {node.gen.error && ` · ${node.gen.error}`}
+          </p>
+        )}
         <div className="napkin-md napkin-md-full text-[14px] leading-relaxed">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
         </div>
