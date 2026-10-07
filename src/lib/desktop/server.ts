@@ -35,7 +35,7 @@ export function isDesktop(): boolean {
   return process.env.NPKN_ELECTRON === "1";
 }
 
-export async function desktopRequest(type: "reveal" | "choose-directory", payload?: Record<string, unknown>): Promise<BridgeResult> {
+export async function desktopRequest(type: "reveal" | "open" | "choose-directory" | "render", payload?: Record<string, unknown>): Promise<BridgeResult> {
   const bridge = (globalThis as DesktopGlobals).__npknDesktop;
   if (!bridge) return { ok: false, error: "Only available in the desktop app." };
   return bridge.request(type, payload);

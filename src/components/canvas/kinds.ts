@@ -23,5 +23,6 @@ export const KIND_STYLES: Record<NodeKind, KindStyle> = {
   doc: { label: "File", card: "bg-white border border-line shadow-sm text-[13px] leading-snug", markdown: true, clamp: 8 },
   link: { label: "Link", card: "bg-white border border-line shadow-sm text-[13px] leading-snug", markdown: true, clamp: 7 },
   image: { card: "bg-white border border-line shadow-sm text-[12px]", clamp: 3 },
+  artifact: { label: "File", card: "bg-white border border-ink/25 shadow-md text-[13px] leading-snug", clamp: 4 },
   writeup: { label: "Write-up", card: "bg-white border border-ink/25 shadow-md text-[13px] leading-snug", markdown: true, clamp: 14 },
 };

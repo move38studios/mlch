@@ -1,7 +1,7 @@
 /** Adding dropped things to a napkin and reading them in the background. Server-only. */
 
 import path from "node:path";
-import { submitIngest } from "@/lib/agent/jobs";
+import { submitImage, submitIngest } from "@/lib/agent/jobs";
 import { newClientId } from "@/lib/napkin/ids";
 import { NODE_WIDTH } from "@/lib/napkin/sizes";
 import { applyToNapkin, emit } from "@/lib/napkin/store";
@@ -38,7 +38,11 @@ function failed(napkinId: string, nodeId: string, message: string) {
 export async function addFile(napkinId: string, bytes: Buffer, fileName: string, at: { x: number; y: number }): Promise<NapkinNode> {
   const assetId = await saveAsset(napkinId, bytes, fileName);
   const name = path.basename(fileName).slice(0, 200);
-  if (isImage(fileName)) return addNode(napkinId, "image", at, { assetId, fileName: name });
+  if (isImage(fileName)) {
+    const node = await addNode(napkinId, "image", at, { assetId, fileName: name });
+    submitImage(napkinId, node.id, `Looking at ${name}`);
+    return node;
+  }
   const node = await addNode(napkinId, "doc", at, { assetId, fileName: name, title: name, text: "Reading…" });
   void (async () => {
     const text = await extractFile(bytes, fileName);

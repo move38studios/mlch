@@ -8,6 +8,7 @@ import { HistoryBar } from "./History";
 import { useCanvasUi } from "./ui";
 import { desktop } from "@/lib/desktop/client";
 import { useNapkin } from "@/lib/napkin/client";
+import { ArtifactViewer } from "./ArtifactViewer";
 import { Canvas } from "./Canvas";
 import { InputBar } from "./InputBar";
 import { JobStatus } from "./JobStatus";
@@ -132,6 +133,7 @@ export function NapkinView({ id }: { id: string }) {
             <>
               <Canvas napkin={shown} />
               {!preview && <InputBar napkinId={id} />}
+              <ArtifactViewer />
             </>
           ) : null}
         </div>

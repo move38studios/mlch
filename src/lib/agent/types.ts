@@ -151,7 +151,25 @@ export interface HarnessTurnParams {
   effort?: string;
   /** Turn on the harness's own web search and fetch. */
   webAccess?: boolean;
+  /**
+   * Run with the CLI's own tools (shell, file editing) inside its OS sandbox,
+   * for making files. Absent: only our tools.
+   */
+  workspace?: AgentWorkspace;
   signal: AbortSignal;
+}
+
+export interface AgentWorkspace {
+  /** Working directory; writable. */
+  cwd: string;
+  /** Other absolute folders the sandbox may write. */
+  writable: string[];
+  /** Absolute folders it may not read. */
+  readDenied: string[];
+  /** Hosts sandboxed commands may reach (package registries). */
+  networkDomains: string[];
+  /** Extra environment for commands (caches kept inside the workspace). */
+  env: Record<string, string>;
 }
 
 export interface AgentHarness {
@@ -192,6 +210,8 @@ export interface AgentToolResult {
   summary: string;
   /** Napkin changes the tool made, in order. Empty for read-only tools and failures. */
   ops: NapkinOp[];
+  /** Images returned to the model with the text (base64, no data: prefix). */
+  images?: Array<{ data: string; mimeType: string }>;
 }
 
 export interface AgentToolRuntime {

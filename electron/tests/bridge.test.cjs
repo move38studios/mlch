@@ -76,7 +76,7 @@ test('a request main never answers times out, and a folder picker waits longer',
 
 test('unknown requests and an unreachable main fail without waiting', async () => {
   const { bridge, posted } = client();
-  for (const type of ['open', '__proto__', undefined]) assert.deepEqual(await bridge.request(type, {}), { ok: false, error: 'The desktop app does not handle that request.' });
+  for (const type of ['launch', '__proto__', undefined]) assert.deepEqual(await bridge.request(type, {}), { ok: false, error: 'The desktop app does not handle that request.' });
   assert.equal(posted.length, 0);
   const closed = createBridgeClient({ post: () => { throw new Error('Port closed'); } });
   assert.deepEqual(await closed.request('reveal', { path: '/a' }), { ok: false, error: 'The desktop app is not reachable.' });
@@ -167,7 +167,7 @@ test('main opens the folder picker with the requested title, in both message for
 test('main ignores what it does not answer and never throws', async () => {
   const { handle, shell } = main();
   for (const message of [null, 'bridge', { type: 'bridge' }, { type: 'bridge', id: '1' }, { type: 'log', id: 1 }, { type: 'ready', id: 1 }]) assert.equal(await handle(message), undefined);
-  for (const request of [undefined, null, { type: 'open' }, { type: 'constructor' }, { type: '__proto__', payload: 'x' }]) {
+  for (const request of [undefined, null, { type: 'launch' }, { type: 'constructor' }, { type: '__proto__', payload: 'x' }]) {
     assert.deepEqual(await handle({ type: 'bridge', id: 1, request }), { type: 'bridge-result', id: 1, result: { ok: false, error: 'The desktop app does not handle that request.' } });
   }
   shell.showItemInFolder = () => { throw new Error('Finder is busy'); };

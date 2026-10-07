@@ -26,6 +26,8 @@ export type NodeKind =
   | "image"
   /** Markdown produced by the AI. */
   | "writeup"
+  /** A file the AI made: an HTML page or deck, a PowerPoint, … (in artifacts/). */
+  | "artifact"
   /** Free text the user typed onto the canvas. */
   | "note";
 
@@ -39,6 +41,7 @@ export const NODE_KINDS: readonly NodeKind[] = [
   "link",
   "image",
   "writeup",
+  "artifact",
   "note",
 ];
 
@@ -64,7 +67,7 @@ export interface NapkinNode {
   assetId?: string;
   /** File name shown for doc and image nodes. */
   fileName?: string;
-  /** Path of a write-up relative to the napkin folder (docs/<slug>.md). */
+  /** File the item stands for, relative to the napkin folder (docs/<slug>.md, artifacts/<slug>.html). */
   docPath?: string;
   groupId?: string;
   origin: Origin;

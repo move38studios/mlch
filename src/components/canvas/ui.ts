@@ -7,6 +7,9 @@ interface CanvasUi {
   editingId?: string;
   /** Node whose full content is open in the side panel. */
   openId?: string;
+  /** Artifact shown full-window over the canvas. */
+  viewerId?: string;
+  setViewer(id?: string): void;
   /** Looking at a past checkpoint: nothing can be changed. */
   readOnly: boolean;
   setEditing(id?: string): void;
@@ -17,4 +20,5 @@ export const useCanvasUi = create<CanvasUi>((set) => ({
   readOnly: false,
   setEditing: (editingId) => set({ editingId }),
   setOpen: (openId) => set({ openId }),
+  setViewer: (viewerId) => set({ viewerId }),
 }));

@@ -1,5 +1,6 @@
 import { handle, jsonError } from "@/lib/http";
 import { desktopRequest } from "@/lib/desktop/server";
+import { ARTIFACT_PATH } from "@/lib/artifacts/artifacts";
 import { ASSET_ID, assetPath } from "@/lib/ingest/ingest";
 import { napkinDir } from "@/lib/napkin/store";
 import path from "node:path";
@@ -16,7 +17,7 @@ export async function POST(request: Request, { params }: Params) {
   if (typeof body.assetId === "string") {
     if (!ASSET_ID.test(body.assetId)) return jsonError(400, "Invalid asset.");
     target = assetPath(id, body.assetId);
-  } else if (typeof body.docPath === "string" && /^docs\/[a-z0-9-]+\.md$/.test(body.docPath)) {
+  } else if (typeof body.docPath === "string" && (/^docs\/[a-z0-9-]+\.md$/.test(body.docPath) || ARTIFACT_PATH.test(body.docPath))) {
     target = path.join(napkinDir(id), body.docPath);
   } else target = path.join(napkinDir(id), "napkin.json");
   return handle(async () => {

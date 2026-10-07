@@ -32,6 +32,7 @@ import type {
   AgentSignInStart,
   AgentSignInState,
   AgentToolDefinition,
+  AgentToolResult,
   AgentToolRuntime,
   HarnessEvent,
   HarnessTurnParams,
@@ -50,6 +51,7 @@ import {
   type CodexUsageVerdict,
 } from "./codexStatus";
 import { buildCodexEnv } from "./env";
+import { runCodexExec } from "./codexExec";
 import { withConversationHistory } from "./history";
 import { executeTool } from "./toolExecution";
 
@@ -281,8 +283,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function toolReply(text: string, success: boolean) {
-  return { contentItems: [{ type: "inputText", text }], success };
+// npkn: images (view_image) go back as inputImage data URLs.
+function toolReply(text: string, success: boolean, images: AgentToolResult["images"] = []) {
+  return {
+    contentItems: [
+      { type: "inputText", text },
+      ...images.map((image) => ({ type: "inputImage", imageUrl: `data:${image.mimeType};base64,${image.data}` })),
+    ],
+    success,
+  };
 }
 
 /** Whether a sparse `account/rateLimits/updated` snapshot says a limit may have been reached. */
@@ -342,7 +351,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
       return toolReply("That request was stopped, so the tool didn't run.", false);
     }
     const result = await executeTool(active.runtime, params.tool, params.arguments ?? {});
-    return toolReply(result.text, result.ok);
+    return toolReply(result.text, result.ok, result.images);
   }
 
   /** The app-server for this binary, with our handlers attached. */
@@ -959,6 +968,11 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
   }
 
   async function* runTurn(params: HarnessTurnParams): AsyncGenerator<HarnessEvent> {
+    // npkn: making turns need Codex's own tools, which the app-server has switched off.
+    if (params.workspace) {
+      yield* runCodexExec(params);
+      return;
+    }
     const lookup = deps.lookupBinary();
     if (lookup.path === null) {
       yield { type: "error", code: "not_installed", message: lookup.problem };

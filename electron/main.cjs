@@ -125,6 +125,12 @@ async function createWindow() {
     event.preventDefault(); openExternal(url);
   });
   current.webContents.on('will-attach-webview', event => event.preventDefault());
+  // Frames inside the page (artifacts) may not navigate anywhere else.
+  current.webContents.on('will-frame-navigate', (event) => {
+    if (event.isMainFrame) return;
+    try { if (new URL(event.url).origin === origin) return; } catch {}
+    event.preventDefault();
+  });
   current.webContents.on('render-process-gone', async (_event, details) => {
     log(`Renderer stopped: ${details.reason}`);
     if (quitting) return;
@@ -138,6 +144,41 @@ async function createWindow() {
   current.webContents.on('did-finish-load', sendStatus);
   current.on('closed', () => { clearTimeout(saveTimer); window = undefined; });
   await current.loadURL(origin);
+}
+
+// npkn: the agent's eyes on an HTML artifact. Loads it in a hidden window (the
+// server sends the same sandboxing CSP), captures the first slides, pressing
+// ArrowRight between them, and reports script errors.
+const ARTIFACT_URL = /^\/api\/napkins\/[a-z0-9-]+\/artifacts\/[a-z0-9][a-z0-9._-]*\.(html|svg)$/;
+async function renderArtifact(url, steps = 1) {
+  let parsed;
+  try { parsed = new URL(url, origin); } catch { throw new Error('Invalid page.'); }
+  if (parsed.origin !== origin || !ARTIFACT_URL.test(parsed.pathname)) throw new Error('Only napkin artifacts can be rendered.');
+  const view = new BrowserWindow({ show: false, width: 1280, height: 720, webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  const errors = [];
+  view.webContents.on('console-message', (event) => { if (event.level === 'error' || event.level === 'warning') errors.push(String(event.message).slice(0, 300)); });
+  view.webContents.on('render-process-gone', () => errors.push('The page crashed.'));
+  view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  view.webContents.on('will-navigate', (event) => event.preventDefault());
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  try {
+    await Promise.race([view.loadURL(parsed.href), wait(15_000)]);
+    await wait(900);
+    const images = [];
+    const count = Math.max(1, Math.min(8, steps));
+    for (let i = 0; i < count; i++) {
+      if (i > 0) {
+        view.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
+        view.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' });
+        await wait(700);
+      }
+      const image = await view.webContents.capturePage();
+      images.push(image.resize({ width: 960 }).toPNG().toString('base64'));
+    }
+    return { images, errors: [...new Set(errors)].slice(0, 20) };
+  } finally {
+    view.destroy();
+  }
 }
 
 function guarded(handler) {
@@ -197,7 +238,7 @@ else {
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
       redactor.add(values); backend?.post({ type: 'secrets', values });
     });
-    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, log });
+    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, log });
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('NPKN_ELECTRON_PORT must be a port number between 1 and 65535.');
     backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
       entry: path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,

@@ -5,7 +5,7 @@ const config = {
   reactStrictMode: true,
   // The agent spawns the Claude Code and Codex CLIs, which these packages locate
   // relative to their own install path; bundling them breaks that lookup.
-  serverExternalPackages: ['@anthropic-ai/claude-agent-sdk', '@openai/codex', 'unpdf', 'mammoth'],
+  serverExternalPackages: ['@anthropic-ai/claude-agent-sdk', '@openai/codex', 'unpdf', 'mammoth', 'sharp', 'pptxgenjs'],
   images: { unoptimized: true },
   devIndicators: false,
   experimental: { serverActions: { bodySizeLimit: '100mb' } },

@@ -60,14 +60,73 @@ function Editor({ node, onDone }: { node: NapkinNode; onDone: () => void }) {
   );
 }
 
+export async function openFile(napkinId: string, docPath: string, action: "open" | "reveal") {
+  await fetch(`/api/napkins/${napkinId}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docPath }) });
+}
+
+function ArtifactBody({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
+  const setViewer = useCanvasUi((s) => s.setViewer);
+  const ext = node.docPath?.split(".").pop() ?? "";
+  const viewable = ext === "html" || ext === "svg";
+  const src = node.docPath ? `/api/napkins/${napkinId}/${node.docPath}` : undefined;
+  const label = ext === "pptx" ? "PowerPoint" : ext.toUpperCase();
+  return (
+    <div>
+      {viewable && src && (
+        <div className="relative h-[180px] overflow-hidden rounded-t-[inherit] border-b border-line bg-paper-2">
+          {/* A live, non-interactive thumbnail: the page at 1280px wide, scaled down. */}
+          <iframe
+            src={src}
+            sandbox="allow-scripts"
+            tabIndex={-1}
+            title={node.title ?? "Preview"}
+            className="pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-white"
+            style={{ width: 1280, height: 720, transform: `scale(${(node.w ?? 320) / 1280})` }}
+          />
+        </div>
+      )}
+      <div className="px-3.5 py-3">
+        <div className="flex items-center gap-1.5 mb-1.5 text-[10.5px] uppercase tracking-wider text-ink-3 font-medium">
+          <FileText size={11} /> {label}
+          <span className="normal-case tracking-normal truncate">{node.fileName}</span>
+        </div>
+        {node.title && <div className="font-semibold mb-1 leading-snug">{node.title}</div>}
+        <p className="whitespace-pre-wrap text-ink-2 line-clamp-3">{node.text}</p>
+        {node.docPath && (
+          <div className="nodrag flex gap-1.5 mt-2.5">
+            {viewable ? (
+              <button onClick={() => setViewer(node.id)} className="px-2 py-1 rounded bg-ink text-paper text-xs">
+                Open
+              </button>
+            ) : (
+              <button onClick={() => openFile(napkinId, node.docPath!, "open")} className="px-2 py-1 rounded bg-ink text-paper text-xs">
+                Open
+              </button>
+            )}
+            <button onClick={() => openFile(napkinId, node.docPath!, "reveal")} className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2">
+              Show in Finder
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Body({ node, napkinId }: { node: NapkinNode; napkinId: string }) {
   const style = KIND_STYLES[node.kind];
+  if (node.kind === "artifact") return <ArtifactBody node={node} napkinId={napkinId} />;
   if (node.kind === "image" && node.assetId) {
     return (
       <div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={`/api/napkins/${napkinId}/assets/${node.assetId}`} alt={node.text || node.fileName || ""} className="block w-full rounded-t-[inherit]" draggable={false} />
-        {(node.title || node.fileName) && <div className="px-3 py-2 text-ink-2 truncate">{node.title || node.fileName}</div>}
+        {(node.title || node.fileName || node.text) && (
+          <div className="px-3 py-2">
+            <div className="text-ink-2 font-medium truncate">{node.title || node.fileName}</div>
+            {node.text && <p className="text-ink-2 mt-0.5 line-clamp-3">{node.text}</p>}
+          </div>
+        )}
       </div>
     );
   }
@@ -116,7 +175,7 @@ function NodeViewImpl({ data, selected }: NodeProps<NapkinFlowNode>) {
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        if (node.kind !== "image" && !readOnly) setEditing(node.id);
+        if (node.kind !== "image" && node.kind !== "artifact" && !readOnly) setEditing(node.id);
       }}
     >
       <Handle type="target" position={Position.Left} className="napkin-handle-target" isConnectableStart={false} />

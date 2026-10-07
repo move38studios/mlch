@@ -13,9 +13,14 @@ import path from "node:path";
 import { z } from "zod";
 import { newClientId } from "@/lib/napkin/ids";
 import { arrangeGroups, boundsOf, placeNear } from "@/lib/napkin/place";
-import { estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/napkin/sizes";
+import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/napkin/sizes";
 import { applyToNapkin, atomicWriteFile, emit, getNapkin, napkinDir } from "@/lib/napkin/store";
 import { NODE_KINDS, type Napkin, type NapkinNode, type NapkinOp, type NodeKind } from "@/lib/napkin/types";
+import { assetPath, isImage } from "@/lib/ingest/ingest";
+import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
+import { desktopRequest } from "@/lib/desktop/server";
+import { buildPptx, slideSchema, type Slide } from "@/lib/artifacts/pptx";
+import { hiddenEntry, imageForModel, resolveReadable } from "./files";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime } from "./types";
 
 export type ToolName =
@@ -30,7 +35,15 @@ export type ToolName =
   | "hand_off"
   | "set_title"
   | "list_files"
-  | "read_file";
+  | "find_files"
+  | "read_file"
+  | "view_image"
+  | "caption_image"
+  | "write_artifact"
+  | "make_pptx"
+  | "make"
+  | "present_file"
+  | "preview_artifact";
 
 export interface ToolContext {
   napkinId: string;
@@ -38,10 +51,12 @@ export interface ToolContext {
   tools: ToolName[];
   /** An explicit command may change what the user made. */
   allowUserEdits?: boolean;
-  /** Folder the file tools may read (folder ingestion). */
+  /** Folder the file tools may read: a picked folder, or the home folder for instructions. */
   readRoot?: string;
   /** For hand_off: queue a command job with this instruction. */
   onHandOff?: (instruction: string) => void;
+  /** For make: queue a making job with this brief. */
+  onMake?: (brief: string) => void;
   /** Ids of nodes this job added, in order. */
   added: string[];
   /** Origin stamped on what this job adds; default `agent:<jobId>`. The fast lane uses `speech:<jobId>`. */
@@ -94,11 +109,11 @@ export function describeNapkin(napkin: Napkin, options: { textLimit?: number; ma
 
 /* ── definitions ───────────────────────────────────────────────── */
 
-const AI_KINDS = NODE_KINDS.filter((kind) => kind !== "doc" && kind !== "image" && kind !== "note") as [NodeKind, ...NodeKind[]];
+const AI_KINDS = NODE_KINDS.filter((kind) => !["doc", "image", "note", "artifact", "writeup"].includes(kind)) as [NodeKind, ...NodeKind[]];
 
 const newNodeShape = z.object({
   ref: z.string().max(40).optional().describe("Your temporary name for this item, to connect it to others in the same call."),
-  kind: z.enum(AI_KINDS).describe("idea | question | search | definition | example | link | writeup"),
+  kind: z.enum(AI_KINDS).describe("idea | question | search | definition | example | link"),
   title: z.string().max(200).optional().describe("Short heading. Required for search, definition and link."),
   text: z.string().max(6000).describe("The content. Markdown allowed except for idea and question."),
   url: z.string().max(2000).optional().describe("Source URL for search and link items."),
@@ -205,19 +220,103 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     inputShape: { title: z.string().min(1).max(60) },
     readOnly: false,
   },
+  write_artifact: {
+    name: "write_artifact",
+    title: "Make file",
+    description:
+      "Save a file you wrote (an HTML page or slide deck, SVG, markdown, CSV, JSON, text) in the napkin's artifacts folder and put a card for it on the napkin. " +
+      "HTML opens full-window inside npkn and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
+      "images only as data: URIs. It cannot fetch anything at runtime and cannot open other pages.",
+    inputShape: {
+      title: z.string().max(120),
+      extension: z.enum(["html", "svg", "md", "csv", "json", "txt"]),
+      content: z.string().max(600_000),
+      description: z.string().max(400).describe("One or two sentences for the card."),
+      near: z.array(z.string()).max(6).optional(),
+      replace: z.string().max(200).optional().describe("Path of an artifact you made earlier (e.g. artifacts/deck.html) to overwrite with this content instead of making a new one."),
+    },
+    readOnly: false,
+  },
+  preview_artifact: {
+    name: "preview_artifact",
+    title: "Look at page",
+    description:
+      "Render an HTML or SVG artifact as the person will see it (1280x720) and get screenshots back, plus any script errors. " +
+      "`slides` > 1 presses the right arrow between screenshots. Use it after writing HTML, fix what is wrong with write_artifact `replace`, and look again.",
+    inputShape: { path: z.string().max(200), slides: z.number().int().min(1).max(8).optional() },
+    readOnly: true,
+  },
+  make_pptx: {
+    name: "make_pptx",
+    title: "Make PowerPoint",
+    description: "Build a PowerPoint (.pptx) deck from a list of slides, save it in the napkin's artifacts folder and put a card for it on the napkin. Layout and styling are done for you.",
+    inputShape: {
+      title: z.string().max(120),
+      slides: z.array(slideSchema).min(1).max(60),
+      accent: z.string().max(7).optional().describe("Accent colour as hex, e.g. D2491F."),
+      description: z.string().max(400).describe("One or two sentences for the card."),
+      near: z.array(z.string()).max(6).optional(),
+    },
+    readOnly: false,
+  },
+  make: {
+    name: "make",
+    title: "Make with tools",
+    description:
+      "Start a making job: Claude Code or Codex with its own shell and file tools in a sandbox (Python, python-pptx, node, and so on), for files that need real tools: " +
+      "PowerPoint decks, Word or PDF documents, spreadsheets, charts. It saves results in the napkin's artifacts folder and they appear on the napkin. " +
+      "Give a complete brief: what to make, for whom, the format, and which napkin items it should draw on.",
+    inputShape: { brief: z.string().min(10).max(8000) },
+    readOnly: true,
+  },
+  present_file: {
+    name: "present_file",
+    title: "Put file on napkin",
+    description: "Put a card on the napkin for a file you saved in the artifacts folder (path relative to it, e.g. deck.pptx).",
+    inputShape: {
+      path: z.string().max(300),
+      title: z.string().max(120),
+      description: z.string().max(400),
+      near: z.array(z.string()).max(6).optional(),
+    },
+    readOnly: false,
+  },
   list_files: {
     name: "list_files",
     title: "List files",
-    description: "List files and folders under a path inside the folder being explored (relative path, '' for the top).",
+    description: "List files and folders under a path (relative to the readable root, or absolute inside it; '' for the root). Read-only.",
     inputShape: { path: z.string().max(1000) },
+    readOnly: true,
+  },
+  find_files: {
+    name: "find_files",
+    title: "Find files",
+    description: "Find files or folders whose name contains `name` (case-insensitive), searching up to 6 levels under `under`. Read-only.",
+    inputShape: { name: z.string().min(1).max(200), under: z.string().max(1000).optional() },
     readOnly: true,
   },
   read_file: {
     name: "read_file",
     title: "Read file",
-    description: "Read a text file inside the folder being explored (relative path). Long files are cut; pass `offset` (characters) to read further.",
+    description:
+      "Read a file (relative to the readable root, or absolute inside it). Text, PDF and Word files come back as text; images come back as images. " +
+      "Long text is cut; pass `offset` (characters) to read further. Read-only.",
     inputShape: { path: z.string().max(1000), offset: z.number().int().min(0).optional() },
     readOnly: true,
+  },
+  view_image: {
+    name: "view_image",
+    title: "Look at image",
+    description: "See an image item on the napkin (by id).",
+    inputShape: { id: z.string() },
+    readOnly: true,
+  },
+  caption_image: {
+    name: "caption_image",
+    title: "Caption image",
+    description: "Set an image item's title and caption (what it shows and why it matters, 1-3 sentences). Only for images without a caption, unless the person asked.",
+    inputShape: { id: z.string(), title: z.string().max(120).optional(), text: z.string().max(1000) },
+    readOnly: false,
   },
 };
 
@@ -239,12 +338,6 @@ function slugify(title: string): string {
       .replace(/^-+|-+$/g, "")
       .slice(0, 60) || "doc"
   );
-}
-
-/** Resolve a path inside root, or undefined if it escapes. */
-function inside(root: string, relative: string): string | undefined {
-  const target = path.resolve(root, relative.replace(/^\/+/, ""));
-  return target === root || target.startsWith(root + path.sep) ? target : undefined;
 }
 
 const READ_LIMIT = 30_000;
@@ -278,6 +371,18 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
       ops.push({ op: "addEdge", edge: { id: newClientId("e"), source, target, ...(edge.label ? { label: edge.label } : {}), origin, createdAt: Date.now() } });
     }
     return ops;
+  }
+
+  async function addArtifactCard(title: string, description: string, docPath: string, near?: string[]): Promise<string> {
+    const napkin = await getNapkin(ctx.napkinId);
+    const id = newClientId("n");
+    const anchors = (near ?? []).filter((key) => napkin.nodes[key]);
+    const position = placeNear(napkin, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, { anchorIds: anchors, seed: id });
+    await commit([
+      { op: "addNode", node: { id, kind: "artifact", x: position.x, y: position.y, title, text: description, docPath, fileName: path.basename(docPath), origin, createdAt: Date.now() } },
+    ]);
+    ctx.added.push(id);
+    return id;
   }
 
   const handlers: Record<ToolName, (args: Record<string, unknown>) => Promise<AgentToolResult>> = {
@@ -450,10 +555,71 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
       return ok("Named.", "Named the napkin", ops);
     },
 
+    async write_artifact(args) {
+      const { title, extension, content, description, near, replace } = args as {
+        title: string; extension: string; content: string; description: string; near?: string[]; replace?: string;
+      };
+      if (replace) {
+        const napkin = await getNapkin(ctx.napkinId);
+        const node = Object.values(napkin.nodes).find((n) => n.kind === "artifact" && n.docPath === replace);
+        if (!node || !ARTIFACT_PATH.test(replace) || !replace.endsWith(`.${extension}`)) return fail(`No artifact ${replace} with extension ${extension} on the napkin.`);
+        if (isUserOwned(node) && !ctx.allowUserEdits) return fail(`${replace} belongs to the person.`);
+        await atomicWriteFile(artifactFile(ctx.napkinId, replace), content);
+        await commit([{ op: "updateNode", id: node.id, patch: { title, text: description, updatedAt: Date.now() } }]);
+        return ok(`Replaced ${replace}.`, `Revised ${title}`);
+      }
+      const docPath = await saveArtifact(ctx.napkinId, title, extension, Buffer.from(content));
+      const id = await addArtifactCard(title, description, docPath, near);
+      return ok(`Saved ${docPath} and added card ${id}.`, `Made ${title}`, []);
+    },
+
+    async make_pptx(args) {
+      const { title, slides, accent, description, near } = args as { title: string; slides: Slide[]; accent?: string; description: string; near?: string[] };
+      const napkin = await getNapkin(ctx.napkinId);
+      const bytes = await buildPptx(title, slides, { accent: accent?.replace("#", "") }, async (imageId) => {
+        const node = napkin.nodes[imageId];
+        if (node?.kind !== "image" || !node.assetId) return undefined;
+        return imageForModel(await fs.readFile(assetPath(ctx.napkinId, node.assetId)));
+      });
+      const docPath = await saveArtifact(ctx.napkinId, title, "pptx", bytes);
+      const id = await addArtifactCard(title, `${description}\n\n${slides.length} slides`, docPath, near);
+      return ok(`Saved ${docPath} (${slides.length} slides) and added card ${id}.`, `Made ${title}.pptx`, []);
+    },
+
+    async preview_artifact(args) {
+      const { path: file, slides = 1 } = args as { path: string; slides?: number };
+      const docPath = file.startsWith("artifacts/") ? file : `artifacts/${file}`;
+      if (!ARTIFACT_PATH.test(docPath) || !/\.(html|svg)$/.test(docPath)) return fail("Only HTML and SVG artifacts can be previewed.");
+      const result = await desktopRequest("render", { url: `/api/napkins/${ctx.napkinId}/${docPath}`, steps: slides });
+      if (!result.ok) return fail(`Could not render it: ${result.error}`);
+      const value = result.value as { images: string[]; errors: string[] };
+      const errors = value.errors.length ? `Script errors and warnings:\n${value.errors.join("\n")}` : "No script errors.";
+      return {
+        ...ok(`${value.images.length} screenshot(s) of ${docPath}, in order. ${errors}`, `Looked at ${path.basename(docPath)}`),
+        images: value.images.map((data) => ({ data, mimeType: "image/png" })),
+      };
+    },
+
+    async make(args) {
+      if (!ctx.onMake) return fail("Not available here.");
+      ctx.onMake((args as { brief: string }).brief);
+      return ok("Making job queued. Its files will appear on the napkin when done.", "Started making");
+    },
+
+    async present_file(args) {
+      const { path: file, title, description, near } = args as { path: string; title: string; description: string; near?: string[] };
+      const docPath = await adoptArtifact(ctx.napkinId, file.replace(/^artifacts\//, "").split("/").pop() ?? "");
+      if (!docPath) return fail(`No such file in the artifacts folder, or not a supported type (${ARTIFACT_EXTENSIONS.join(", ")}). Save it there first.`);
+      const napkin = await getNapkin(ctx.napkinId);
+      if (Object.values(napkin.nodes).some((node) => node.docPath === docPath)) return ok(`${docPath} is already on the napkin.`, "Already there");
+      const id = await addArtifactCard(title, description, docPath, near);
+      return ok(`Added card ${id} for ${docPath}.`, `Added ${title}`);
+    },
+
     async list_files(args) {
-      if (!ctx.readRoot) return fail("No folder to explore.");
-      const dir = inside(ctx.readRoot, (args as { path: string }).path || "");
-      if (!dir) return fail("That path is outside the folder.");
+      if (!ctx.readRoot) return fail("No files to read here.");
+      const dir = resolveReadable(ctx.readRoot, (args as { path: string }).path || "");
+      if (!dir) return fail(`That path is outside what you may read. Readable root: ${ctx.readRoot}`);
       let entries;
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
@@ -464,6 +630,7 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
       for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
         if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
         const full = path.join(dir, entry.name);
+        if (hiddenEntry(full)) continue;
         const rel = path.relative(ctx.readRoot, full);
         if (entry.isDirectory()) lines.push(`${rel}/`);
         else if (entry.isFile()) {
@@ -475,19 +642,78 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
           break;
         }
       }
-      return ok(lines.join("\n") || "(empty)", `Listed ${lines.length}`);
+      return ok(lines.join("\n") || "(empty)", `Listed ${path.basename(dir)}`);
+    },
+
+    async find_files(args) {
+      if (!ctx.readRoot) return fail("No files to read here.");
+      const { name, under = "" } = args as { name: string; under?: string };
+      const start = resolveReadable(ctx.readRoot, under);
+      if (!start) return fail(`That path is outside what you may read. Readable root: ${ctx.readRoot}`);
+      const needle = name.toLowerCase();
+      const found: string[] = [];
+      let visited = 0;
+      const walk = async (dir: string, depth: number): Promise<void> => {
+        if (depth > 6 || found.length >= 100 || visited > 20_000) return;
+        let entries;
+        try {
+          entries = await fs.readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const entry of entries) {
+          visited++;
+          if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
+          const full = path.join(dir, entry.name);
+          if (hiddenEntry(full)) continue;
+          if (entry.name.toLowerCase().includes(needle)) found.push(`${path.relative(ctx.readRoot!, full)}${entry.isDirectory() ? "/" : ""}`);
+          if (entry.isDirectory()) await walk(full, depth + 1);
+          if (found.length >= 100) return;
+        }
+      };
+      await walk(start, 0);
+      return ok(found.join("\n") || "Nothing found.", `Found ${found.length}`);
     },
 
     async read_file(args) {
-      if (!ctx.readRoot) return fail("No folder to explore.");
+      if (!ctx.readRoot) return fail("No files to read here.");
       const { path: relative, offset = 0 } = args as { path: string; offset?: number };
-      const file = inside(ctx.readRoot, relative);
-      if (!file) return fail("That path is outside the folder.");
+      const file = resolveReadable(ctx.readRoot, relative);
+      if (!file) return fail(`That file is outside what you may read, or private. Readable root: ${ctx.readRoot}`);
+      if (isImage(file)) {
+        try {
+          return { ...ok(`Image ${path.basename(file)}.`, `Looked at ${path.basename(file)}`), images: [await imageForModel(await fs.readFile(file))] };
+        } catch (error) {
+          return fail(`Could not open the image: ${(error as Error).message}`);
+        }
+      }
       const { readText } = await import("@/lib/ingest/extract");
       const text = await readText(file).catch((error: Error) => `(could not read: ${error.message})`);
       const slice = text.slice(offset, offset + READ_LIMIT);
       const more = offset + READ_LIMIT < text.length ? `\n\n(cut at ${offset + READ_LIMIT} of ${text.length} characters; read on with offset)` : "";
       return ok(slice + more, `Read ${path.basename(file)}`);
+    },
+
+    async view_image(args) {
+      const { id } = args as { id: string };
+      const node = (await getNapkin(ctx.napkinId)).nodes[id];
+      if (!node || node.kind !== "image" || !node.assetId) return fail(`${id} is not an image item. Image items have kind [image].`);
+      try {
+        const bytes = await fs.readFile(assetPath(ctx.napkinId, node.assetId));
+        return { ...ok(`Image ${id}${node.fileName ? ` (${node.fileName})` : ""}.`, "Looked at an image"), images: [await imageForModel(bytes)] };
+      } catch (error) {
+        return fail(`Could not open the image: ${(error as Error).message}`);
+      }
+    },
+
+    async caption_image(args) {
+      const { id, title, text } = args as { id: string; title?: string; text: string };
+      const node = (await getNapkin(ctx.napkinId)).nodes[id];
+      if (!node || node.kind !== "image") return fail(`${id} is not an image item.`);
+      if (node.text && !ctx.allowUserEdits) return fail(`${id} already has a caption; leave it unless the person asks.`);
+      const ops: NapkinOp[] = [{ op: "updateNode", id, patch: { text, ...(title ? { title } : {}) } }];
+      await commit(ops);
+      return ok(`Captioned ${id}.`, "Captioned an image", ops);
     },
   };
 

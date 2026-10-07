@@ -41,6 +41,7 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk/core";
 import type {
+  AgentWorkspace,
   AgentHarness,
   AgentHarnessStatus,
   AgentSignInOptions,
@@ -197,7 +198,9 @@ export function buildClaudeTools(runtime: AgentToolRuntime) {
       definition.inputShape,
       async (args) => {
         const result = await executeTool(runtime, definition.name, args);
-        return { content: [{ type: "text" as const, text: result.text }], isError: !result.ok };
+        // npkn: images (view_image) go back as MCP image content.
+        const images = (result.images ?? []).map((image) => ({ type: "image" as const, data: image.data, mimeType: image.mimeType }));
+        return { content: [{ type: "text" as const, text: result.text }, ...images], isError: !result.ok };
       },
       {
         annotations: {
@@ -209,6 +212,36 @@ export function buildClaudeTools(runtime: AgentToolRuntime) {
       },
     ),
   );
+}
+
+/** npkn: Claude Code's own tools for a making turn (always sandboxed, see workspaceOptions). */
+export const CLAUDE_WORKSPACE_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep"] as const;
+
+/** Absolute paths in permission rules start with `//`. */
+const rulePath = (dir: string) => `/${dir.replace(/\/+$/, "")}/**`;
+
+/**
+ * Edits only inside the workspace; reads anywhere but the denied folders.
+ * In dontAsk mode anything without an allow rule is refused.
+ */
+export function workspaceAllowRules(workspace: AgentWorkspace): string[] {
+  const writable = [workspace.cwd, ...workspace.writable];
+  return ["Bash", "Glob", "Grep", "Read", ...writable.flatMap((dir) => [`Write(${rulePath(dir)})`, `Edit(${rulePath(dir)})`])];
+}
+
+/** Bash runs in the OS sandbox only: writes confined, private folders unreadable, network to listed hosts. */
+export function workspaceOptions(workspace: AgentWorkspace): Partial<Options> {
+  return {
+    disallowedTools: workspace.readDenied.map((dir) => `Read(${rulePath(dir)})`),
+    sandbox: {
+      enabled: true,
+      failIfUnavailable: true,
+      autoAllowBashIfSandboxed: true,
+      allowUnsandboxedCommands: false,
+      network: { allowedDomains: workspace.networkDomains, strictAllowlist: true },
+      filesystem: { allowWrite: workspace.writable, denyRead: workspace.readDenied },
+    },
+  };
 }
 
 /** SDK options for one agent turn: locked down to our tools, our prompt, the user's subscription. */
@@ -224,17 +257,21 @@ export function buildClaudeOptions(input: {
   const { params } = input;
   // "default" lets Claude Code pick the plan's default model.
   const model = params.model === "default" ? undefined : params.model || CLAUDE_DEFAULT_MODEL;
+  // npkn: a making turn gets Claude Code's own tools inside its OS sandbox.
+  const workspace = params.workspace;
+  const nativeTools = workspace ? [...CLAUDE_WORKSPACE_TOOLS] : [];
   return {
     pathToClaudeCodeExecutable: input.bin,
-    cwd: input.cwd,
-    env: input.env,
+    cwd: workspace?.cwd ?? input.cwd,
+    env: workspace ? { ...input.env, ...workspace.env } : input.env,
     // No user/project settings: no CLAUDE.md, hooks, plugins, or apiKeyHelper.
     settingSources: [],
     // No MCP servers but ours (.mcp.json, user and plugin servers are ignored).
     strictMcpConfig: true,
     // No built-in tools: no shell, files, sub-agents or skills. Web search and
-    // fetch only for a research turn, which has no canvas tools.
-    tools: params.webAccess ? [...CLAUDE_WEB_TOOLS] : [],
+    // fetch only when asked; shell and files only in a sandboxed workspace.
+    tools: [...nativeTools, ...(params.webAccess ? CLAUDE_WEB_TOOLS : [])],
+    ...(workspace ? workspaceOptions(workspace) : {}),
     mcpServers: {
       [CLAUDE_MCP_SERVER_NAME]: createSdkMcpServer({
         name: CLAUDE_MCP_SERVER_NAME,
@@ -245,6 +282,7 @@ export function buildClaudeOptions(input: {
     allowedTools: [
       ...params.tools.definitions.map((definition) => claudeToolName(definition.name)),
       ...(params.webAccess ? CLAUDE_WEB_TOOLS : []),
+      ...(workspace ? workspaceAllowRules(workspace) : []),
     ],
     // Our tools run without asking; anything else is denied.
     permissionMode: "dontAsk",

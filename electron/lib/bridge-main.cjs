@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const DEFAULT_PICKER_TITLE = 'Choose a folder';
 
-function createServerMessageHandler({ shell, dialog, fs, getWindow, log = () => {}, platform = process.platform }) {
+function createServerMessageHandler({ shell, dialog, fs, getWindow, render, log = () => {}, platform = process.platform }) {
   const bin = platform === 'win32' ? 'Recycle Bin' : 'Trash';
   const fail = error => ({ ok: false, error });
 
@@ -42,6 +42,21 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, log = () => 
         shell.showItemInFolder(file);
         return { ok: true };
       }
+      case 'open': {
+        // npkn: open a napkin file in its default app.
+        const file = target(payload);
+        if (!file) return fail('Opening a file needs a full path.');
+        let stat;
+        try { stat = fs.statSync(file); } catch { return fail('That file is no longer on disk.'); }
+        if (!stat.isFile()) return fail('Only a file can be opened.');
+        const error = await shell.openPath(file);
+        return error ? fail(error) : { ok: true };
+      }
+      case 'render': {
+        // npkn: screenshots of an artifact page for the agent (see main.cjs renderArtifact).
+        if (!render) return fail('Rendering is not available.');
+        return { ok: true, value: await render(payload.url, payload.steps) };
+      }
       case 'trash': {
         const file = target(payload);
         if (!file) return fail(`Moving to the ${bin} needs the full path of a file.`);
@@ -61,6 +76,8 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, log = () => 
 
   const failures = {
     reveal: 'The file could not be shown in its folder.',
+    open: 'The file could not be opened.',
+    render: 'The page could not be rendered.',
     trash: `The file could not be moved to the ${bin}.`,
     'choose-directory': 'The folder picker could not open.',
   };

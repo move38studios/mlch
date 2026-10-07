@@ -146,6 +146,8 @@ Each milestone ends with something usable and tested (Vitest for logic; Playwrig
 | M6 | Commands and write-ups: organize, clean up, summarize; markdown side panel | "Write a summary" produces a `writeup` node and a `.md` file |
 | M7 | History: checkpoints, timeline slider, restore | Can go back to any checkpoint and restore it |
 
+Added after M7: the AI looks at images (view_image, dropped images are captioned); instructions can read files on the machine (read-only, private places refused); artifacts: HTML pages and decks shown over the canvas and checked by the agent with off-screen screenshots, and a maker lane that runs Claude Code or Codex with their own tools in their OS sandbox for PowerPoint, Word, PDF, spreadsheets and charts.
+
 After V1: local Parakeet transcriber (Swift helper using FluidAudio, streaming over stdio), share snapshots (checkpoint + referenced assets + markdown index for AIs, hosted), signed build with auto-update, web version (needs hosted AI, since a subscription can't be used server-side), live collaboration.
 
 ## Risks and open items

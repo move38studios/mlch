@@ -13,13 +13,20 @@
  */
 
 import { getHarness } from "@/lib/agent/server/harnesses";
-import type { AgentHarnessStatus, HarnessEvent } from "@/lib/agent/types";
+import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/agent/types";
 import type { JobLane, JobStatus, TranscriptSegment } from "@/lib/napkin/events";
 import { newClientId } from "@/lib/napkin/ids";
 import { checkpoint } from "@/lib/napkin/history";
-import { emit, getNapkin, setJob } from "@/lib/napkin/store";
+import { applyToNapkin, emit, getNapkin, napkinDir, setJob } from "@/lib/napkin/store";
 import { modelFor, readSettings, type Lane } from "@/lib/settings";
-import { commandPrompt, fastPrompt, folderPrompt, ingestPrompt, slowPrompt } from "./prompts";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { adoptArtifact } from "@/lib/artifacts/artifacts";
+import { privateDirs } from "./files";
+import { placeNear } from "@/lib/napkin/place";
+import { artifactHeight, NODE_WIDTH } from "@/lib/napkin/sizes";
+import { commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, slowPrompt } from "./prompts";
 import { createNapkinTools, describeNapkin, type ToolName } from "./tools";
 
 const TIMEOUT_MS: Record<JobLane, number> = { fast: 120_000, slow: 300_000, command: 600_000, ingest: 600_000 };
@@ -76,6 +83,8 @@ interface TurnSpec {
   readRoot?: string;
   origin?: string;
   onHandOff?: (instruction: string) => void;
+  onMake?: (brief: string) => void;
+  workspace?: AgentWorkspace;
 }
 
 class JobError extends Error {}
@@ -100,6 +109,7 @@ async function runTurn(spec: TurnSpec): Promise<string[]> {
     allowUserEdits: spec.allowUserEdits,
     readRoot: spec.readRoot,
     onHandOff: spec.onHandOff,
+    onMake: spec.onMake,
     origin: spec.origin,
     added: [] as string[],
   };
@@ -111,6 +121,7 @@ async function runTurn(spec: TurnSpec): Promise<string[]> {
     tools: createNapkinTools(ctx),
     model: modelFor(settings, spec.lane),
     webAccess: spec.webAccess,
+    workspace: spec.workspace,
     signal: spec.signal,
   });
   for await (const event of events) {
@@ -243,10 +254,16 @@ export function submitCommand(napkinId: string, instruction: string): void {
         signal,
         lane: "command",
         systemPrompt: commandPrompt(),
-        prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 400 })}\n</napkin>\n\n<instruction>\n${instruction}\n</instruction>`,
-        tools: ["get_napkin", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say"],
+        prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 400 })}\n</napkin>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
+        tools: [
+          "get_napkin", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
+          "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
+        ],
+        onMake: (brief) => submitMake(napkinId, brief),
         webAccess: true,
         allowUserEdits: true,
+        // Instructions may read the person's files ("look at my dev/briefbuster folder"), read-only.
+        readRoot: os.homedir(),
       });
     },
   });
@@ -273,6 +290,116 @@ export function submitIngest(napkinId: string, sourceId: string, label: string, 
   });
 }
 
+/** Hosts a making job's commands may reach: package registries and font/CDN hosts. */
+const MAKER_HOSTS = [
+  "pypi.org", "files.pythonhosted.org", "registry.npmjs.org", "github.com", "objects.githubusercontent.com",
+  "release-assets.githubusercontent.com", "cdn.jsdelivr.net", "fonts.googleapis.com", "fonts.gstatic.com",
+];
+
+function makerWorkspace(napkinId: string): AgentWorkspace {
+  const dir = napkinDir(napkinId);
+  const cwd = path.join(dir, "work");
+  const cache = path.join(cwd, ".cache");
+  return {
+    cwd,
+    writable: [path.join(dir, "artifacts")],
+    readDenied: privateDirs(),
+    networkDomains: MAKER_HOSTS,
+    // Tools keep their caches inside the workspace, which is all they may write.
+    env: {
+      UV_CACHE_DIR: path.join(cache, "uv"),
+      UV_PYTHON_INSTALL_DIR: path.join(cache, "uv-python"),
+      PIP_CACHE_DIR: path.join(cache, "pip"),
+      npm_config_cache: path.join(cache, "npm"),
+      XDG_CACHE_HOME: cache,
+      MPLCONFIGDIR: path.join(cache, "matplotlib"),
+    },
+  };
+}
+
+/** Files in artifacts/ changed since `since`, as napkin-relative paths (renamed safe). */
+async function newArtifacts(napkinId: string, since: number): Promise<string[]> {
+  const dir = path.join(napkinDir(napkinId), "artifacts");
+  const found: string[] = [];
+  for (const name of await fs.readdir(dir).catch(() => [] as string[])) {
+    const stat = await fs.stat(path.join(dir, name)).catch(() => undefined);
+    if (!stat?.isFile() || stat.mtimeMs < since - 1000) continue;
+    const adopted = await adoptArtifact(napkinId, name);
+    if (adopted) found.push(adopted);
+  }
+  return found;
+}
+
+/**
+ * Make files with the CLI's own tools in its OS sandbox (python-pptx decks,
+ * documents, charts). Whatever it saves in artifacts/ lands on the napkin.
+ */
+export function submitMake(napkinId: string, brief: string): void {
+  enqueue(napkinId, {
+    lane: "command",
+    label: `Making: ${brief.length > 50 ? `${brief.slice(0, 47)}…` : brief}`,
+    async run(job, signal) {
+      const started = Date.now();
+      const workspace = makerWorkspace(napkinId);
+      await fs.mkdir(workspace.cwd, { recursive: true });
+      await fs.mkdir(workspace.writable[0], { recursive: true });
+      const napkin = await getNapkin(napkinId);
+      const settings = await readSettings();
+      await runTurn({
+        napkinId,
+        job,
+        signal,
+        lane: "command",
+        systemPrompt: makerPrompt(settings.harness),
+        prompt:
+          `<napkin>\n${describeNapkin(napkin, { textLimit: 2000 })}\n</napkin>\n\n` +
+          `Working folder (scratch): ${workspace.cwd}\nSave finished files in: ${workspace.writable[0]}\n` +
+          `Napkin files (images, documents) are in: ${path.join(napkinDir(napkinId), "assets")}\n\n<brief>\n${brief}\n</brief>`,
+        tools: ["get_napkin", "view_image", "present_file", "preview_artifact", "say"],
+        workspace,
+        webAccess: true,
+      });
+      // Codex makes files without our tools, and Claude may forget one: put any new file on the napkin.
+      const current = await getNapkin(napkinId);
+      const onNapkin = new Set(Object.values(current.nodes).map((node) => node.docPath));
+      const fresh = (await newArtifacts(napkinId, started)).filter((docPath) => !onNapkin.has(docPath));
+      for (const docPath of fresh) await addArtifactNode(napkinId, job.id, docPath);
+    },
+  });
+}
+
+async function addArtifactNode(napkinId: string, jobId: string, docPath: string): Promise<void> {
+  const napkin = await getNapkin(napkinId);
+  const id = newClientId("n");
+  const name = path.basename(docPath);
+  const position = placeNear(napkin, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, { seed: id });
+  await applyToNapkin(
+    napkinId,
+    [{ op: "addNode", node: { id, kind: "artifact", x: position.x, y: position.y, title: name.replace(/\.[a-z0-9]+$/, "").replace(/[-_]+/g, " "), text: "", docPath, fileName: name, origin: `agent:${jobId}`, createdAt: Date.now() } }],
+    `agent:${jobId}`,
+  );
+}
+
+/** Look at a dropped image: caption it and add what it brings to the napkin. */
+export function submitImage(napkinId: string, nodeId: string, label: string): void {
+  enqueue(napkinId, {
+    lane: "ingest",
+    label,
+    async run(job, signal) {
+      const napkin = await getNapkin(napkinId);
+      await runTurn({
+        napkinId,
+        job,
+        signal,
+        lane: "slow",
+        systemPrompt: imagePrompt(),
+        prompt: `<napkin>\n${describeNapkin(napkin, { textLimit: 140, maxNodes: 120 })}\n</napkin>\n\nNew image: ${nodeId}`,
+        tools: ["view_image", "caption_image", "add_nodes", "connect"],
+      });
+    },
+  });
+}
+
 /** Explore a folder and build items from it. */
 export function submitFolder(napkinId: string, folder: string): void {
   enqueue(napkinId, {
@@ -286,7 +413,7 @@ export function submitFolder(napkinId: string, folder: string): void {
         lane: "command",
         systemPrompt: folderPrompt(),
         prompt: `Folder: ${folder}`,
-        tools: ["list_files", "read_file", "add_nodes", "connect", "arrange", "say", "set_title"],
+        tools: ["list_files", "find_files", "read_file", "add_nodes", "connect", "arrange", "say", "set_title"],
         readRoot: folder,
       });
     },

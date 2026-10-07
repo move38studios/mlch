@@ -4,7 +4,7 @@
 // parentPort and waits for the reply carrying the same id. electron/server.cjs
 // exposes request() to route code as globalThis.__npknDesktop
 // (src/lib/desktop/server.ts); lib/bridge-main.cjs answers.
-const BRIDGE_REQUESTS = new Set(['reveal', 'trash', 'choose-directory']);
+const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render']);
 const INGEST_PICKER_TITLE = 'Choose a folder';
 const REQUEST_TIMEOUT_MS = 30_000;
 // A folder picker waits on the user, not on main; this only bounds a lost reply
@@ -26,6 +26,8 @@ function bridgePayload(payload) {
   return {
     ...(typeof payload?.path === 'string' ? { path: payload.path } : {}),
     ...(typeof payload?.title === 'string' ? { title: payload.title } : {}),
+    ...(typeof payload?.url === 'string' ? { url: payload.url } : {}),
+    ...(Number.isInteger(payload?.steps) ? { steps: payload.steps } : {}),
   };
 }
 
@@ -70,7 +72,7 @@ function createBridgeClient({ post, timeoutMs = REQUEST_TIMEOUT_MS, pickerTimeou
   async function request(type, payload) {
     if (!BRIDGE_REQUESTS.has(type)) return { ok: false, error: 'The desktop app does not handle that request.' };
     const call = send({ type: 'bridge', request: { type, payload: bridgePayload(payload) } }, {
-      timeout: type === 'choose-directory' ? pickerTimeoutMs : timeoutMs,
+      timeout: type === 'choose-directory' ? pickerTimeoutMs : type === 'render' ? 60_000 : timeoutMs,
       fail: reason => ({ ok: false, error: reason === 'timeout' ? 'The desktop app did not answer in time.' : 'The desktop app is not reachable.' }),
     });
     return bridgeResult(await call.result);

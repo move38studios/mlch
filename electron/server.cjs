@@ -36,6 +36,16 @@ process.parentPort.on('message', ({ data }) => {
   bridge.receive(data);
 });
 
+// Pages inside the app that are not the app itself (sandboxed artifacts, which
+// get the token header like every request to this origin) must not reach the
+// API: their requests carry Origin: null or a foreign Sec-Fetch-Site.
+function foreignPage(req) {
+  const site = req.headers['sec-fetch-site'];
+  if (site === 'cross-site' || site === 'same-site') return true;
+  const origin = req.headers.origin;
+  return origin !== undefined && origin !== `http://${hostname}:${port}`;
+}
+
 function authorized(req) {
   return req.headers.host === `${hostname}:${port}` && req.headers['x-npkn-desktop'] === token;
 }
@@ -53,6 +63,10 @@ async function start() {
       return;
     }
     delete req.headers['x-npkn-desktop'];
+    if (req.url?.startsWith('/api/') && foreignPage(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' }).end('{"error":"Not allowed"}');
+      return;
+    }
     req.headers[AGENT_LOCAL_HEADER] = agentLocalSecret;
     try {
       const url = req.method === 'GET' ? new URL(req.url, origin) : undefined;

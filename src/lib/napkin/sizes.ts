@@ -15,6 +15,7 @@ export const NODE_WIDTH: Record<NodeKind, number> = {
   link: 280,
   image: 260,
   writeup: 320,
+  artifact: 320,
   note: 220,
 };
 
@@ -28,8 +29,14 @@ const FALLBACK_HEIGHT: Record<NodeKind, number> = {
   link: 150,
   image: 200,
   writeup: 220,
+  artifact: 240,
   note: 70,
 };
+
+/** Artifact cards with a live preview are taller. */
+export function artifactHeight(docPath?: string): number {
+  return docPath && /\.(html|svg|png|jpg)$/.test(docPath) ? 400 : 200;
+}
 
 export interface Rect {
   x: number;
@@ -46,12 +53,12 @@ export function estimateHeight(kind: NodeKind, text: string, title?: string): nu
   return Math.max(FALLBACK_HEIGHT[kind], Math.min(420, 40 + lines * 20));
 }
 
-export function rectOf(node: Pick<NapkinNode, "kind" | "x" | "y" | "w" | "h" | "text" | "title">): Rect {
+export function rectOf(node: Pick<NapkinNode, "kind" | "x" | "y" | "w" | "h" | "text" | "title" | "docPath">): Rect {
   return {
     x: node.x,
     y: node.y,
     w: node.w ?? NODE_WIDTH[node.kind],
-    h: node.h ?? estimateHeight(node.kind, node.text, node.title),
+    h: node.h ?? (node.kind === "artifact" ? artifactHeight(node.docPath) : estimateHeight(node.kind, node.text, node.title)),
   };
 }
 
