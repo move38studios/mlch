@@ -43,6 +43,16 @@ export function useSearch(query: string, mulchId?: string) {
   return { results, loading };
 }
 
+/** A snippet as plain text: no markdown markers. */
+function plain(text: string): string {
+  return text
+    .replace(/\\n/g, " ")
+    .replace(/(^|[\s…])#{1,6}\s+/g, "$1")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const KIND_LABEL: Record<string, string> = {
   transcript: "said",
   doc: "file",
@@ -59,20 +69,35 @@ const KIND_LABEL: Record<string, string> = {
   note: "note",
 };
 
-export function ResultList({ results, showMulch, onPick }: { results: SearchResult[]; showMulch: boolean; onPick(result: SearchResult): void }) {
-  if (!results.length) return <p className="px-4 py-3 text-sm text-ink-3">Nothing found.</p>;
+export function ResultList({
+  results,
+  showMulch,
+  onPick,
+  active = -1,
+}: {
+  results: SearchResult[];
+  showMulch: boolean;
+  onPick(result: SearchResult): void;
+  /** The row the arrow keys are on. */
+  active?: number;
+}) {
+  if (!results.length) return <p className="px-4 py-3 text-[14px] text-ink-3">Nothing found.</p>;
   return (
-    <ul className="max-h-[60vh] overflow-auto py-1">
+    <ul className="max-h-[60vh] overflow-auto py-1.5">
       {results.map((result, i) => (
         <li key={`${result.mulchId}/${result.nodeId}/${i}`}>
-          <button onClick={() => onPick(result)} className="w-full text-left px-4 py-2 hover:bg-paper-2 focus:bg-paper-2 outline-none">
-            <div className="flex items-baseline gap-2 text-[11px] text-ink-3">
+          <button
+            onClick={() => onPick(result)}
+            ref={i === active ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+            className={`w-full text-left px-4 py-2.5 hover:bg-paper-2 focus:bg-paper-2 outline-none ${i === active ? "bg-paper-2" : ""}`}
+          >
+            <div className="flex items-baseline gap-2 text-[12px] text-ink-3">
               <span>{KIND_LABEL[result.kind] ?? result.kind}</span>
               {result.title && <span className="truncate">{result.title}</span>}
               {result.page && <span>p.{result.page}</span>}
               {showMulch && <span className="ml-auto truncate">{result.mulchTitle}</span>}
             </div>
-            <p className="text-sm text-ink line-clamp-2">{result.snippet}</p>
+            <p className="text-[14px] leading-snug text-ink line-clamp-2 mt-0.5">{plain(result.snippet)}</p>
           </button>
         </li>
       ))}
@@ -86,8 +111,10 @@ export function SearchPalette({ mulchId, onFocus }: { mulchId: string; onFocus(r
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [all, setAll] = useState(false);
+  const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const { results, loading } = useSearch(open ? query : "", all ? undefined : mulchId);
+  useEffect(() => setActive(0), [results]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -108,35 +135,44 @@ export function SearchPalette({ mulchId, onFocus }: { mulchId: string; onFocus(r
     else router.push(`/n/${result.mulchId}?focus=${result.nodeId}${result.page ? `&page=${result.page}` : ""}`);
   };
   return (
-    <div className="absolute inset-0 z-40 bg-ink/10 flex justify-center pt-[12vh]" onMouseDown={() => setOpen(false)}>
-      <div className="w-[min(640px,90%)] h-fit rounded-xl border border-line bg-white shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 px-4 border-b border-line">
-          <Search size={15} className="text-ink-3" />
+    <div className="absolute inset-0 z-40 bg-paper/50 backdrop-blur-[2px] flex justify-center pt-[12vh]" onMouseDown={() => setOpen(false)}>
+      <div className="float w-[min(640px,90%)] h-fit rounded-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2.5 px-4 border-b border-line">
+          <Search size={17} strokeWidth={1.75} className="text-ink-3" />
           <input
             ref={input}
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && results?.[0]) pick(results[0]);
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const count = results?.length ?? 0;
+                if (count) setActive((i) => (i + (e.key === "ArrowDown" ? 1 : count - 1)) % count);
+              } else if (e.key === "Enter" && results?.[active]) pick(results[active]);
             }}
             placeholder="Search"
             aria-label="Search"
-            className="flex-1 py-3 outline-none text-[15px] bg-transparent"
+            className="flex-1 py-3.5 outline-none text-[17px] bg-transparent placeholder:text-ink-3"
           />
-          <div className="flex text-xs rounded-md bg-paper-2 p-0.5">
+          <div className="flex shrink-0 rounded-lg bg-paper-2 p-0.5 text-[12.5px]">
             {[false, true].map((value) => (
-              <button key={String(value)} onClick={() => setAll(value)} className={`px-2 py-0.5 rounded ${all === value ? "bg-white shadow-sm" : "text-ink-3"}`}>
+              <button
+                key={String(value)}
+                onClick={() => setAll(value)}
+                aria-pressed={all === value}
+                className={`px-2 py-1 rounded-md ${all === value ? "bg-chrome text-ink font-medium shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-ink-3 hover:text-ink"}`}
+              >
                 {value ? "All" : "This one"}
               </button>
             ))}
           </div>
-          <button onClick={() => setOpen(false)} className="p-1 text-ink-3 hover:text-ink" aria-label="Close">
-            <X size={15} />
+          <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg text-ink-3 hover:bg-paper-2 hover:text-ink" title="Close" aria-label="Close">
+            <X size={16} strokeWidth={1.75} />
           </button>
         </div>
-        {loading && !results && <p className="px-4 py-3 text-sm text-ink-3">Searching</p>}
-        {results && <ResultList results={results} showMulch={all} onPick={pick} />}
+        {loading && !results && <p className="px-4 py-3 text-[14px] text-ink-3">Searching</p>}
+        {results && <ResultList results={results} showMulch={all} onPick={pick} active={active} />}
       </div>
     </div>
   );

@@ -25,16 +25,16 @@ export function ArtifactViewer() {
 
   if (!node?.docPath || !mulchId) return null;
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-ink/80 backdrop-blur-sm">
-      <div className="h-10 shrink-0 flex items-center gap-2 px-3 text-paper text-sm">
-        <span className="font-medium truncate">{node.title}</span>
-        <span className="text-paper/50 text-xs truncate">{node.fileName}</span>
+    <div className="absolute inset-0 z-30 flex flex-col bg-ink/85 backdrop-blur-sm">
+      <div className="drag h-12 shrink-0 flex items-center gap-3 pl-[84px] pr-3 text-white">
+        <span className="text-[14.5px] font-semibold truncate">{node.title}</span>
+        <span className="text-white/45 text-[12.5px] truncate">{node.fileName}</span>
         <div className="flex-1" />
-        <button onClick={() => openFile(mulchId, node.docPath!, "reveal")} className="p-1.5 rounded hover:bg-white/10" title="Show in Finder" aria-label="Show in Finder">
-          <FolderOpen size={15} />
+        <button onClick={() => openFile(mulchId, node.docPath!, "reveal")} className="p-1.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white" title="Show in Finder" aria-label="Show in Finder">
+          <FolderOpen size={16} strokeWidth={1.75} />
         </button>
-        <button onClick={() => setViewer(undefined)} className="p-1.5 rounded hover:bg-white/10" title="Close" aria-label="Close">
-          <X size={16} />
+        <button onClick={() => setViewer(undefined)} className="p-1.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white" title="Close" aria-label="Close">
+          <X size={18} strokeWidth={1.75} />
         </button>
       </div>
       <iframe
@@ -43,7 +43,7 @@ export function ArtifactViewer() {
         sandbox="allow-scripts"
         title={node.title ?? "Artifact"}
         onLoad={() => frame.current?.focus()}
-        className="flex-1 mx-3 mb-3 rounded-md bg-white border-0"
+        className="flex-1 mx-3 mb-3 rounded-xl bg-white border-0"
       />
     </div>
   );

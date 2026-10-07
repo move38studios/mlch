@@ -10,11 +10,11 @@ import { KIND_STYLES } from "./kinds";
 import { MediaPlayer } from "./MediaBody";
 import { useCanvasUi } from "./ui";
 
-/** The full content of one node: long write-ups, documents, search results. */
 // The colour of a found passage. Kept out of the stylesheet: the CSS optimiser
 // does not know ::highlight() (the CSS Custom Highlight API) and warns about it.
 const HIGHLIGHT_STYLE = "::highlight(mlch-find) { background-color: rgba(255, 192, 0, 0.5); }";
 
+/** The full content of one node (write-ups, documents, sources), in a panel beside the canvas. */
 export function SidePanel() {
   const openId = useCanvasUi((s) => s.openId);
   const setOpen = useCanvasUi((s) => s.setOpen);
@@ -73,8 +73,8 @@ export function SidePanel() {
     });
   const label = KIND_STYLES[node.kind].label;
   return (
-    <aside className="w-[min(560px,45%)] shrink-0 border-l border-line bg-white flex flex-col">
-      <div className="h-11 shrink-0 flex items-center gap-2 px-4 border-b border-line text-xs text-ink-3">
+    <aside className="float w-[min(560px,45%)] shrink-0 my-3 mr-3 rounded-2xl flex flex-col overflow-hidden">
+      <div className="h-12 shrink-0 flex items-center gap-2 pl-6 pr-3 text-[12.5px] text-ink-3">
         {label && <span>{label}</span>}
         {node.fileName && <span className="truncate">{node.fileName}</span>}
         {node.url && (
@@ -84,30 +84,30 @@ export function SidePanel() {
         )}
         <div className="flex-1" />
         {revealable && (
-          <button onClick={reveal} className="p-1 rounded hover:bg-paper-2 text-ink-2" title="Show in Finder" aria-label="Show in Finder">
-            <FolderOpen size={15} />
+          <button onClick={reveal} className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink" title="Show in Finder" aria-label="Show in Finder">
+            <FolderOpen size={15} strokeWidth={1.75} />
           </button>
         )}
-        <button onClick={() => setOpen(undefined)} aria-label="Close" className="p-1 rounded hover:bg-paper-2 text-ink-2">
-          <X size={15} />
+        <button onClick={() => setOpen(undefined)} title="Close" aria-label="Close" className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink">
+          <X size={16} strokeWidth={1.75} />
         </button>
       </div>
       <style>{HIGHLIGHT_STYLE}</style>
-      <div ref={contentRef} className="flex-1 overflow-auto px-6 py-5">
+      <div ref={contentRef} className="flex-1 overflow-auto px-6 pt-1 pb-8">
         {node.kind === "media" && mulchId && (
-          <div className="-mx-6 -mt-5 mb-4 bg-paper-2">
+          <div className="-mx-6 mb-4 bg-paper-2">
             <MediaPlayer node={node} mulchId={mulchId} large />
           </div>
         )}
-        {node.title && <h2 className="text-lg font-semibold mb-3">{node.title}</h2>}
+        {node.title && <h2 className="text-[22px] font-semibold leading-[1.2] tracking-[-0.015em] mb-4">{node.title}</h2>}
         {node.gen && (
-          <p className="text-xs text-ink-3 mb-3">
+          <p className="text-[12.5px] text-ink-3 mb-3">
             {node.gen.endpoint}
-            {node.gen.cost !== undefined && ` · about $${node.gen.cost.toFixed(3)}`}
-            {node.gen.error && ` · ${node.gen.error}`}
+            {node.gen.cost !== undefined && `, about $${node.gen.cost.toFixed(3)}`}
+            {node.gen.error && `, ${node.gen.error}`}
           </p>
         )}
-        <div className="mlch-md mlch-md-full text-[14px] leading-relaxed">
+        <div className="mlch-md mlch-md-full text-[15px] leading-[1.6]">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
         </div>
       </div>

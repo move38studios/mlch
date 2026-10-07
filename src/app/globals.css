@@ -63,6 +63,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Text fields draw their own focus (a border, or the panel they sit in). */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
 /* The window has no title bar; floating controls sit on a drag strip. */
 .drag {
   -webkit-app-region: drag;

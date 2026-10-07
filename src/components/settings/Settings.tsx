@@ -53,11 +53,11 @@ const LANE_NAMES: Record<string, string> = { fast: "Capture", slow: "Enrich", co
 
 function UsageTable({ usage }: { usage: SettingsView["usageToday"] }) {
   const rows = Object.entries(usage);
-  if (!rows.length) return <p className="text-sm text-ink-3">No AI turns today.</p>;
+  if (!rows.length) return <p className="text-[14px] text-ink-3">No AI turns today.</p>;
   const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n));
   return (
-    <table className="text-sm tabular-nums">
-      <thead className="text-ink-3 text-xs">
+    <table className="text-[14px] tabular-nums">
+      <thead className="text-ink-3 text-[12.5px]">
         <tr>
           <th className="text-left font-normal pr-6 pb-1"></th>
           <th className="text-right font-normal pr-6 pb-1">Turns</th>
@@ -70,7 +70,7 @@ function UsageTable({ usage }: { usage: SettingsView["usageToday"] }) {
           const [harness, lane] = key.split("/");
           return (
             <tr key={key}>
-              <td className="pr-6">{harness === "claude" ? "Claude Code" : "Codex"} · {LANE_NAMES[lane] ?? lane}</td>
+              <td className="pr-6">{harness === "claude" ? "Claude Code" : "Codex"}, {LANE_NAMES[lane] ?? lane}</td>
               <td className="text-right pr-6">{value.turns}</td>
               <td className="text-right pr-6">{k(value.inputTokens)}</td>
               <td className="text-right">{k(value.outputTokens)}</td>
@@ -84,12 +84,16 @@ function UsageTable({ usage }: { usage: SettingsView["usageToday"] }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="py-6 border-b border-line">
-      <h2 className="text-sm font-semibold mb-4">{title}</h2>
+    <section className="py-7 border-t border-line first:border-t-0">
+      <h2 className="text-[15px] font-semibold tracking-[-0.005em] mb-4">{title}</h2>
       {children}
     </section>
   );
 }
+
+const FIELD = "h-9 rounded-lg border border-line bg-chrome px-2.5 text-[14px] outline-none focus:border-ink";
+const PRIMARY = "h-8 px-3 rounded-lg bg-ink text-white text-[13px] font-medium disabled:bg-paper-2 disabled:text-ink-3";
+const SECONDARY = "h-8 px-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-paper-2 hover:text-ink";
 
 function KeyField({ id, label, set, stored, onSaved }: { id: string; label: string; set: boolean; stored: boolean; onSaved: () => void }) {
   const [value, setValue] = useState("");
@@ -107,8 +111,8 @@ function KeyField({ id, label, set, stored, onSaved }: { id: string; label: stri
   }
   return (
     <div className="flex items-center gap-3 py-1.5">
-      <span className="w-40 text-sm">{label}</span>
-      <span className={`text-xs w-24 ${set ? "text-ink-2" : "text-ink-3"}`}>{stored ? "Set" : set ? "Set in .env" : "Not set"}</span>
+      <span className="w-40 text-[14px]">{label}</span>
+      <span className={`text-[12.5px] w-24 ${set ? "text-ink-2" : "text-ink-3"}`}>{stored ? "Set" : set ? "Set in .env" : "Not set"}</span>
       {bridge ? (
         <>
           <input
@@ -116,21 +120,21 @@ function KeyField({ id, label, set, stored, onSaved }: { id: string; label: stri
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={set ? "Replace" : "Paste key"}
-            className="flex-1 rounded-md border border-line bg-white px-2 py-1 text-sm outline-none focus:border-ink/40"
+            className={`flex-1 min-w-0 ${FIELD}`}
           />
-          <button onClick={() => save(value.trim())} disabled={!value.trim()} className="text-sm px-2.5 py-1 rounded-md bg-ink text-paper disabled:opacity-30">
+          <button onClick={() => save(value.trim())} disabled={!value.trim()} className={PRIMARY}>
             Save
           </button>
           {stored && (
-            <button onClick={() => save(null)} className="text-sm px-2 py-1 rounded-md text-ink-2 hover:bg-paper-2">
+            <button onClick={() => save(null)} className={SECONDARY}>
               Remove
             </button>
           )}
         </>
       ) : (
-        <span className="text-xs text-ink-3">.env.local</span>
+        <span className="text-[12.5px] text-ink-3">.env.local</span>
       )}
-      {error && <span className="text-xs text-danger">{error}</span>}
+      {error && <span className="text-[12.5px] text-danger">{error}</span>}
     </div>
   );
 }
@@ -174,33 +178,37 @@ export function Settings() {
 
   return (
     <main className="min-h-full">
-      <header className="drag h-12 pl-20 pr-4 flex items-center gap-2 border-b border-line">
-        <Link href="/" className="p-1.5 rounded-md text-ink-2 hover:bg-paper-2" aria-label="Home" title="Home">
-          <ArrowLeft size={16} />
-        </Link>
-        <span className="font-semibold">Settings</span>
-        {saved && (
-          <span className="text-xs text-ink-3 inline-flex items-center gap-1">
-            <Check size={12} /> Saved
-          </span>
-        )}
-      </header>
+      <header className="drag h-12" />
       <div className="max-w-2xl mx-auto px-6 pb-16">
+        <div className="flex items-center gap-2 pb-2">
+          <Link href="/" className="-ml-2 p-1.5 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink" aria-label="Home" title="Home">
+            <ArrowLeft size={18} strokeWidth={1.75} />
+          </Link>
+          <h1 className="text-[26px] font-semibold tracking-[-0.02em]">Settings</h1>
+          {saved && (
+            <span className="ml-2 text-[12.5px] text-ink-3 inline-flex items-center gap-1">
+              <Check size={12} /> Saved
+            </span>
+          )}
+        </div>
         <Section title="AI">
           {!harnesses && (
-            <p className="text-sm text-ink-3 inline-flex items-center gap-2">
+            <p className="text-[14px] text-ink-3 inline-flex items-center gap-2">
               <Loader2 size={14} className="animate-spin" /> Checking
             </p>
           )}
           <div className="space-y-2">
             {harnesses?.map((h) => (
-              <label key={h.id} className="flex items-start gap-3 rounded-lg border border-line bg-white px-3 py-2.5 cursor-pointer">
-                <input type="radio" name="harness" checked={settings?.harness === h.id} onChange={() => update({ harness: h.id })} className="mt-1" />
+              <label
+                key={h.id}
+                className={`flex items-start gap-3 rounded-xl bg-chrome px-4 py-3 cursor-pointer ${settings?.harness === h.id ? "border-[1.5px] border-ink" : "border border-line hover:border-line-2"}`}
+              >
+                <input type="radio" name="harness" checked={settings?.harness === h.id} onChange={() => update({ harness: h.id })} className="mt-1 accent-black" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">
+                  <div className="text-[14.5px] font-medium">
                     {h.label} {h.version && <span className="text-ink-3 font-normal">{h.version}</span>}
                   </div>
-                  <div className="text-xs text-ink-2 mt-0.5">
+                  <div className="text-[12.5px] text-ink-2 mt-0.5">
                     {h.problem ? (
                       <span className="text-danger">{h.problem}</span>
                     ) : (
@@ -209,7 +217,7 @@ export function Settings() {
                         {h.account?.email ? ` (${h.account.email})` : ""}
                         {h.planUsage?.length ? (
                           <span className="block mt-0.5 text-ink-3">
-                            Plan used: {h.planUsage.map((w) => `${WINDOW_NAMES[w.name] ?? w.name} ${w.percent}%`).join(" · ")}
+                            Plan used: {h.planUsage.map((w) => `${WINDOW_NAMES[w.name] ?? w.name} ${w.percent}%`).join(", ")}
                           </span>
                         ) : null}
                       </>
@@ -217,7 +225,7 @@ export function Settings() {
                   </div>
                 </div>
                 {h.installed && !h.signedIn && (
-                  <button onClick={(e) => { e.preventDefault(); void signIn(h.id); }} className="text-sm px-2.5 py-1 rounded-md bg-ink text-paper">
+                  <button onClick={(e) => { e.preventDefault(); void signIn(h.id); }} className={PRIMARY}>
                     Sign in
                   </button>
                 )}
@@ -228,13 +236,13 @@ export function Settings() {
             <div className="mt-5 space-y-2">
               {LANES.map((lane) => (
                 <div key={lane.id} className="flex items-center gap-3">
-                  <span className="w-28 text-sm">{lane.label}</span>
+                  <span className="w-28 text-[14px]">{lane.label}</span>
                   <select
                     value={settings.models[settings.harness]?.[lane.id] ?? ""}
                     onChange={(e) =>
                       update({ models: { ...settings.models, [settings.harness]: { ...settings.models[settings.harness], [lane.id]: e.target.value || undefined } } })
                     }
-                    className="rounded-md border border-line bg-white px-2 py-1 text-sm"
+                    className={FIELD}
                   >
                     <option value="">{view?.defaults[settings.harness]?.[lane.id] ? `Default (${view.defaults[settings.harness][lane.id]})` : "Default"}</option>
                     {active.models.map((model) => (
@@ -250,25 +258,27 @@ export function Settings() {
         </Section>
         {settings && (
           <Section title="Enrichment">
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
-              {ENRICH.map((item) => (
-                <label key={item.id} className="inline-flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={settings.enrich.includes(item.id)}
-                    onChange={(e) =>
-                      update({ enrich: e.target.checked ? [...settings.enrich, item.id] : settings.enrich.filter((x) => x !== item.id) })
-                    }
-                  />
-                  {item.label}
-                </label>
-              ))}
+            <div className="flex flex-wrap gap-2">
+              {ENRICH.map((item) => {
+                const on = settings.enrich.includes(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    aria-pressed={on}
+                    onClick={() => update({ enrich: on ? settings.enrich.filter((x) => x !== item.id) : [...settings.enrich, item.id] })}
+                    className={`h-8 px-3 rounded-full text-[13px] inline-flex items-center gap-1.5 ${on ? "border-[1.5px] border-ink text-ink font-medium" : "border border-line text-ink-3 hover:border-line-2 hover:text-ink"}`}
+                  >
+                    {on && <Check size={13} strokeWidth={2.25} />}
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
           </Section>
         )}
         {view && settings && (
           <Section title="Generation spend">
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-3 text-[14px]">
               <span className="w-40">Daily cap (USD)</span>
               <input
                 type="number"
@@ -279,7 +289,7 @@ export function Settings() {
                   const value = Number(e.target.value);
                   if (Number.isFinite(value) && value >= 0 && value !== settings.dailySpendCapUsd) void update({ dailySpendCapUsd: value });
                 }}
-                className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm"
+                className={`w-24 ${FIELD}`}
               />
               <span className="text-ink-2">Today: ${view.spentToday.toFixed(2)}</span>
             </div>
@@ -298,17 +308,17 @@ export function Settings() {
                 const body = (await response.json()) as { file?: string; error?: string };
                 setReport(body.file ?? body.error);
               }}
-              className="text-sm px-2.5 py-1 rounded-md bg-ink text-paper"
+              className={PRIMARY}
             >
               Save diagnostic report
             </button>
             {desktop() && (
-              <button onClick={() => void desktop()?.openLogs()} className="text-sm px-2.5 py-1 rounded-md text-ink-2 hover:bg-paper-2">
+              <button onClick={() => void desktop()?.openLogs()} className={SECONDARY}>
                 Open logs folder
               </button>
             )}
           </div>
-          {report && <p className="text-xs text-ink-3 mt-2 break-all">{report}</p>}
+          {report && <p className="text-[12.5px] text-ink-3 mt-2 break-all">{report}</p>}
         </Section>
         {view && (
           <Section title="Keys">

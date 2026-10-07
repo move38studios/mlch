@@ -84,7 +84,7 @@ export function Home() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search"
               aria-label="Search"
-              className="w-full rounded-xl border border-line bg-chrome pl-10 pr-3 h-11 text-[15px] outline-none placeholder:text-ink-3 focus:border-line-2"
+              className="w-full rounded-xl border border-line bg-chrome pl-10 pr-3 h-11 text-[15px] outline-none placeholder:text-ink-3 focus:border-ink"
             />
           </div>
           <button
