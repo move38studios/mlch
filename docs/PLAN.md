@@ -148,7 +148,7 @@ Each milestone ends with something usable and tested (Vitest for logic; Playwrig
 
 Added after M7: the AI looks at images (view_image, dropped images are captioned); instructions can read files on the machine (read-only, private places refused); artifacts: HTML pages and decks shown over the canvas and checked by the agent with off-screen screenshots, and a maker lane that runs Claude Code or Codex with their own tools in their OS sandbox for PowerPoint, Word, PDF, spreadsheets and charts.
 
-Next candidates, after testing: packaged signed app (non-technical users), opt-in connectors (your MCP servers, read-only by default, approval cards for actions), share snapshots, PPTX/DOCX thumbnails, local Parakeet transcriber (Swift helper using FluidAudio, streaming over stdio), share snapshots (checkpoint + referenced assets + markdown index for AIs, hosted), signed build with auto-update, web version (needs hosted AI, since a subscription can't be used server-side), live collaboration.
+What comes next is tracked in [ROADMAP.md](ROADMAP.md).
 
 ## Risks and open items
 
