@@ -11,6 +11,10 @@ import { MediaPlayer } from "./MediaBody";
 import { useCanvasUi } from "./ui";
 
 /** The full content of one node: long write-ups, documents, search results. */
+// The colour of a found passage. Kept out of the stylesheet: the CSS optimiser
+// does not know ::highlight() (the CSS Custom Highlight API) and warns about it.
+const HIGHLIGHT_STYLE = "::highlight(mlch-find) { background-color: rgba(255, 192, 0, 0.5); }";
+
 export function SidePanel() {
   const openId = useCanvasUi((s) => s.openId);
   const setOpen = useCanvasUi((s) => s.setOpen);
@@ -88,6 +92,7 @@ export function SidePanel() {
           <X size={15} />
         </button>
       </div>
+      <style>{HIGHLIGHT_STYLE}</style>
       <div ref={contentRef} className="flex-1 overflow-auto px-6 py-5">
         {node.kind === "media" && mulchId && (
           <div className="-mx-6 -mt-5 mb-4 bg-paper-2">
