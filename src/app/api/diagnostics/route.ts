@@ -25,7 +25,7 @@ async function tail(file: string, lines: number): Promise<string> {
 /** Summaries of this app's crash reports from the last week (macOS writes them). */
 async function crashReports(): Promise<string> {
   const dir = path.join(os.homedir(), "Library", "Logs", "DiagnosticReports");
-  const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => /^(Electron|npkn)/.test(n) && n.endsWith(".ips"));
+  const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => /^(Electron|Mulch)/.test(n) && n.endsWith(".ips"));
   const lines: string[] = [];
   for (const name of names) {
     const file = path.join(dir, name);
@@ -57,19 +57,19 @@ export async function POST() {
     );
     const napkins = await listNapkins();
     const sections: Array<[string, string]> = [
-      ["App", `npkn ${packageJson.version} · Electron ${process.versions.electron ?? "-"} · Node ${process.versions.node} · macOS ${os.release()} ${os.arch()} · ${new Date().toISOString()}`],
+      ["App", `mulch ${packageJson.version} · Electron ${process.versions.electron ?? "-"} · Node ${process.versions.node} · macOS ${os.release()} ${os.arch()} · ${new Date().toISOString()}`],
       ["AI", harnesses.join("\n")],
       ["Settings", JSON.stringify({ ...settings }, null, 2)],
       ["Keys set", ["groq", "firecrawl", "fal", "exa"].map((k) => `${k}=${getCredential(k as "groq") ? "yes" : "no"}`).join(" ")],
-      ["Library", `${libraryDir()} · ${napkins.length} napkins`],
+      ["Library", `${libraryDir()} · ${napkins.length} mulches`],
       ["Today", `generation spend $${(await spentToday()).toFixed(2)} · usage ${JSON.stringify(await usageToday())}`],
       ["Crash reports (7 days)", await crashReports()],
-      ["Log (npkn.jsonl, last 400 lines)", await tail(logFile(), 400)],
+      ["Log (mulch.jsonl, last 400 lines)", await tail(logFile(), 400)],
       ["Desktop log (last 200 lines)", await tail(path.join(logsDir(), "desktop.log"), 200)],
     ];
     const text = redact(sections.map(([title, body]) => `## ${title}\n\n${body}\n`).join("\n"));
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const file = path.join(os.homedir(), "Downloads", `npkn-diagnostics-${stamp}.txt`);
+    const file = path.join(os.homedir(), "Downloads", `mulch-diagnostics-${stamp}.txt`);
     await fs.writeFile(file, text);
     log.info("diagnostics", "report saved", { file });
     await desktopRequest("reveal", { path: file });

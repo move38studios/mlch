@@ -1,4 +1,6 @@
-# npkn V1 plan
+# Mulch V1 plan
+
+(Written when the product was called npkn; renamed to Mulch on 2026-10-07. "Napkin" below is the internal term for a canvas.)
 
 Status 2026-10-07: M0–M7 built, plus images, artifacts and the maker lane, media generation, search and research, logging. Next: George tests with real voice and real napkins.
 
@@ -69,7 +71,7 @@ Electron main ── window (renderer: Next pages, React Flow canvas, mic captur
 Each napkin is a plain folder, so Claude Code and other tools can read it directly and a later share or export is a copy of a slice of it.
 
 ```
-~/Documents/npkn/<napkin-id>/
+~/Documents/mulch/<napkin-id>/
   napkin.json            current board: meta, nodes, edges
   transcript.jsonl       speech segments with timestamps
   events.jsonl           append-only op log (who, when, which op)

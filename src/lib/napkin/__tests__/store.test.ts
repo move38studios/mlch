@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 let library: string;
 beforeEach(() => {
-  library = fs.mkdtempSync(path.join(os.tmpdir(), "npkn-store-"));
-  process.env.NPKN_LIBRARY = library;
-  delete (globalThis as { __npknStore?: unknown }).__npknStore;
+  library = fs.mkdtempSync(path.join(os.tmpdir(), "mulch-store-"));
+  process.env.MULCH_LIBRARY = library;
+  delete (globalThis as { __mulchStore?: unknown }).__mulchStore;
 });
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 
@@ -35,7 +35,7 @@ describe("napkin store", () => {
     expect(fs.readFileSync(path.join(dir, "events.jsonl"), "utf8").trim().split("\n")).toHaveLength(1);
 
     // A fresh process reads it back from disk.
-    delete (globalThis as { __npknStore?: unknown }).__npknStore;
+    delete (globalThis as { __mulchStore?: unknown }).__mulchStore;
     expect((await store.getNapkin(napkin.id)).nodes.a.text).toBe("hi");
     expect((await store.listNapkins()).map((s) => [s.title, s.nodeCount])).toEqual([["One", 1]]);
 

@@ -117,7 +117,7 @@ export function NapkinView({ id }: { id: string }) {
   return (
     <main className="h-full flex flex-col">
       <header className="drag h-12 shrink-0 pl-20 pr-3 flex items-center gap-2 border-b border-line bg-paper z-10">
-        <Link href="/" className="p-1.5 rounded-md text-ink-2 hover:bg-paper-2" aria-label="Napkins" title="Napkins">
+        <Link href="/" className="p-1.5 rounded-md text-ink-2 hover:bg-paper-2" aria-label="Home" title="Home">
           <ArrowLeft size={16} />
         </Link>
         <Title />

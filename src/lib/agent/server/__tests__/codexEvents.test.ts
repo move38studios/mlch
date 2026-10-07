@@ -159,9 +159,9 @@ describe("CodexTurnMapper.awaitingModel", () => {
     mapper.turnId = TURN;
     mapper.map(at("item/completed", { item: { type: "reasoning", id: "r1", summary: ["Plan"] } }));
     expect(mapper.awaitingModel).toBe(true);
-    mapper.map(at("item/started", { item: { type: "dynamicToolCall", id: "c1", namespace: "npkn", tool: "get_workflow" } }));
+    mapper.map(at("item/started", { item: { type: "dynamicToolCall", id: "c1", namespace: "mulch", tool: "get_workflow" } }));
     expect(mapper.awaitingModel).toBe(false);
-    mapper.map(at("item/completed", { item: { type: "dynamicToolCall", id: "c1", namespace: "npkn", tool: "get_workflow" } }));
+    mapper.map(at("item/completed", { item: { type: "dynamicToolCall", id: "c1", namespace: "mulch", tool: "get_workflow" } }));
     expect(mapper.awaitingModel).toBe(true);
     mapper.map(at("item/started", { item: { type: "agentMessage", id: "m1", text: "" } }));
     expect(mapper.awaitingModel).toBe(false);

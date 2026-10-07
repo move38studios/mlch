@@ -8,10 +8,10 @@ import { napkinWith, node } from "./fixtures";
 
 let library: string;
 beforeEach(() => {
-  library = fs.mkdtempSync(path.join(os.tmpdir(), "npkn-history-"));
-  process.env.NPKN_LIBRARY = library;
-  delete (globalThis as { __npknStore?: unknown }).__npknStore;
-  delete (globalThis as { __npknHistory?: unknown }).__npknHistory;
+  library = fs.mkdtempSync(path.join(os.tmpdir(), "mulch-history-"));
+  process.env.MULCH_LIBRARY = library;
+  delete (globalThis as { __mulchStore?: unknown }).__mulchStore;
+  delete (globalThis as { __mulchHistory?: unknown }).__mulchHistory;
 });
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 

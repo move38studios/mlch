@@ -19,31 +19,31 @@ const ENV_NAMES: Record<CredentialName, string> = {
 };
 
 type DesktopGlobals = typeof globalThis & {
-  __npknCredentials?: Partial<Record<CredentialName, string | null>>;
-  __npknDesktop?: { request(type: string, payload?: Record<string, unknown>): Promise<BridgeResult> };
+  __mulchCredentials?: Partial<Record<CredentialName, string | null>>;
+  __mulchDesktop?: { request(type: string, payload?: Record<string, unknown>): Promise<BridgeResult> };
 };
 
 export type BridgeResult = { ok: true; value?: unknown } | { ok: false; error: string };
 
 /** A key stored in the app, else the environment. Undefined when neither has one. */
 export function getCredential(name: CredentialName): string | undefined {
-  const stored = (globalThis as DesktopGlobals).__npknCredentials?.[name];
+  const stored = (globalThis as DesktopGlobals).__mulchCredentials?.[name];
   if (typeof stored === "string" && stored) return stored;
   const fromEnv = process.env[ENV_NAMES[name]];
   return fromEnv ? fromEnv : undefined;
 }
 
 export function isDesktop(): boolean {
-  return process.env.NPKN_ELECTRON === "1";
+  return process.env.MULCH_ELECTRON === "1";
 }
 
 export async function desktopRequest(type: "reveal" | "open" | "choose-directory" | "render", payload?: Record<string, unknown>): Promise<BridgeResult> {
-  const bridge = (globalThis as DesktopGlobals).__npknDesktop;
+  const bridge = (globalThis as DesktopGlobals).__mulchDesktop;
   if (!bridge) return { ok: false, error: "Only available in the desktop app." };
   return bridge.request(type, payload);
 }
 
 /** Where napkin folders live. */
 export function libraryDir(): string {
-  return process.env.NPKN_LIBRARY ? path.resolve(process.env.NPKN_LIBRARY) : path.join(os.homedir(), "Documents", "npkn");
+  return process.env.MULCH_LIBRARY ? path.resolve(process.env.MULCH_LIBRARY) : path.join(os.homedir(), "Documents", "Mulch");
 }

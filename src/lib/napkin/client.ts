@@ -161,7 +161,7 @@ export const useNapkin = create<NapkinState>((set, get) => {
           if (closed) return;
           // A 404 never recovers; check once, else reconnect.
           fetch(`/api/napkins/${id}`).then((response) => {
-            if (response.status === 404) set({ error: "Napkin not found." });
+            if (response.status === 404) set({ error: "Not found." });
             else retry = setTimeout(open, 1000);
           }, () => (retry = setTimeout(open, 1000)));
         };

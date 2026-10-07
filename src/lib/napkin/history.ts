@@ -48,9 +48,9 @@ interface HistoryState {
   chains: Map<string, Promise<unknown>>;
 }
 
-const globalState = globalThis as typeof globalThis & { __npknHistory?: HistoryState };
+const globalState = globalThis as typeof globalThis & { __mulchHistory?: HistoryState };
 function state(): HistoryState {
-  return (globalState.__npknHistory ??= { lastHash: new Map(), lastAt: new Map(), timers: new Map(), chains: new Map() });
+  return (globalState.__mulchHistory ??= { lastHash: new Map(), lastAt: new Map(), timers: new Map(), chains: new Map() });
 }
 
 function historyDir(id: string): string {

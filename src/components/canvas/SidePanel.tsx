@@ -50,7 +50,7 @@ export function SidePanel() {
         const range = document.createRange();
         range.setStart(text, at);
         range.setEnd(text, Math.min((text.textContent ?? "").length, at + needle.length));
-        (CSS as unknown as { highlights: Map<string, unknown> }).highlights.set("npkn-find", new (window as unknown as { Highlight: new (r: Range) => unknown }).Highlight(range));
+        (CSS as unknown as { highlights: Map<string, unknown> }).highlights.set("mulch-find", new (window as unknown as { Highlight: new (r: Range) => unknown }).Highlight(range));
         (text.parentElement ?? root).scrollIntoView({ block: "center", behavior: "smooth" });
         return;
       }

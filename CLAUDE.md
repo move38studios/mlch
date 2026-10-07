@@ -1,11 +1,13 @@
-# npkn
+# Mulch
+
+Formerly npkn. In the interface the product is **Mulch** and the thing you create is barely named ("New", titles, "This one / All"); where a noun is needed it is "a mulch". In code the thing is still a **napkin** (types, store, routes, tools); keep that internal term.
 
 Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user's own Claude Code / Codex subscription. Product vision: README.md. Plan and status: docs/PLAN.md.
 
 ## Commands
 
 - `npm run check`: typecheck, lint, vitest, electron tests. Run before committing.
-- `npm run dev`: browser dev server on :3100. Set `NPKN_LIBRARY=<dir>` to keep test napkins out of `~/Documents/npkn`.
+- `npm run dev`: browser dev server on :3100. Set `MULCH_LIBRARY=<dir>` to keep test data out of `~/Documents/Mulch`.
 - `npm run electron:dev` / `npm run app`: desktop app (dev / production build).
 - `node scripts/electron-run.cjs <test.cjs> [--library dir] [--shots dir] [--fake-mic file.wav] [--production]`: drive the real app with Playwright (throwaway profile). `scripts/electron-shot.cjs <out.png> [route]` for a screenshot. electron-run fails if a new Electron crash report appears in ~/Library/Logs/DiagnosticReports.
 
@@ -18,7 +20,7 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 - Maker lane (`submitMake` in jobs.ts): Claude Code with its own tools inside its OS sandbox (`workspace` in HarnessTurnParams → `sandbox` + permission rules in claudeHarness.ts), or `codex exec` in workspace-write (codexExec.ts). Writes only to `<napkin>/work` and `<napkin>/artifacts`; network only to package registries (Claude). New files in artifacts/ become cards.
 - `src/lib/search/`: one SQLite index for the library (`<library>/.index.sqlite`, `node:sqlite` with FTS5) plus local embeddings (multilingual-e5-small) in a WebAssembly worker thread (`scripts/embed-worker.mjs`, onnxruntime-web). Search merges keyword and vector rankings, never waits more than 8s on the model, and works keyword-only without it. `exa.ts` is the optional Exa web search.
 - Research lane (`submitResearch` in jobs.ts): many searches and page reads, then sources, a comparison table and a write-up; resumes the session once if outputs are missing.
-- Logging: `src/lib/log.ts` writes JSON lines to `<logs>/npkn.jsonl` (redacted, rotated); main writes `desktop.log` and records process crashes; crash dumps stay local. Settings → Diagnostics saves a support report to ~/Downloads.
+- Logging: `src/lib/log.ts` writes JSON lines to `<logs>/mulch.jsonl` (redacted, rotated); main writes `desktop.log` and records process crashes; crash dumps stay local. Settings → Diagnostics saves a support report to ~/Downloads.
 - File reading for instructions: read-only, home folder, private places refused (`src/lib/agent/files.ts`).
 - `src/lib/voice/`: browser recorder (pause-cut WAV chunks) and server transcriber (Groq).
 - `electron/`: shell adapted from node-banana. Main injects a per-launch token; keys live in Keychain via safeStorage and reach the server process over parentPort, never through the page.

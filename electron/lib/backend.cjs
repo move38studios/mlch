@@ -10,7 +10,7 @@ function createBackend({ fork, options, entry, onMessage, onDisconnected, diagno
     stopping = true;
     const current = child;
     stopPromise = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('The previous local server has not stopped. Quit npkn before retrying.')), 5000);
+      const timer = setTimeout(() => reject(new Error('The previous local server has not stopped. Quit Mulch before retrying.')), 5000);
       current.once('exit', () => { clearTimeout(timer); resolve(); });
       current.kill();
     });

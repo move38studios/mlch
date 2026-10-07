@@ -2,14 +2,14 @@
  {
   "type": "system",
   "subtype": "init",
-  "cwd": "/Users/user/.npkn/agent",
+  "cwd": "/Users/user/.mulch/agent",
   "session_id": "42aeca93-6672-48dd-897c-3b62f633dd55",
   "tools": [
-   "mcp__npkn__add_numbers"
+   "mcp__mulch__add_numbers"
   ],
   "mcp_servers": [
    {
-    "name": "npkn",
+    "name": "mulch",
     "status": "connected",
     "source": "sdk"
    }
@@ -131,7 +131,7 @@
   "product_feedback_disabled": false,
   "uuid": "05ba7e90-1203-47f4-aa1d-6b8fccfe90d0",
   "memory_paths": {
-   "auto": "/Users/user/.claude-claude2/projects/-Users-user--npkn-agent/memory/"
+   "auto": "/Users/user/.claude-claude2/projects/-Users-user--mulch-agent/memory/"
   },
   "messaging_socket_path": "/tmp/cc-socks/53787.sock",
   "fast_mode_state": "off",
@@ -338,7 +338,7 @@
    "content_block": {
     "type": "tool_use",
     "id": "toolu_01BzVxDNQiKFdPMUYXk6XtmX",
-    "name": "mcp__npkn__add_numbers",
+    "name": "mcp__mulch__add_numbers",
     "input": {},
     "caller": {
      "type": "direct"
@@ -416,7 +416,7 @@
     {
      "type": "tool_use",
      "id": "toolu_01BzVxDNQiKFdPMUYXk6XtmX",
-     "name": "mcp__npkn__add_numbers",
+     "name": "mcp__mulch__add_numbers",
      "input": {
       "a": 2,
       "b": 3
@@ -461,7 +461,7 @@
    {
     "id": "toolu_01BzVxDNQiKFdPMUYXk6XtmX",
     "display_name": "Add Numbers",
-    "server_display_name": "npkn"
+    "server_display_name": "mulch"
    }
   ]
  },

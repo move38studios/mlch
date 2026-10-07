@@ -50,7 +50,7 @@ async function probe(file: string): Promise<{ duration?: number; width?: number;
 }
 
 async function videoFrames(file: string, duration: number, count = 6): Promise<ModelView["images"]> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "npkn-frames-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mulch-frames-"));
   try {
     const images: ModelView["images"] = [];
     for (let i = 0; i < count; i++) {

@@ -173,6 +173,6 @@ body {
 .napkin-focused .napkin-node {
   animation: napkin-focus 1.2s ease-in-out 2;
 }
-::highlight(npkn-find) {
+::highlight(mulch-find) {
   background-color: rgba(248, 229, 140, 0.9);
 }

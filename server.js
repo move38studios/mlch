@@ -22,14 +22,14 @@ const port = process.env.PORT || 3100;
 // The agent routes (/api/agent/*) run turns on the user's own Claude or ChatGPT
 // subscription, so only this machine may use them. Stamp requests whose socket
 // really is loopback with a per-process secret; src/lib/agent/server/sameOrigin.ts
-// refuses agent requests without it (unless NPKN_AGENT_ALLOWED_HOSTS lists the host),
+// refuses agent requests without it (unless MULCH_AGENT_ALLOWED_HOSTS lists the host),
 // and refuses the agent altogether on a server that doesn't set the secret.
 // Headers can be forged from another machine; the socket address cannot. The
 // app's own server-side fetches to 127.0.0.1 are loopback too and get the stamp,
 // so sameOrigin also requires a browser page's headers, which Node's fetch never sends.
-const AGENT_LOCAL_HEADER = 'x-npkn-agent-local';
+const AGENT_LOCAL_HEADER = 'x-mulch-agent-local';
 const agentLocalSecret = randomBytes(32).toString('hex');
-process.env.NPKN_AGENT_LOCAL_SECRET = agentLocalSecret;
+process.env.MULCH_AGENT_LOCAL_SECRET = agentLocalSecret;
 
 function isLoopback(address) {
   if (!address) return false;

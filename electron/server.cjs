@@ -8,27 +8,27 @@ const next = require('next');
 const { createRedactor } = require('./lib/diagnostics.cjs');
 const { browseDirectoryTitle, createBridgeClient } = require('./lib/bridge.cjs');
 const redactor = createRedactor();
-globalThis.__npknRedact = value => redactor.redact(value);
+globalThis.__mulchRedact = value => redactor.redact(value);
 // Native actions (reveal, folder picker) for route code, answered by main;
 // see src/lib/desktop/server.ts.
 const bridge = createBridgeClient({ post: message => process.parentPort.postMessage(message) });
-globalThis.__npknDesktop = { request: (type, payload) => bridge.request(type, payload) };
+globalThis.__mulchDesktop = { request: (type, payload) => bridge.request(type, payload) };
 // Keys stored by main (Keychain-encrypted); read by src/lib/desktop/server.ts.
-globalThis.__npknCredentials = {};
+globalThis.__mulchCredentials = {};
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '127.0.0.1';
-const port = Number(process.env.NPKN_ELECTRON_PORT);
-const token = process.env.NPKN_ELECTRON_TOKEN;
-delete process.env.NPKN_ELECTRON_TOKEN;
+const port = Number(process.env.MULCH_ELECTRON_PORT);
+const token = process.env.MULCH_ELECTRON_TOKEN;
+delete process.env.MULCH_ELECTRON_TOKEN;
 const origin = `http://${hostname}:${port}`;
 // The agent routes run turns on the user's own Claude or ChatGPT subscription
 // and only answer requests this server vouches for (see
 // src/lib/agent/server/sameOrigin.ts). Every request that passes authorized()
 // comes from the desktop window, so it gets the stamp.
-const AGENT_LOCAL_HEADER = 'x-npkn-agent-local';
+const AGENT_LOCAL_HEADER = 'x-mulch-agent-local';
 const agentLocalSecret = randomBytes(32).toString('hex');
-process.env.NPKN_AGENT_LOCAL_SECRET = agentLocalSecret;
+process.env.MULCH_AGENT_LOCAL_SECRET = agentLocalSecret;
 
 // A stray rejection or exception in route code is logged, not fatal: the
 // window and running jobs keep going. (desktop.log keeps stderr.)
@@ -37,7 +37,7 @@ process.on('uncaughtException', (error) => console.error('[server] uncaught exce
 
 process.parentPort.on('message', ({ data }) => {
   if (data?.type === 'secrets') { redactor.add(data.values); return; }
-  if (data?.type === 'credentials') { globalThis.__npknCredentials = data.values && typeof data.values === 'object' ? data.values : {}; return; }
+  if (data?.type === 'credentials') { globalThis.__mulchCredentials = data.values && typeof data.values === 'object' ? data.values : {}; return; }
   bridge.receive(data);
 });
 
@@ -52,7 +52,7 @@ function foreignPage(req) {
 }
 
 function authorized(req) {
-  return req.headers.host === `${hostname}:${port}` && req.headers['x-npkn-desktop'] === token;
+  return req.headers.host === `${hostname}:${port}` && req.headers['x-mulch-desktop'] === token;
 }
 
 async function start() {
@@ -67,7 +67,7 @@ async function start() {
       res.writeHead(403).end('Forbidden');
       return;
     }
-    delete req.headers['x-npkn-desktop'];
+    delete req.headers['x-mulch-desktop'];
     if (req.url?.startsWith('/api/') && foreignPage(req)) {
       res.writeHead(403, { 'Content-Type': 'application/json' }).end('{"error":"Not allowed"}');
       return;
@@ -99,7 +99,7 @@ async function start() {
       socket.destroy();
       return;
     }
-    delete req.headers['x-npkn-desktop'];
+    delete req.headers['x-mulch-desktop'];
   });
   // Agent turns and transcription can run long.
   server.requestTimeout = 0;

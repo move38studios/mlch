@@ -43,7 +43,7 @@ function replayRecordedTurn(toolAnswers: RpcLine[], options: { stopAfterTool?: b
               threadId: RECORDED_THREAD,
               turnId: RECORDED_TURN,
               callId: item.id,
-              namespace: "npkn",
+              namespace: "mulch",
               tool: "add_numbers",
               arguments: { a: 2, b: 3 },
             }),
@@ -110,7 +110,7 @@ function params(overrides: Partial<HarnessTurnParams> = {}): HarnessTurnParams {
   return {
     history: [{ role: "user", text: "The secret word is banana." }, { role: "assistant", text: "Got it." }],
     prompt: "<canvas/>\n<user>add 2 and 3</user>",
-    systemPrompt: "You are npkn's workflow agent.",
+    systemPrompt: "You are Mulch's workflow agent.",
     tools: runtime(),
     signal: new AbortController().signal,
     ...overrides,
@@ -198,7 +198,7 @@ describe("Codex harness runTurn", () => {
       approvalPolicy: "never",
       sandbox: "read-only",
       ephemeral: true,
-      baseInstructions: "You are npkn's workflow agent.",
+      baseInstructions: "You are Mulch's workflow agent.",
       developerInstructions: CODEX_DEVELOPER_INSTRUCTIONS,
       config: { "mcp_servers.node_repl.enabled": false, "mcp_servers.computer-use.enabled": false },
       environments: [],
@@ -336,12 +336,12 @@ describe("Codex harness runTurn", () => {
       threadId: "nope",
       turnId: "t",
       callId: "c",
-      namespace: "npkn",
+      namespace: "mulch",
       tool: "add_numbers",
       arguments: {},
     });
     expect(answer.result).toEqual({
-      contentItems: [{ type: "inputText", text: expect.stringMatching(/No npkn turn/) }],
+      contentItems: [{ type: "inputText", text: expect.stringMatching(/No Mulch turn/) }],
       success: false,
     });
   });
@@ -595,7 +595,7 @@ describe("Codex harness: one turn per thread", () => {
       threadId,
       turnId,
       callId: `call-${turnId}`,
-      namespace: "npkn",
+      namespace: "mulch",
       tool: "add_numbers",
       arguments: { a: 2, b: 3 },
     });
@@ -752,7 +752,7 @@ describe("Codex harness after the app-server goes away", () => {
       events.push(event);
       if (event.type === "session") {
         setTimeout(() => {
-          current = b.instance; // e.g. NPKN_CODEX_BIN changed
+          current = b.instance; // e.g. MULCH_CODEX_BIN changed
           a.instance.stop();
         }, 20);
       }

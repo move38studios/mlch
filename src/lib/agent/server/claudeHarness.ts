@@ -72,14 +72,14 @@ import {
   isMissingSessionError,
 } from "./claudeEvents";
 import { ClaudeSignIn } from "./claudeSignIn";
-import { buildClaudeEnv, NPKN_VERSION } from "./env";
+import { buildClaudeEnv, MULCH_VERSION } from "./env";
 import { withConversationHistory } from "./history";
 import { executeTool } from "./toolExecution";
 
 const LABEL = "Claude Code";
 
 /** Agent chats live in their own Claude Code project, away from the user's repos and `claude --resume` lists. */
-export const CLAUDE_AGENT_CWD = path.join(os.homedir(), ".npkn", "agent");
+export const CLAUDE_AGENT_CWD = path.join(os.homedir(), ".mulch", "agent");
 
 /** Upper bound on model round-trips in one turn. */
 const MAX_TURNS = 40;
@@ -153,7 +153,7 @@ export interface ClaudeHarnessState {
    * minutes after that, and dropped as soon as a turn shows extra usage is on.
    */
   extraUsageOffAt: number | null;
-  /** npkn: the plan windows from the last usage report, for display. */
+  /** Mulch: the plan windows from the last usage report, for display. */
   planUsage?: NonNullable<AgentHarnessStatus["planUsage"]>;
 }
 
@@ -162,12 +162,12 @@ export function createClaudeHarnessState(): ClaudeHarnessState {
 }
 
 const globalState = globalThis as typeof globalThis & {
-  __npknClaudeSignIn?: ClaudeSignIn;
-  __npknClaudeHarness?: ClaudeHarnessState;
+  __mulchClaudeSignIn?: ClaudeSignIn;
+  __mulchClaudeHarness?: ClaudeHarnessState;
 };
 
 function sharedState(): ClaudeHarnessState {
-  const state = (globalState.__npknClaudeHarness ??= createClaudeHarnessState());
+  const state = (globalState.__mulchClaudeHarness ??= createClaudeHarnessState());
   // After a dev reload the object may come from an older version of this module.
   const defaults = createClaudeHarnessState();
   for (const key of Object.keys(defaults) as Array<keyof ClaudeHarnessState>) {
@@ -177,7 +177,7 @@ function sharedState(): ClaudeHarnessState {
 }
 
 function sharedSignIn(): ClaudeSignIn {
-  globalState.__npknClaudeSignIn ??= new ClaudeSignIn({
+  globalState.__mulchClaudeSignIn ??= new ClaudeSignIn({
     spawn: (bin, args, options) =>
       spawn(bin, args, {
         env: options.env as NodeJS.ProcessEnv,
@@ -186,7 +186,7 @@ function sharedSignIn(): ClaudeSignIn {
         windowsHide: true,
       }),
   });
-  return globalState.__npknClaudeSignIn;
+  return globalState.__mulchClaudeSignIn;
 }
 
 /* ── tools ─────────────────────────────────────────────────────── */
@@ -200,7 +200,7 @@ export function buildClaudeTools(runtime: AgentToolRuntime) {
       definition.inputShape,
       async (args) => {
         const result = await executeTool(runtime, definition.name, args);
-        // npkn: images (view_image) go back as MCP image content.
+        // Mulch: images (view_image) go back as MCP image content.
         const images = (result.images ?? []).map((image) => ({ type: "image" as const, data: image.data, mimeType: image.mimeType }));
         return { content: [{ type: "text" as const, text: result.text }, ...images], isError: !result.ok };
       },
@@ -216,7 +216,7 @@ export function buildClaudeTools(runtime: AgentToolRuntime) {
   );
 }
 
-/** npkn: Claude Code's own tools for a making turn (always sandboxed, see workspaceOptions). */
+/** Mulch: Claude Code's own tools for a making turn (always sandboxed, see workspaceOptions). */
 export const CLAUDE_WORKSPACE_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep"] as const;
 
 /** Absolute paths in permission rules start with `//`. */
@@ -259,7 +259,7 @@ export function buildClaudeOptions(input: {
   const { params } = input;
   // "default" lets Claude Code pick the plan's default model.
   const model = params.model === "default" ? undefined : params.model || CLAUDE_DEFAULT_MODEL;
-  // npkn: a making turn gets Claude Code's own tools inside its OS sandbox.
+  // Mulch: a making turn gets Claude Code's own tools inside its OS sandbox.
   const workspace = params.workspace;
   const nativeTools = workspace ? [...CLAUDE_WORKSPACE_TOOLS] : [];
   return {
@@ -277,7 +277,7 @@ export function buildClaudeOptions(input: {
     mcpServers: {
       [CLAUDE_MCP_SERVER_NAME]: createSdkMcpServer({
         name: CLAUDE_MCP_SERVER_NAME,
-        version: NPKN_VERSION,
+        version: MULCH_VERSION,
         tools: buildClaudeTools(params.tools),
       }),
     },
@@ -403,14 +403,14 @@ const USAGE_UNCONFIRMED =
   "lets Claude Code bill extra usage. Try again in a moment.";
 
 const OAUTH_TOKEN_NO_USAGE =
-  "Claude Code can't report your plan's usage limits with the CLAUDE_CODE_OAUTH_TOKEN in npkn's " +
+  "Claude Code can't report your plan's usage limits with the CLAUDE_CODE_OAUTH_TOKEN in Mulch's " +
   "environment (a `claude setup-token` token), so the agent can't make sure a turn stays within your plan's " +
-  "included usage. Remove the variable, restart npkn and sign in with `claude auth login` to use the agent.";
+  "included usage. Remove the variable, restart Mulch and sign in with `claude auth login` to use the agent.";
 
 const OAUTH_TOKEN_REJECTED =
-  "Claude rejected the CLAUDE_CODE_OAUTH_TOKEN in npkn's environment (it may have expired or been " +
+  "Claude rejected the CLAUDE_CODE_OAUTH_TOKEN in Mulch's environment (it may have expired or been " +
   "revoked). Create a new one with `claude setup-token` in a terminal and update the variable, or remove it " +
-  "and restart npkn to use your saved Claude sign-in.";
+  "and restart Mulch to use your saved Claude sign-in.";
 
 function rejectedProblem(oauthTokenInEnv: boolean): string {
   return oauthTokenInEnv
@@ -711,7 +711,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
       return { allowed: false, code: "usage_limit", message: USAGE_UNCONFIRMED };
     }
     const rateLimits = usage?.rate_limits_available ? (usage.rate_limits as Record<string, unknown> | null) : null;
-    // npkn: keep the windows for display.
+    // Mulch: keep the windows for display.
     if (rateLimits) {
       deps.state.planUsage = Object.entries(rateLimits).flatMap(([name, value]) => {
         const window = value as UsageWindow;

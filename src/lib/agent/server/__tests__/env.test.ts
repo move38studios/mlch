@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { buildClaudeEnv, buildCodexEnv, isAllowedForCodex, isStrippedForClaude, NPKN_VERSION } from "../env";
+import { buildClaudeEnv, buildCodexEnv, isAllowedForCodex, isStrippedForClaude, MULCH_VERSION } from "../env";
 
 /** Everything that could make Claude Code bill something other than the user's subscription. */
 const CLAUDE_BILLING_VARIABLES = [
@@ -34,7 +34,7 @@ const CLAUDE_BILLING_VARIABLES = [
   "GOOGLE_APPLICATION_CREDENTIALS",
 ];
 
-/** Set when npkn itself runs inside a Claude Code session (as in this repo's dev shells). */
+/** Set when Mulch itself runs inside a Claude Code session (as in this repo's dev shells). */
 const NESTED_SESSION_VARIABLES = [
   "CLAUDECODE",
   "CLAUDE_CODE_ENTRYPOINT",
@@ -96,7 +96,7 @@ const KEEP_FOR_CLAUDE: Record<string, string> = {
   NODE_EXTRA_CA_CERTS: "/certs/ca.pem",
   SSL_CERT_FILE: "/certs/ca.pem",
   CODEX_CA_CERTIFICATE: "/certs/corp.pem",
-  NPKN_CLAUDE_BIN: "/opt/claude",
+  MULCH_CLAUDE_BIN: "/opt/claude",
 };
 
 function fill(names: string[]): Record<string, string> {
@@ -137,8 +137,8 @@ describe("buildClaudeEnv", () => {
   });
 
   it("identifies the app and turns off auto memory and hyperlinks", () => {
-    expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toBe(`npkn/${NPKN_VERSION}`);
-    expect(NPKN_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toBe(`mulch/${MULCH_VERSION}`);
+    expect(MULCH_VERSION).toMatch(/^\d+\.\d+\.\d+/);
     expect(env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).toBe("1");
     expect(env.FORCE_HYPERLINK).toBe("0");
   });
@@ -164,31 +164,31 @@ describe("buildClaudeEnv", () => {
 describe("server.js's loopback stamp secret", () => {
   // server.js sets it on process.env before Next starts; a CLI that could read
   // it could vouch for requests from another machine (sameOrigin.ts).
-  const source = { ...EVERYTHING, NPKN_AGENT_LOCAL_SECRET: "a".repeat(64), NPKN_AGENT_ALLOWED_HOSTS: "192.168.4.22" };
+  const source = { ...EVERYTHING, MULCH_AGENT_LOCAL_SECRET: "a".repeat(64), MULCH_AGENT_ALLOWED_HOSTS: "192.168.4.22" };
 
   it("never reaches the Claude Code child", () => {
-    expect(isStrippedForClaude("NPKN_AGENT_LOCAL_SECRET")).toBe(true);
+    expect(isStrippedForClaude("MULCH_AGENT_LOCAL_SECRET")).toBe(true);
     const env = buildClaudeEnv(source);
-    expect(env).not.toHaveProperty("NPKN_AGENT_LOCAL_SECRET");
+    expect(env).not.toHaveProperty("MULCH_AGENT_LOCAL_SECRET");
     expect(Object.values(env)).not.toContain("a".repeat(64));
   });
 
   it("never reaches the Codex child", () => {
-    expect(isAllowedForCodex("NPKN_AGENT_LOCAL_SECRET")).toBe(false);
+    expect(isAllowedForCodex("MULCH_AGENT_LOCAL_SECRET")).toBe(false);
     const env = buildCodexEnv(source);
-    expect(env).not.toHaveProperty("NPKN_AGENT_LOCAL_SECRET");
+    expect(env).not.toHaveProperty("MULCH_AGENT_LOCAL_SECRET");
     expect(Object.values(env)).not.toContain("a".repeat(64));
   });
 
   it("stays out of both when read from process.env, as in the running server", () => {
-    const before = process.env.NPKN_AGENT_LOCAL_SECRET;
-    process.env.NPKN_AGENT_LOCAL_SECRET = "b".repeat(64);
+    const before = process.env.MULCH_AGENT_LOCAL_SECRET;
+    process.env.MULCH_AGENT_LOCAL_SECRET = "b".repeat(64);
     try {
-      expect(buildClaudeEnv()).not.toHaveProperty("NPKN_AGENT_LOCAL_SECRET");
-      expect(buildCodexEnv()).not.toHaveProperty("NPKN_AGENT_LOCAL_SECRET");
+      expect(buildClaudeEnv()).not.toHaveProperty("MULCH_AGENT_LOCAL_SECRET");
+      expect(buildCodexEnv()).not.toHaveProperty("MULCH_AGENT_LOCAL_SECRET");
     } finally {
-      if (before === undefined) delete process.env.NPKN_AGENT_LOCAL_SECRET;
-      else process.env.NPKN_AGENT_LOCAL_SECRET = before;
+      if (before === undefined) delete process.env.MULCH_AGENT_LOCAL_SECRET;
+      else process.env.MULCH_AGENT_LOCAL_SECRET = before;
     }
   });
 });

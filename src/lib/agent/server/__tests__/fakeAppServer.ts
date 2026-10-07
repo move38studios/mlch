@@ -22,7 +22,7 @@ export type FakeHandler = (params: any, server: FakeAppServer) => unknown;
 
 export const DEFAULT_HANDLERS: Record<string, FakeHandler> = {
   initialize: () => ({
-    userAgent: "npkn/0.157.0 (Mac OS 26.6.0; arm64) unknown (npkn; 1.10.0)",
+    userAgent: "mulch/0.157.0 (Mac OS 26.6.0; arm64) unknown (Mulch; 1.10.0)",
     codexHome: "/Users/user/.codex",
     platformFamily: "unix",
     platformOs: "macos",

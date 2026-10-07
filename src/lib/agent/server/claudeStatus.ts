@@ -58,7 +58,7 @@ const CLAUDE_DEFAULT_EFFORT = "high";
 
 /**
  * The picker's models from Claude Code's own list (initializationResult().models):
- * real names ("Opus 5.5") and the exact model each alias runs today. npkn's
+ * real names ("Opus 5.5") and the exact model each alias runs today. Mulch's
  * default stays Sonnet (fast, and what the evals passed on); the CLI's own
  * "Default (recommended)" row is kept, labelled by the model it resolves to.
  * Falls back to the static aliases when the CLI reports no list.

@@ -24,12 +24,12 @@ const crashReports = () => new Set((fs.existsSync(reports) ? fs.readdirSync(repo
 
 (async () => {
   const crashesBefore = crashReports();
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'npkn-run-'));
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'mulch-run-'));
   const app = await electron.launch({
     args: [
       path.resolve(__dirname, '..'), ...(production ? [] : ['--dev']),
     ],
-    env: { ...process.env, ...(fakeMic ? { NPKN_FAKE_MIC: '1' } : {}), NPKN_ELECTRON_USER_DATA: profile, NPKN_LIBRARY: library || path.join(profile, 'napkins'), NPKN_ELECTRON_PORT: '47851' },
+    env: { ...process.env, ...(fakeMic ? { MULCH_FAKE_MIC: '1' } : {}), MULCH_ELECTRON_USER_DATA: profile, MULCH_LIBRARY: library || path.join(profile, 'napkins'), MULCH_ELECTRON_PORT: '47851' },
     timeout: 180_000,
   });
   let failed = false;

@@ -17,8 +17,8 @@
 
 import { WEB_TOOL_PENDING, type AgentErrorCode, type HarnessEvent } from "../types";
 
-/** Namespace our dynamic tools live under (`npkn.<tool>`). */
-export const CODEX_TOOL_NAMESPACE = "npkn";
+/** Namespace our dynamic tools live under (`mulch.<tool>`). */
+export const CODEX_TOOL_NAMESPACE = "mulch";
 
 interface TurnErrorLike {
   message?: unknown;

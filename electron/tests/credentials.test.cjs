@@ -6,7 +6,7 @@ const path = require('node:path');
 const { createCipheriv, createDecipheriv, randomBytes } = require('node:crypto');
 const { createCredentialStore } = require('../lib/credentials.cjs');
 test('encrypted updates, deletion tombstones and failures preserve credentials', () => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'npkn-keys-'));
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mulch-keys-'));
   const key = randomBytes(32), iv = randomBytes(16);
   let available = true;
   const secure = {

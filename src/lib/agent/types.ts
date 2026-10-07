@@ -1,5 +1,5 @@
 /**
- * npkn agent: shared contracts.
+ * Mulch agent: shared contracts.
  *
  * Adapted from node-banana's agent (MIT, © William Falloon). Each turn runs on
  * the user's own Claude Code or Codex login through the official CLI, never on
@@ -87,7 +87,7 @@ export interface AgentHarnessStatus {
   };
   /** The terminal command that signs in with the vendor's own flow. */
   signInCommand: string;
-  /** npkn: the plan's usage windows at the last check (percent used), when the vendor reports them. */
+  /** Mulch: the plan's usage windows at the last check (percent used), when the vendor reports them. */
   planUsage?: Array<{ name: string; percent: number; resetsAt?: number; at: number }>;
 }
 

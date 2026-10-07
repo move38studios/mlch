@@ -41,7 +41,7 @@ test('startup timeout kills the incomplete backend', async () => {
   assert.equal(backend.online(), false);
 });
 test('logs redact split secrets and rotate with bounded storage', async () => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'npkn-log-'));
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mulch-log-'));
   try {
     const redactor = createRedactor(); redactor.add(['secret-split-across-chunks']);
     const logs = createDiagnostics(temp, redactor, 256);

@@ -47,20 +47,20 @@ interface StoreState {
   afterApply: Array<(id: string, batch: OpBatch) => void>;
 }
 
-const globalState = globalThis as typeof globalThis & { __npknStore?: StoreState };
+const globalState = globalThis as typeof globalThis & { __mulchStore?: StoreState };
 function state(): StoreState {
-  if (!globalState.__npknStore) {
-    globalState.__npknStore = { open: new Map(), loading: new Map(), afterApply: [] };
+  if (!globalState.__mulchStore) {
+    globalState.__mulchStore = { open: new Map(), loading: new Map(), afterApply: [] };
     const flush = () => void flushAll();
     process.once("SIGTERM", flush);
     process.once("beforeExit", flush);
   }
-  return globalState.__npknStore;
+  return globalState.__mulchStore;
 }
 
 export class NapkinNotFoundError extends Error {
   constructor(id: string) {
-    super(`Napkin ${id} not found.`);
+    super(`Not found: ${id}.`);
   }
 }
 

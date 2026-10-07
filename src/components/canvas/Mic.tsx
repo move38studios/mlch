@@ -53,7 +53,7 @@ export function MicButton({ napkinId }: { napkinId: string }) {
     try {
       const bridge = desktop();
       if (bridge && !(await bridge.microphoneAccess())) {
-        notify("Microphone access is off for npkn. Turn it on in System Settings > Privacy & Security > Microphone.");
+        notify("Microphone access is off for Mulch. Turn it on in System Settings > Privacy & Security > Microphone.");
         return;
       }
       const next = new Recorder({

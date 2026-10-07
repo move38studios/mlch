@@ -43,7 +43,7 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, log 
         return { ok: true };
       }
       case 'open': {
-        // npkn: open a napkin file in its default app.
+        // Mulch: open a napkin file in its default app.
         const file = target(payload);
         if (!file) return fail('Opening a file needs a full path.');
         let stat;
@@ -53,7 +53,7 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, log 
         return error ? fail(error) : { ok: true };
       }
       case 'render': {
-        // npkn: screenshots of an artifact page for the agent (see main.cjs renderArtifact).
+        // Mulch: screenshots of an artifact page for the agent (see main.cjs renderArtifact).
         if (!render) return fail('Rendering is not available.');
         return { ok: true, value: await render(payload.url, payload.steps) };
       }

@@ -1,10 +1,10 @@
-// Local text embeddings in a worker thread of the npkn server.
+// Local text embeddings in a worker thread of the Mulch server.
 //
 // Pure JavaScript and WebAssembly, no native code: the native ONNX runtime
 // crashes inside Electron (EXC_BREAKPOINT in V8). The tokenizer comes from
 // transformers.js's web build (its Node build loads the native runtime on
 // import); the model runs in onnxruntime-web. Model: multilingual-e5-small,
-// quantised, downloaded once into ~/.npkn/models.
+// quantised, downloaded once into ~/.mulch/models.
 //
 // Protocol: { id, texts, role } -> { id, vectors: Float32Array[] } | { id, error }.
 import { parentPort } from "node:worker_threads";
@@ -14,7 +14,7 @@ import path from "node:path";
 
 const MODEL = "Xenova/multilingual-e5-small";
 const FILES = ["onnx/model_quantized.onnx", "tokenizer.json", "tokenizer_config.json"];
-const modelDir = path.join(os.homedir(), ".npkn", "models", MODEL);
+const modelDir = path.join(os.homedir(), ".mulch", "models", MODEL);
 
 let ready;
 

@@ -24,7 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import type { Readable, Writable } from "node:stream";
-import { NPKN_VERSION } from "./env";
+import { MULCH_VERSION } from "./env";
 
 /** `-c key=value` overrides applied to the app-server process. */
 export const CODEX_LOCKDOWN_CONFIG: readonly string[] = [
@@ -149,7 +149,7 @@ const defaultSpawn: SpawnAppServer = (bin, args, options) =>
     windowsHide: true,
   });
 
-/** "npkn/0.157.0 (Mac OS 26.6.0; arm64) …" → "0.157.0". */
+/** "mulch/0.157.0 (Mac OS 26.6.0; arm64) …" → "0.157.0". */
 export function parseCodexVersion(userAgent: string): string | undefined {
   return userAgent.match(/^[^/\s]+\/(\d+\.\d+\.\d+[\w.-]*)/)?.[1];
 }
@@ -223,7 +223,7 @@ export class CodexAppServer {
 
     try {
       const init = (await this.requestOn(child, "initialize", {
-        clientInfo: { name: "npkn", title: "npkn", version: NPKN_VERSION },
+        clientInfo: { name: "mulch", title: "Mulch", version: MULCH_VERSION },
         capabilities: { experimentalApi: true, requestAttestation: false },
       })) as { userAgent?: string; codexHome?: string };
       this.info = {
@@ -238,7 +238,7 @@ export class CodexAppServer {
       };
       this.userMcpServers = Object.keys(read.config?.mcp_servers ?? {});
       this.modelProvider = read.config?.model_provider ?? null;
-      this.workDir ??= await (this.options.makeWorkDir ?? (() => mkdtemp(path.join(os.tmpdir(), "npkn-codex-"))))();
+      this.workDir ??= await (this.options.makeWorkDir ?? (() => mkdtemp(path.join(os.tmpdir(), "mulch-codex-"))))();
     } catch (error) {
       child.kill("SIGTERM");
       this.handleExit(child, (error as Error).message);
@@ -390,7 +390,7 @@ export class CodexAppServer {
     if (!child) return;
     const handler = this.requestHandlers.get(method);
     if (!handler) {
-      this.write(child, { id, error: { code: -32601, message: `npkn doesn't support "${method}".` } });
+      this.write(child, { id, error: { code: -32601, message: `Mulch doesn't support "${method}".` } });
       return;
     }
     try {
@@ -404,17 +404,17 @@ export class CodexAppServer {
 
 /* ── the shared instance ───────────────────────────────────────── */
 
-const globalState = globalThis as typeof globalThis & { __npknCodexAppServer?: CodexAppServer };
+const globalState = globalThis as typeof globalThis & { __mulchCodexAppServer?: CodexAppServer };
 
 /**
  * The process-wide app-server for this binary. A different binary (e.g.
- * NPKN_CODEX_BIN changed) replaces it.
+ * MULCH_CODEX_BIN changed) replaces it.
  */
 export function getCodexAppServer(bin: string, env: Record<string, string>): CodexAppServer {
-  const current = globalState.__npknCodexAppServer;
+  const current = globalState.__mulchCodexAppServer;
   if (current && current.bin === bin) return current;
   current?.stop();
   const server = new CodexAppServer({ bin, env });
-  globalState.__npknCodexAppServer = server;
+  globalState.__mulchCodexAppServer = server;
   return server;
 }

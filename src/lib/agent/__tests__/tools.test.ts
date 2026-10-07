@@ -7,9 +7,9 @@ import { overlaps, rectOf } from "@/lib/napkin/sizes";
 
 let library: string;
 beforeEach(() => {
-  library = fs.mkdtempSync(path.join(os.tmpdir(), "npkn-tools-"));
-  process.env.NPKN_LIBRARY = library;
-  delete (globalThis as { __npknStore?: unknown }).__npknStore;
+  library = fs.mkdtempSync(path.join(os.tmpdir(), "mulch-tools-"));
+  process.env.MULCH_LIBRARY = library;
+  delete (globalThis as { __mulchStore?: unknown }).__mulchStore;
 });
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 
@@ -86,7 +86,7 @@ describe("napkin tools", () => {
   });
 
   it("file tools stay inside the folder", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "npkn-root-"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mulch-root-"));
     fs.writeFileSync(path.join(root, "a.md"), "hello");
     const { runtime } = await setup(["list_files", "read_file"], { readRoot: root });
     expect((await runtime.execute("list_files", { path: "" })).text).toContain("a.md");

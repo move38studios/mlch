@@ -127,7 +127,7 @@ export function SearchPalette({ napkinId, onFocus }: { napkinId: string; onFocus
           <div className="flex text-xs rounded-md bg-paper-2 p-0.5">
             {[false, true].map((value) => (
               <button key={String(value)} onClick={() => setAll(value)} className={`px-2 py-0.5 rounded ${all === value ? "bg-white shadow-sm" : "text-ink-3"}`}>
-                {value ? "All napkins" : "This napkin"}
+                {value ? "All" : "This one"}
               </button>
             ))}
           </div>

@@ -149,7 +149,7 @@ function params(overrides: Partial<HarnessTurnParams> = {}): HarnessTurnParams {
   return {
     history: [],
     prompt: "<canvas/>\n<user>add 2 and 3</user>",
-    systemPrompt: "You are npkn's workflow agent.",
+    systemPrompt: "You are Mulch's workflow agent.",
     tools: runtime(),
     signal: new AbortController().signal,
     ...overrides,
@@ -249,16 +249,16 @@ describe("Claude harness runTurn", () => {
       settingSources: [],
       strictMcpConfig: true,
       tools: [],
-      allowedTools: ["mcp__npkn__add_numbers"],
+      allowedTools: ["mcp__mulch__add_numbers"],
       permissionMode: "dontAsk",
-      systemPrompt: "You are npkn's workflow agent.",
+      systemPrompt: "You are Mulch's workflow agent.",
       model: "haiku",
       thinking: { type: "adaptive", display: "summarized" },
       includePartialMessages: true,
       maxTurns: 40,
       resume: "s-9",
     });
-    expect(Object.keys(options.mcpServers ?? {})).toEqual(["npkn"]);
+    expect(Object.keys(options.mcpServers ?? {})).toEqual(["mulch"]);
     expect(options.env).not.toHaveProperty("ANTHROPIC_API_KEY");
     expect(options.env).not.toHaveProperty("CLAUDECODE");
     expect(options.env).toMatchObject({ HOME: "/Users/someone", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
@@ -269,7 +269,7 @@ describe("Claude harness runTurn", () => {
     await collect(harness({ query }).runTurn(params({ webAccess: true })));
     expect(made[0].options).toMatchObject({
       tools: ["WebSearch", "WebFetch"],
-      allowedTools: ["mcp__npkn__add_numbers", "WebSearch", "WebFetch"],
+      allowedTools: ["mcp__mulch__add_numbers", "WebSearch", "WebFetch"],
       permissionMode: "dontAsk",
     });
   });

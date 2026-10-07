@@ -54,7 +54,7 @@ export function Home() {
   return (
     <main className="min-h-full flex flex-col">
       <header className="drag h-12 shrink-0 pl-20 pr-3 flex items-center gap-3 border-b border-line">
-        <span className="font-semibold tracking-tight">npkn</span>
+        <span className="font-semibold tracking-tight">Mulch</span>
         <div className="flex-1" />
         <Link href="/settings" className="p-2 rounded-md text-ink-2 hover:bg-paper-2" aria-label="Settings" title="Settings">
           <Settings size={16} />
@@ -62,21 +62,20 @@ export function Home() {
       </header>
       <div className="w-full max-w-3xl mx-auto px-6 py-10">
         <div className="flex items-center mb-6">
-          <h1 className="text-lg font-semibold">Napkins</h1>
           <div className="flex-1" />
           <button
             onClick={create}
             disabled={creating}
             className="inline-flex items-center gap-1.5 rounded-md bg-ink text-paper px-3 py-1.5 text-sm font-medium hover:bg-ink/85 disabled:opacity-50"
           >
-            <Plus size={15} /> New napkin
+            <Plus size={15} /> New
           </button>
         </div>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search all napkins"
-          aria-label="Search all napkins"
+          placeholder="Search"
+          aria-label="Search"
           className="w-full mb-6 rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-ink/40"
         />
         {results && (
@@ -85,7 +84,7 @@ export function Home() {
           </div>
         )}
         {error && <p className="text-sm text-accent mb-4">{error}</p>}
-        {napkins && napkins.length === 0 && <p className="text-sm text-ink-3">No napkins yet.</p>}
+        {napkins && napkins.length === 0 && <p className="text-sm text-ink-3">Nothing yet.</p>}
         <ul className="divide-y divide-line border-y border-line">
           {napkins?.map((napkin) => (
             <li key={napkin.id} className="group flex items-center">

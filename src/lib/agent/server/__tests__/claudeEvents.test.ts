@@ -17,7 +17,7 @@ import {
  * A real Claude Agent SDK stream (haiku, one tool call, includePartialMessages),
  * recorded by the research spike as .scratch/agent/claude-sdk/log-turn1.json.
  * It was recorded with the MCP server named "nb"; the fixture renames it to
- * "npkn" and replaces local paths, nothing else.
+ * "mulch" and replaces local paths, nothing else.
  */
 const recorded = JSON.parse(
   readFileSync(path.join(__dirname, "fixtures", "claude-turn.json"), "utf8"),
@@ -37,9 +37,9 @@ function init(overrides: Record<string, unknown> = {}) {
     subtype: "init",
     session_id: "s-1",
     uuid: "u-init",
-    cwd: "/Users/user/.npkn/agent",
-    tools: ["mcp__npkn__add_numbers"],
-    mcp_servers: [{ name: "npkn", status: "connected" }],
+    cwd: "/Users/user/.mulch/agent",
+    tools: ["mcp__mulch__add_numbers"],
+    mcp_servers: [{ name: "mulch", status: "connected" }],
     model: "claude-haiku",
     permissionMode: "dontAsk",
     apiKeySource: "none",

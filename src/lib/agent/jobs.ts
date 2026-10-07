@@ -62,9 +62,9 @@ interface JobsState {
   status?: { at: number; value: AgentHarnessStatus };
 }
 
-const globalState = globalThis as typeof globalThis & { __npknJobs?: JobsState };
+const globalState = globalThis as typeof globalThis & { __mulchJobs?: JobsState };
 function state(): JobsState {
-  return (globalState.__npknJobs ??= { napkins: new Map() });
+  return (globalState.__mulchJobs ??= { napkins: new Map() });
 }
 
 function jobsFor(napkinId: string): NapkinJobs {

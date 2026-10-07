@@ -61,9 +61,9 @@ interface State {
   finishedHooks: Array<(record: GenerationRecord) => void>;
 }
 
-const globalState = globalThis as typeof globalThis & { __npknGenerations?: State };
+const globalState = globalThis as typeof globalThis & { __mulchGenerations?: State };
 function state(): State {
-  return (globalState.__npknGenerations ??= { records: new Map(), polling: new Set(), waiters: new Map(), loaded: new Set(), finishedHooks: [] });
+  return (globalState.__mulchGenerations ??= { records: new Map(), polling: new Set(), waiters: new Map(), loaded: new Set(), finishedHooks: [] });
 }
 
 /** Called when any generation finishes (done, failed or cancelled). One hook per source. */

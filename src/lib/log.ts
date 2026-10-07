@@ -1,10 +1,10 @@
 /**
- * Structured logging for the npkn server. Server-only.
+ * Structured logging for the Mulch server. Server-only.
  *
  *   log.info("jobs", "job finished", { napkinId, jobId, ms: 5200 })
  *
- * One JSON object per line in <logs>/npkn.jsonl (the app's logs folder, see
- * electron/main.cjs; ~/Library/Logs/npkn in browser development), rotated at
+ * One JSON object per line in <logs>/mulch.jsonl (the app's logs folder, see
+ * electron/main.cjs; ~/Library/Logs/mulch in browser development), rotated at
  * 5 MB with four old files kept. Secrets are redacted: stored keys, key-like
  * fields, bearer tokens. Lines also go to the console, which Electron keeps
  * in desktop.log. Logging never throws.
@@ -28,16 +28,16 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP = 4;
 
 export function logsDir(): string {
-  return process.env.NPKN_LOGS_DIR || path.join(os.homedir(), "Library", "Logs", "npkn");
+  return process.env.MULCH_LOGS_DIR || path.join(os.homedir(), "Library", "Logs", "Mulch");
 }
 
 export function logFile(): string {
-  return path.join(logsDir(), "npkn.jsonl");
+  return path.join(logsDir(), "mulch.jsonl");
 }
 
 type Globals = typeof globalThis & {
-  __npknRedact?: (value: string) => string;
-  __npknCredentials?: Record<string, string | null | undefined>;
+  __mulchRedact?: (value: string) => string;
+  __mulchCredentials?: Record<string, string | null | undefined>;
 };
 
 const SECRET_FIELD = /(key|token|secret|password|authorization)/i;
@@ -45,9 +45,9 @@ const SECRET_FIELD = /(key|token|secret|password|authorization)/i;
 /** Remove anything that looks like a secret, including the keys the app holds. */
 export function redact(text: string): string {
   const globals = globalThis as Globals;
-  let out = globals.__npknRedact ? globals.__npknRedact(text) : text;
+  let out = globals.__mulchRedact ? globals.__mulchRedact(text) : text;
   const known = [
-    ...Object.values(globals.__npknCredentials ?? {}),
+    ...Object.values(globals.__mulchCredentials ?? {}),
     ...["GROQ_API_KEY", "FIRECRAWL_API_KEY", "FAL_KEY", "EXA_API_KEY"].map((name) => process.env[name]),
   ].filter((value): value is string => typeof value === "string" && value.length >= 8);
   for (const secret of known) out = out.split(secret).join("[REDACTED]");
@@ -104,7 +104,7 @@ function write(level: LogLevel, area: string, msg: string, data?: Record<string,
 
 export const log = {
   debug: (area: string, msg: string, data?: Record<string, unknown>) => {
-    if (process.env.NPKN_DEBUG) write("debug", area, msg, data);
+    if (process.env.MULCH_DEBUG) write("debug", area, msg, data);
   },
   info: (area: string, msg: string, data?: Record<string, unknown>) => write("info", area, msg, data),
   warn: (area: string, msg: string, data?: Record<string, unknown>) => write("warn", area, msg, data),

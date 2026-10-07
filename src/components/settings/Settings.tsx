@@ -33,7 +33,7 @@ const ENRICH: Array<{ id: string; label: string }> = [
   { id: "examples", label: "Examples" },
   { id: "related", label: "Related ideas" },
   { id: "questions", label: "Questions" },
-  { id: "napkins", label: "Links to other napkins" },
+  { id: "napkins", label: "Links to your other mulches" },
 ];
 const KEYS: Array<{ id: "groq" | "firecrawl" | "fal" | "exa"; label: string }> = [
   { id: "groq", label: "Groq API key" },
@@ -175,7 +175,7 @@ export function Settings() {
   return (
     <main className="min-h-full">
       <header className="drag h-12 pl-20 pr-4 flex items-center gap-2 border-b border-line">
-        <Link href="/" className="p-1.5 rounded-md text-ink-2 hover:bg-paper-2" aria-label="Napkins" title="Napkins">
+        <Link href="/" className="p-1.5 rounded-md text-ink-2 hover:bg-paper-2" aria-label="Home" title="Home">
           <ArrowLeft size={16} />
         </Link>
         <span className="font-semibold">Settings</span>

@@ -252,7 +252,7 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     title: "Make file",
     description:
       "Save a file you wrote (an HTML page or slide deck, SVG, markdown, CSV, JSON, text) in the napkin's artifacts folder and put a card for it on the napkin. " +
-      "HTML opens full-window inside npkn and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
+      "HTML opens full-window inside Mulch and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
       "images only as data: URIs. It cannot fetch anything at runtime and cannot open other pages.",
     inputShape: {
       title: z.string().max(120),
@@ -844,7 +844,7 @@ export function createNapkinTools(ctx: ToolContext): AgentToolRuntime {
         groupId: undefined,
         docPath: undefined,
         title: node.title ?? undefined,
-        text: `${node.text}\n\n(From napkin "${source.title}")`,
+        text: `${node.text}\n\n(From "${source.title}")`,
         origin,
         userTouched: undefined,
         createdAt: Date.now(),

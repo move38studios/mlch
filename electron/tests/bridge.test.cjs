@@ -25,7 +25,7 @@ function main({ platform, window } = {}) {
 }
 
 function withTemp(run) {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'npkn-bridge-'));
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mulch-bridge-'));
   return Promise.resolve(run(temp)).finally(() => fs.rmSync(temp, { recursive: true, force: true }));
 }
 

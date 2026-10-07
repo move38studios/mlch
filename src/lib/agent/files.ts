@@ -11,7 +11,7 @@ import path from "node:path";
 
 const DENIED_DIRS = [
   ".ssh", ".aws", ".gnupg", ".gpg", ".azure", ".kube", ".docker", ".config/gcloud", ".config/gh",
-  ".password-store", ".netrc", "Library", ".Trash", ".npkn",
+  ".password-store", ".netrc", "Library", ".Trash", ".mulch",
 ];
 const DENIED_FILES = /(^|\/)(\.env(\..*)?|\.npmrc|\.pypirc|\.netrc|\.git-credentials|id_[a-z0-9]+|.*\.(pem|key|p12|pfx|keychain-db|kdbx))$/i;
 
