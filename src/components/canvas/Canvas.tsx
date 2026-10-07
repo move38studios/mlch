@@ -434,8 +434,9 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
       minZoom={0.1}
       maxZoom={2}
       panOnScroll
-      selectionOnDrag
-      panOnDrag={[1, 2]}
+      // Drag on empty canvas moves it; Shift-drag draws a selection box.
+      panOnDrag
+      selectionKeyCode="Shift"
       fitView
       fitViewOptions={{ padding: { top: "40px", left: "40px", right: "40px", bottom: "150px" }, maxZoom: 1 }}
       proOptions={{ hideAttribution: true }}
