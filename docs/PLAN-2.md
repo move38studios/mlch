@@ -2,6 +2,16 @@
 
 Written 2026-10-12, for George to review before work starts. V1 (built) is docs/PLAN.md; once this plan is agreed, docs/ROADMAP.md is rewritten to follow it.
 
+## Status (2026-10-12)
+
+Built and checked in the app: M0, M1, M2, M3 (system audio unverified), M4, M5 (against a local Worker), M6, M7 up to an unsigned package. Open:
+- **Deploy (G3):** the Worker, R2 bucket and landing are ready; Claude Code's auto mode refuses production deploys, so George runs `cd cloud && npm install --legacy-peer-deps && npx wrangler r2 bucket create mlch-shares && npm run deploy`.
+- **System audio (G6):** grant "System Audio Recording" to mlch (dev: the terminal or Electron), then `node scripts/electron-run.cjs scripts/scenarios/local-audio.cjs` and a real call.
+- **Signing and notarizing (G2):** `npm run dist` signs with the move38 Developer ID (macOS may ask once for keychain access to the key); notarizing needs `xcrun notarytool store-credentials mlch` and `APPLE_KEYCHAIN_PROFILE=mlch`. Releases: `node scripts/release.mjs` after the deploy.
+- **Distribution terms (G4)** before anyone else installs it.
+- **Wording (G5):** the list at the end.
+- Not built: areas and headings during a call; collaboration (M8).
+
 ## The goal
 
 The use case that makes mlch worth giving to friends:
@@ -180,4 +190,5 @@ Placeholders I'll add, collected here for you to replace. Existing ones from ROA
 - M3: "New call", "Listening", "Stop listening", "Me", "Them", consent line (yours)
 - M4: "Open at login"
 - M5: "Share", "Copy link", "Stop sharing", "Live", "No longer live", "Open in mlch", what-is-shared summary (yours)
-- M6: every line on the checklist screen (yours)
+- M6: every line on the checklist screen (yours). Now: "AI", "Transcription", "Microphone", "Search", "Folders", "optional", "Sign in", "Check again", "Save", "Allow", "Download", "Try again", "Downloading", "Start", "Groq API key" (placeholder), "Setup checklist", "App", "Open at login"
+- Added while building: "Links to your mulches and sources" (enrichment), "Remove", "Folder not found", "Indexing", "Indexing, N read of M", "N files", "Obsidian", "Connected there", "Calls" (prompt part), "Listening", "Stop listening", "Me", "Them", "Only the microphone: …", "Link copied", "Copy link", "Share again", "Delete link", "Sharing", "N items, M files, live / not live", "Show Call", "Stop Listening", "New", "New Call", "Open mlch" (menu bar), "Zoom In", "Zoom Out", "Show All", macOS permission prompts "Speech to text." and "Speech to text in calls.", "Download model", "Downloading model N%", viewer "Live", "No longer live", "Open in mlch", "Not found."

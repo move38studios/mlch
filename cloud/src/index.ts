@@ -291,6 +291,13 @@ export async function handle(request: Request, env: Env): Promise<Response> {
     return shareHost(request, env, url, parts);
   }
 
+  // App updates (electron-updater, generic provider): R2 releases/mac/… — latest-mac.yml, the zip, its blockmap.
+  if (parts[0] === "releases" && parts[1] === "mac" && parts.length === 3 && request.method === "GET" && /^[\w.-]+$/.test(parts[2])) {
+    const object = await env.SHARES.get(`releases/mac/${parts[2]}`);
+    if (!object) return notFound();
+    const type = parts[2].endsWith(".yml") ? "text/yaml; charset=utf-8" : "application/octet-stream";
+    return new Response(object.body, { headers: { "Content-Type": type, "Content-Length": String(object.size), "Cache-Control": parts[2].endsWith(".yml") ? "no-cache" : "public, max-age=31536000, immutable" } });
+  }
   if (parts[0] === "viewer" || parts[0] === "brand") return env.ASSETS.fetch(request);
   if (url.pathname === "/favicon.ico") return Response.redirect(`${url.origin}/brand/icon.svg`, 301);
   if (url.pathname === "/") {

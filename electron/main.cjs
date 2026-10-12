@@ -198,6 +198,17 @@ function setupScreenshots() {
   if (!globalShortcut.register(CALL_SHORTCUT, () => void openPage('/new?call=1'))) log(`Shortcut ${CALL_SHORTCUT} is taken by another app.`);
 }
 
+// mlch: updates for the packaged app, from mlch.app (electron-builder.yml publish). Downloaded quietly, installed on quit.
+function startUpdates() {
+  if (!app.isPackaged || process.env.MLCH_NO_UPDATES) return;
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.logger = { info: log, warn: log, error: log, debug: () => {} };
+  autoUpdater.autoInstallOnAppQuit = true;
+  const check = () => autoUpdater.checkForUpdates().catch((error) => log(`Update check failed: ${error.message}`));
+  void check();
+  setInterval(check, 6 * 60 * 60 * 1000).unref();
+}
+
 // mlch: the menu bar. New, New Call, the last few mulches, and the call being listened to.
 const CALL_SHORTCUT = 'Control+Command+L';
 let tray;
@@ -514,6 +525,7 @@ else {
     setupScreenshots();
     if (await startWithRetry()) await createWindow();
     createTray();
+    startUpdates();
     if (!process.env.MLCH_ELECTRON_USER_DATA) {
       if (app.isPackaged) app.setAsDefaultProtocolClient('mlch');
       else app.setAsDefaultProtocolClient('mlch', process.execPath, [path.resolve(process.argv[1] ?? root), '--dev']);

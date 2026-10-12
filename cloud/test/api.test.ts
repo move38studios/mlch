@@ -19,6 +19,16 @@ describe("landing", () => {
     expect(response.headers.get("Location")).toBe(`${APEX}/x?y=1`);
   });
 
+  it("serves app updates from releases/mac in the bucket", async () => {
+    await env.SHARES.put("releases/mac/latest-mac.yml", "version: 0.2.0\n");
+    const feed = await call(`${APEX}/releases/mac/latest-mac.yml`);
+    expect(feed.status).toBe(200);
+    expect(feed.headers.get("Cache-Control")).toBe("no-cache");
+    expect(await feed.text()).toBe("version: 0.2.0\n");
+    expect((await call(`${APEX}/releases/mac/missing.zip`)).status).toBe(404);
+    expect((await call(`${APEX}/releases/mac/..%2Fshares`)).status).toBe(404);
+  });
+
   it("answers unknown paths with 404", async () => {
     expect((await call(`${APEX}/nope`)).status).toBe(404);
   });

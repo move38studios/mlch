@@ -38,7 +38,11 @@ Ideas emerge from the mess and from cross-pollination, and they happen at the in
 
 **History.** Every mulch keeps its history. You can travel back in time to any earlier state.
 
-**Sharing** (not built yet). You can share a mulch as a static, timestamped snapshot. A share link lets other people (or AIs) explore the canvas visually and open each file and document on it. Creating a link means sharing all documents attached to it.
+**Calls.** Click the mlch icon in the menu bar (or press ⌃⌘L) for a new mulch that listens to a call: your microphone as you, the Mac's sound as the others. Every half minute or so the conversation becomes cards (ideas, decisions, to-dos, questions), enriched as usual. Type while it listens to steer it ("make a quick deck from what we just discussed").
+
+**What you already know.** Link folders once in Settings (company documents, an Obsidian vault): every mulch can search them. When something in another mulch or a linked note bears on what you're saying, the AI puts a link card next to it, saying why. A link copies nothing; it shows the original as it is now and opens it. Obsidian notes open in Obsidian; mlch can add new notes to a folder you allow and never edits existing ones.
+
+**Sharing.** Share a made file (a deck, a page) or the whole canvas as a link on mlch.app. A shared canvas is live while sharing is on, so people can watch it build during a call. Anyone with the link can open it read-only or copy it into their own mlch. Sharing a canvas shares the files on it; links into your folders go as titles only.
 
 ## Platform
 

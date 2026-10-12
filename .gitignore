@@ -14,3 +14,4 @@ cloud/dist/
 cloud/.wrangler/
 native/*/.build/
 native/*/.swiftpm/
+dist/

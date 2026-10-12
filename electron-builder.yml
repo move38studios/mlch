@@ -1,0 +1,54 @@
+# Packaged, signed mlch.app (M7 in docs/PLAN-2.md). Build: npm run dist
+appId: app.mlch.mac
+productName: mlch
+copyright: © 2026 move38 B.V.
+directories:
+  output: dist
+  buildResources: build
+# Next's server reads its own files and the agent CLIs run as separate processes: no asar.
+asar: false
+files:
+  - package.json
+  - server.js
+  - electron/**/*
+  - "!electron/tests/**"
+  - scripts/embed-worker.mjs
+  - public/**/*
+  - .next/**/*
+  - "!.next/cache/**"
+  - "!.next/dev/**"
+  - next.config.*
+  - node_modules/**/*
+extraResources:
+  - from: native/mlch-audio/.build/release/mlch-audio
+    to: mlch-audio
+  - from: native/mlch-audio/.build/release/FluidAudio_FluidAudio.bundle
+    to: FluidAudio_FluidAudio.bundle
+protocols:
+  - name: mlch
+    schemes: [mlch]
+mac:
+  category: public.app-category.productivity
+  icon: electron/icon.png
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  minimumSystemVersion: "14.4"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  identity: "move38 B.V. (FP3X7G6BU7)"
+  # Set APPLE_KEYCHAIN_PROFILE=mlch (xcrun notarytool store-credentials mlch) to notarize.
+  notarize: false
+  extendInfo:
+    # Placeholder wording (George): shown in macOS's permission prompts.
+    NSMicrophoneUsageDescription: Speech to text.
+    NSAudioCaptureUsageDescription: Speech to text in calls.
+    LSUIElement: false
+publish:
+  provider: generic
+  url: https://mlch.app/releases/mac
+afterPack: build/after-pack.cjs
