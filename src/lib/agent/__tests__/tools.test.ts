@@ -78,7 +78,7 @@ describe("mulch tools", () => {
         { op: "addGroup", group: { id: "g-b", title: "B", x: 0, y: 400, w: 500, h: 300, origin: "agent:j0", createdAt: 5 } },
         { op: "updateNode", id: "mine", patch: { groupId: "g-a" } },
         { op: "updateNode", id: "said", patch: { groupId: "g-b" } },
-        { op: "addNode", node: { id: "made", kind: "artifact", x: 0, y: 900, text: "Deck", artifactPath: "artifacts/deck.html", origin: "agent:j0", createdAt: 6 } },
+        { op: "addNode", node: { id: "made", kind: "artifact", x: 0, y: 900, text: "Deck", docPath: "artifacts/deck.html", origin: "agent:j0", createdAt: 6 } },
       ],
       "user",
     );

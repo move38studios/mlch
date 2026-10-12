@@ -28,6 +28,10 @@ export interface SourceStatus {
   files: number;
   /** Files read in this pass (changed or new). */
   done: number;
+  /** Files left out: kinds mlch does not read, or over 20 MB. */
+  skipped?: number;
+  /** The folder has more than MAX_FILES readable files; only the first are indexed. */
+  capped?: boolean;
   error?: string;
   at?: number;
 }
@@ -72,7 +76,7 @@ export function sourceFile(source: Source, relative: string): string | undefined
 }
 
 /** Every indexable file under the source, as relative paths. */
-export async function listSourceFiles(source: Source): Promise<Array<{ path: string; size: number; mtimeMs: number }>> {
+export async function listSourceFiles(source: Source, counts: { skipped: number; capped: boolean } = { skipped: 0, capped: false }): Promise<Array<{ path: string; size: number; mtimeMs: number }>> {
   const out: Array<{ path: string; size: number; mtimeMs: number }> = [];
   async function walk(dir: string, depth: number): Promise<void> {
     if (depth > 16 || out.length >= MAX_FILES) return;
@@ -83,7 +87,10 @@ export async function listSourceFiles(source: Source): Promise<Array<{ path: str
       return;
     }
     for (const entry of entries) {
-      if (out.length >= MAX_FILES) return;
+      if (out.length >= MAX_FILES) {
+        counts.capped = true;
+        return;
+      }
       if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (!resolveReadable(source.path, path.relative(source.path, full))) continue;
@@ -91,7 +98,8 @@ export async function listSourceFiles(source: Source): Promise<Array<{ path: str
       else if (entry.isFile() && INDEXED.has(path.extname(entry.name).toLowerCase())) {
         const stat = await fs.stat(full).catch(() => undefined);
         if (stat && stat.size <= MAX_FILE_BYTES) out.push({ path: path.relative(source.path, full), size: stat.size, mtimeMs: Math.round(stat.mtimeMs) });
-      }
+        else counts.skipped++;
+      } else if (entry.isFile()) counts.skipped++;
     }
   }
   await walk(source.path, 0);
@@ -142,7 +150,10 @@ async function runIndex(source: Source): Promise<void> {
   const status: SourceStatus = { state: "indexing", files: 0, done: 0 };
   s.status.set(source.id, status);
   try {
-    const files = await listSourceFiles(source);
+    const counts = { skipped: 0, capped: false };
+    const files = await listSourceFiles(source, counts);
+    status.skipped = counts.skipped;
+    status.capped = counts.capped;
     status.files = files.length;
     const known = knownSignatures(scope);
     const present = new Set<string>();

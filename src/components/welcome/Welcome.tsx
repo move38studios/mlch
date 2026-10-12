@@ -8,6 +8,7 @@ import { desktop } from "@/lib/desktop/client";
 import { Recorder } from "@/lib/voice/recorder";
 import { Sources } from "@/components/settings/Sources";
 import { AiAccess, type AuthMode } from "@/components/settings/AiAccess";
+import { KeyField } from "@/components/settings/KeyField";
 import { Scribble } from "@/components/brand/Scribble";
 
 type KeyName = "groq" | "exa" | "fal" | "firecrawl" | "anthropic" | "openai";
@@ -29,7 +30,7 @@ interface Status {
  * All text here is placeholder (George's wording replaces it), except the
  * welcome line and "Your context", which are his.
  */
-const STEPS = ["welcome", "ai", "access", "speech", "permissions", "web", "context", "calls", "ready"] as const;
+const STEPS = ["welcome", "about", "ai", "access", "speech", "permissions", "web", "context", "calls", "ready"] as const;
 type Step = (typeof STEPS)[number];
 
 const AI: Record<HarnessId, { name: string; app: string; plan: string }> = {
@@ -45,7 +46,6 @@ const KEYS: Array<{ id: "exa" | "firecrawl" | "fal"; label: string; use: string;
 const PRIMARY = "h-10 px-5 rounded-xl bg-ink text-white text-[14px] font-medium disabled:bg-paper-2 disabled:text-ink-3 transition-colors";
 const SMALL_PRIMARY = "h-8 px-3 rounded-lg bg-ink text-white text-[13px] font-medium disabled:bg-paper-2 disabled:text-ink-3";
 const SECONDARY = "h-8 px-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-paper-2 hover:text-ink inline-flex items-center shrink-0";
-const FIELD = "h-9 flex-1 min-w-0 rounded-lg border border-line bg-chrome px-3 text-[13.5px] outline-none focus:border-ink";
 const post = (url: string, body: object) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 /* ── pieces ─────────────────────────────────────────────────────── */
@@ -99,29 +99,6 @@ function Done({ children }: { children: React.ReactNode }) {
       </span>
       {children}
     </span>
-  );
-}
-
-/** A key field with where to get one. */
-function KeyField({ id, label, url, saved, onSaved }: { id: KeyName; label: string; url: string; saved: boolean; onSaved: () => void }) {
-  const [value, setValue] = useState("");
-  async function save() {
-    if (!value.trim()) return;
-    await desktop()?.credentials.write({ [id]: value.trim() });
-    setValue("");
-    onSaved();
-  }
-  if (saved) return <Done>Key saved</Done>;
-  return (
-    <div className="flex items-center gap-2">
-      <input value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} type="password" placeholder={`${label} API key`} aria-label={`${label} API key`} className={FIELD} />
-      <button onClick={() => void save()} disabled={!value.trim()} className={SMALL_PRIMARY}>
-        Save
-      </button>
-      <a href={url} target="_blank" rel="noreferrer" className={SECONDARY}>
-        Get a key
-      </a>
-    </div>
   );
 }
 
@@ -302,7 +279,7 @@ export function Welcome() {
   const busy =
     status?.searchModel === "downloading" ||
     status?.local.model === "downloading" ||
-    !!harnesses?.some((h) => h.cli?.state === "downloading" || h.cli?.state === "checking" || h.signIn.state === "pending");
+    !!harnesses?.some((h) => h.cli?.state === "downloading" || h.cli?.state === "checking" || (h.cli?.state === "ready" && !h.installed) || h.signIn.state === "pending");
   useEffect(() => {
     if (!busy) return;
     const timer = setInterval(() => void load(), 1500);
@@ -366,6 +343,30 @@ export function Welcome() {
       );
       break;
 
+    case "about":
+      body = (
+        <>
+          <Heading title="A whiteboard that thinks with you">
+            <p>A partner to think with, and a live canvas for every project, call and idea. While you talk, it maps, researches and connects what you say to everything you&rsquo;ve explored before. Then it makes the deck.</p>
+          </Heading>
+          <ul className="space-y-3.5">
+            {[
+              "You talk or type; mlch maps it onto the canvas while you speak.",
+              "It looks things up as you go: sources, examples, definitions, the questions worth asking.",
+              "It spots where today\u2019s thinking meets what you explored before, in other canvases and in your notes, and draws the line.",
+              "Ask for a deck, a document or an interactive page, and share it with a link.",
+              "On calls it listens to both sides and keeps the notes.",
+            ].map((line) => (
+              <li key={line} className="flex gap-3.5 text-[15px] leading-relaxed">
+                <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-ink" />
+                {line}
+              </li>
+            ))}
+          </ul>
+        </>
+      );
+      break;
+
     case "ai":
       body = (
         <>
@@ -375,9 +376,21 @@ export function Welcome() {
           <div className="space-y-3">
             {harnesses.map((h) => {
               const id = h.id as HarnessId;
-              const line = h.signedIn && h.account?.email ? `Signed in as ${h.account.email}` : h.installed ? `${AI[id].app} is on this Mac` : `${AI[id].app} is not on this Mac yet. mlch can download it.`;
+              // While mlch looks for the program (asking it for its version can take a few seconds), and until
+              // the AI's own status (cached for a few seconds) catches up with what it found, it says so.
+              const checking = !h.installed && (h.cli?.state === "checking" || h.cli?.state === "ready");
+              const line = checking
+                ? `Looking for ${AI[id].app} on this Mac`
+                : h.signedIn && h.account?.email
+                  ? `Signed in as ${h.account.email}`
+                  : h.installed
+                    ? `${AI[id].app} is on this Mac`
+                    : h.cli?.state === "downloading"
+                      ? `Downloading ${AI[id].app}`
+                      : `${AI[id].app} is not on this Mac yet. mlch can download it.`;
               return (
                 <Choice key={id} selected={status.harness === id} onSelect={() => void put({ harness: id })} title={AI[id].name} meta={AI[id].app}>
+                  {checking && <Loader2 className="inline animate-spin mr-1.5 -mt-0.5 text-ink-3" size={12} />}
                   {line}
                 </Choice>
               );
@@ -427,7 +440,7 @@ export function Welcome() {
               </Card>
             )}
             <Card>
-              <AiAccess id={id} mode={mode} consented={status.consent[id]} keySaved={id === "claude" ? status.keys.anthropic : status.keys.openai} onChange={(change) => void access(id, change)} />
+              <AiAccess id={id} mode={mode} consented={status.consent[id]} onChange={(change) => void access(id, change)} />
               {mode === "subscription" && h.installed && (
                 <div className="mt-3 pt-3 border-t border-line flex items-center gap-3">
                   {h.signedIn ? (
@@ -476,7 +489,7 @@ export function Welcome() {
             </Choice>
             {status.transcription === "groq" && (
               <div className="pt-1">
-                <KeyField id="groq" label="Groq" url="https://console.groq.com/keys" saved={status.keys.groq} onSaved={() => void load()} />
+                <KeyField name="groq" label="Groq" url="https://console.groq.com/keys" onChanged={() => void load()} />
               </div>
             )}
           </div>
@@ -509,7 +522,7 @@ export function Welcome() {
               <Card key={key.id}>
                 <div className="text-[15px] font-semibold">{key.label}</div>
                 <p className="mt-0.5 mb-3 text-[13.5px] text-ink-2">{key.use}</p>
-                <KeyField id={key.id} label={key.label} url={key.url} saved={status.keys[key.id]} onSaved={() => void load()} />
+                <KeyField name={key.id} label={key.label} url={key.url} onChanged={() => void load()} />
               </Card>
             ))}
           </div>
@@ -521,8 +534,9 @@ export function Welcome() {
       body = (
         <>
           <Heading title="Your context">
-            <p>Add the folders that hold what you know: notes, an Obsidian vault, documents about your work. Add as many as you like.</p>
-            <p>Together they are all the context mlch builds on. Every mulch can search them and link to what is in them. mlch reads them and changes nothing, unless you let it add notes to one. When files change, mlch picks the changes up.</p>
+            <p>Add the folders that hold what you know: an Obsidian vault, notes, documents about your work. Every canvas can draw on them, and mlch links what you think about now to what&rsquo;s already there.</p>
+            <p>Good to add: notes, writing, research, company documents. Not worth adding: your whole home folder, Documents or Downloads, code projects, photo or music libraries.</p>
+            <p className="text-[13.5px] text-ink-3">mlch reads Markdown, text, PDF, Word, RTF and HTML. It skips images, audio, video, spreadsheets and slides. Up to 20,000 files per folder. It never changes your files unless you let it add notes, and it keeps up as they change.</p>
           </Heading>
           <div className="space-y-3">
             {status.vaults.map((vault) => (
@@ -547,8 +561,8 @@ export function Welcome() {
     case "calls":
       body = (
         <>
-          <Heading title="Calls and the menu bar">
-            <p>mlch stays in the menu bar while its window is closed. Start a call from there, or press ⌃⌘L in any app.</p>
+          <Heading title="Calls">
+            <p>Start a call from the menu bar, or press ⌃⌘L in any app. mlch listens to you and the people on the call. Ideas, decisions and to-dos appear on the canvas as you talk. You keep the full transcript, and notes when the call ends.</p>
           </Heading>
           <div className="rounded-2xl border border-line bg-chrome overflow-hidden">
             <div className="h-8 bg-paper-2 flex items-center justify-end gap-4 px-4 text-[12.5px] text-ink-2">

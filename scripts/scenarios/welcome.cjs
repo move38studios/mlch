@@ -15,6 +15,10 @@ module.exports = async ({ page, base, shot: take }) => {
   await shot('1-welcome');
   await page.click('button:has-text("Get started")');
 
+  await heading('A whiteboard that thinks with you');
+  await shot('1b-about');
+  await next();
+
   await heading('Your AI');
   await page.click('button[aria-pressed]:has-text("Claude")');
   await page.waitForSelector('button[aria-pressed=true]:has-text("Claude")');
@@ -50,7 +54,7 @@ module.exports = async ({ page, base, shot: take }) => {
   await shot('7-context');
   await next();
 
-  await heading('Calls and the menu bar');
+  await heading('Calls');
   await shot('8-calls');
   await next();
 

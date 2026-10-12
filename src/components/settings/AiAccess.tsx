@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { Check } from "lucide-react";
 import type { AgentHarnessId } from "@/lib/agent/types";
-import { desktop } from "@/lib/desktop/client";
+import { KeyField } from "./KeyField";
 
 export type AuthMode = "subscription" | "apiKey";
 
@@ -21,23 +20,14 @@ export function AiAccess({
   id,
   mode,
   consented,
-  keySaved,
   onChange,
 }: {
   id: AgentHarnessId;
   mode: AuthMode;
   consented: boolean;
-  keySaved: boolean;
   onChange: (patch: { agentAuth?: AuthMode; consent?: boolean } | { keySaved: true }) => void;
 }) {
   const names = NAMES[id];
-  const [value, setValue] = useState("");
-  async function save() {
-    if (!value.trim()) return;
-    await desktop()?.credentials.write({ [names.keyName]: value.trim() });
-    setValue("");
-    onChange({ keySaved: true });
-  }
   const chip = (on: boolean) => `h-7 px-2.5 rounded-full text-[12.5px] inline-flex items-center gap-1 ${on ? "border-[1.5px] border-ink text-ink font-medium" : "border border-line text-ink-3 hover:border-line-2 hover:text-ink"}`;
   return (
     <div className="space-y-2">
@@ -56,23 +46,8 @@ export function AiAccess({
             I use my own {names.app}, installed, paid for and signed in on this Mac. mlch runs it here, on my machine, and what it does counts against my {names.plan} plan. I am responsible for that use.
           </span>
         </label>
-      ) : keySaved ? (
-        <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-2">
-          <Check size={13} strokeWidth={2.25} /> Key saved
-          <button onClick={() => void desktop()?.credentials.delete(names.keyName).then(() => onChange({ agentAuth: "apiKey" }))} className="ml-2 text-ink-3 hover:text-ink underline underline-offset-2">
-            Remove
-          </button>
-        </span>
       ) : (
-        <div className="flex items-center gap-2 max-w-[520px]">
-          <input value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} type="password" placeholder={`${names.key} API key`} aria-label={`${names.key} API key`} className="h-8 flex-1 min-w-0 rounded-lg border border-line bg-chrome px-2.5 text-[13.5px] outline-none focus:border-ink" />
-          <button onClick={() => void save()} disabled={!value.trim()} className="h-8 px-3 rounded-lg bg-ink text-white text-[13px] font-medium disabled:bg-paper-2 disabled:text-ink-3">
-            Save
-          </button>
-          <a href={names.url} target="_blank" rel="noreferrer" className="h-8 px-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-paper-2 hover:text-ink inline-flex items-center shrink-0">
-            Get a key
-          </a>
-        </div>
+        <KeyField name={names.keyName} label={names.key} url={names.url} onChanged={() => onChange({ keySaved: true })} />
       )}
     </div>
   );

@@ -37,7 +37,7 @@ describe("linked folders", () => {
   it("indexes notes (not hidden or private files) and finds them with their links and tags", async () => {
     const { sources, source } = await link();
     expect((await sources.listSourceFiles(source)).map((f) => f.path).sort()).toEqual(["Biophilia.md", "Ideas/Forest cities.md"]);
-    expect(sources.sourceStatus("vault01")).toMatchObject({ state: "ready", files: 2 });
+    expect(sources.sourceStatus("vault01")).toMatchObject({ state: "ready", files: 2, skipped: 1, capped: false }); // photo.png
     expect(sources.isVault(source)).toBe(true);
     const { search } = await import("@/lib/search");
     const hits = await search("forests streets", { mulchIds: [], sources: ["vault01"] });

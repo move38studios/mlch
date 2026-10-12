@@ -6,6 +6,7 @@ import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
 import type { AgentHarnessId, AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
 import { Sources } from "./Sources";
+import { KeyField } from "./KeyField";
 import { AiAccess, type AuthMode } from "./AiAccess";
 import { TranscriptionChoice } from "./TranscriptionSection";
 
@@ -56,11 +57,11 @@ const PROMPTS: Array<{ id: string; label: string; sub?: boolean }> = [
   { id: "image", label: "Images" },
   { id: "folder", label: "Folders" },
 ];
-const KEYS: Array<{ id: "groq" | "firecrawl" | "fal" | "exa"; label: string }> = [
-  { id: "groq", label: "Groq API key" },
-  { id: "firecrawl", label: "Firecrawl API key" },
-  { id: "fal", label: "fal API key" },
-  { id: "exa", label: "Exa API key" },
+const KEYS: Array<{ id: "groq" | "firecrawl" | "fal" | "exa"; label: string; use: string; url: string }> = [
+  { id: "exa", label: "Exa", use: "Web search, for enrichment and research.", url: "https://dashboard.exa.ai/api-keys" },
+  { id: "firecrawl", label: "Firecrawl", use: "Reads web pages and documents in full.", url: "https://www.firecrawl.dev/app/api-keys" },
+  { id: "fal", label: "fal", use: "Makes images, video, voice and music.", url: "https://fal.ai/dashboard/keys" },
+  { id: "groq", label: "Groq", use: "Speech to text, when Transcription is set to Groq.", url: "https://console.groq.com/keys" },
 ];
 
 const WINDOW_NAMES: Record<string, string> = {
@@ -174,61 +175,14 @@ function PromptField({ label, sub, value, fallback, onSave }: { label: string; s
   );
 }
 
-function KeyField({ id, label, set, stored, onSaved }: { id: string; label: string; set: boolean; stored: boolean; onSaved: () => void }) {
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string>();
-  const bridge = desktop();
-  async function save(next: string | null) {
-    if (!bridge) return;
-    const result = next === null ? await bridge.credentials.delete(id) : await bridge.credentials.write({ [id]: next });
-    if (!result.ok) setError(result.error);
-    else {
-      setError(undefined);
-      setValue("");
-      onSaved();
-    }
-  }
-  return (
-    <div className="flex items-center gap-3 py-1.5">
-      <span className="w-40 text-[14px]">{label}</span>
-      <span className={`text-[12.5px] w-24 ${set ? "text-ink-2" : "text-ink-3"}`}>{stored ? "Set" : set ? "Set in .env" : "Not set"}</span>
-      {bridge ? (
-        <>
-          <input
-            type="password"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={set ? "Replace" : "Paste key"}
-            className={`flex-1 min-w-0 ${FIELD}`}
-          />
-          <button onClick={() => save(value.trim())} disabled={!value.trim()} className={PRIMARY}>
-            Save
-          </button>
-          {stored && (
-            <button onClick={() => save(null)} className={SECONDARY}>
-              Remove
-            </button>
-          )}
-        </>
-      ) : (
-        <span className="text-[12.5px] text-ink-3">.env.local</span>
-      )}
-      {error && <span className="text-[12.5px] text-danger">{error}</span>}
-    </div>
-  );
-}
-
 export function Settings() {
   const [view, setView] = useState<SettingsView>();
   const [harnesses, setHarnesses] = useState<AgentHarnessStatus[]>();
   const [saved, setSaved] = useState(false);
-  const [stored, setStored] = useState<Record<string, boolean>>({});
   const [report, setReport] = useState<string>();
 
   const loadSettings = useCallback(async () => {
     setView((await (await fetch("/api/settings")).json()) as SettingsView);
-    const result = await desktop()?.credentials.status();
-    if (result?.ok) setStored(result.value);
   }, []);
   const loadStatus = useCallback(async () => {
     const body = (await (await fetch("/api/agent/status")).json()) as { harnesses?: AgentHarnessStatus[] };
@@ -324,7 +278,6 @@ export function Settings() {
                   id={h.id}
                   mode={settings.agentAuth[h.id]}
                   consented={!!settings.subscriptionConsent[h.id]}
-                  keySaved={h.id === "claude" ? view.keys.anthropic : view.keys.openai}
                   onChange={(change) => {
                     if ("keySaved" in change) return void loadSettings().then(loadStatus);
                     if (change.agentAuth) void update({ agentAuth: { ...settings.agentAuth, [h.id]: change.agentAuth } }).then(loadStatus);
@@ -401,7 +354,8 @@ export function Settings() {
           </Section>
         )}
         {view && settings && (
-          <Section title="Generation spend">
+          <Section title="fal spend">
+            <p className="text-[13px] text-ink-3 mb-2.5">What images, video, voice and music made with your fal key cost today. Over the cap, mlch asks before making more.</p>
             <div className="flex items-center gap-3 text-[14px]">
               <span className="w-40">Daily cap (USD)</span>
               <input
@@ -447,9 +401,17 @@ export function Settings() {
         </Section>
         {view && (
           <Section title="Keys">
-            {KEYS.map((key) => (
-              <KeyField key={key.id} id={key.id} label={key.label} set={view.keys[key.id]} stored={!!stored[key.id]} onSaved={loadSettings} />
-            ))}
+            <div className="space-y-5">
+              {KEYS.map((key) => (
+                <div key={key.id}>
+                  <div className="flex items-baseline gap-2 mb-1.5">
+                    <span className="text-[14px] font-medium">{key.label}</span>
+                    <span className="text-[12.5px] text-ink-3">{key.use}</span>
+                  </div>
+                  <KeyField name={key.id} label={key.label} url={key.url} onChanged={loadSettings} />
+                </div>
+              ))}
+            </div>
           </Section>
         )}
       </div>

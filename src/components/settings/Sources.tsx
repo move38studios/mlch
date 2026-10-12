@@ -25,13 +25,16 @@ function statusText(status: SourceStatus | null): string {
   if (status.state === "indexing") return status.files ? `Indexing, ${status.done} read of ${status.files}` : "Indexing";
   if (status.state === "missing") return "Folder not found";
   if (status.state === "error") return status.error ?? "Indexing failed";
-  return `${status.files} files`;
+  const parts = [`${status.files.toLocaleString()} ${status.files === 1 ? "file" : "files"}${status.capped ? " (the first 20,000)" : ""}`];
+  if (status.skipped) parts.push(`${status.skipped.toLocaleString()} skipped`);
+  return parts.join(", ");
 }
 
 /** Folders linked once, searched from every mulch. */
 export function Sources() {
   const [sources, setSources] = useState<SourceView[]>();
   const [error, setError] = useState<string>();
+  const [confirm, setConfirm] = useState<{ path: string; message: string }>();
 
   const apply = useCallback(async (response: Response) => {
     const body = (await response.json().catch(() => ({}))) as { sources?: SourceView[]; error?: string };
@@ -56,7 +59,16 @@ export function Sources() {
     const picked = (await (await fetch("/api/browse-directory?purpose=ingest")).json()) as { success?: boolean; cancelled?: boolean; path?: string | null; error?: string };
     if (!picked.success) return setError(picked.error || "The folder picker could not open.");
     if (picked.cancelled || !picked.path) return;
-    await apply(await fetch("/api/sources", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: picked.path }) }));
+    await link(picked.path);
+  }
+  async function link(folder: string, confirmed = false) {
+    setConfirm(undefined);
+    const response = await fetch("/api/sources", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: folder, confirm: confirmed }) });
+    if (response.status === 409) {
+      const body = (await response.json()) as { confirm: string };
+      return setConfirm({ path: folder, message: body.confirm });
+    }
+    await apply(response);
   }
   const patch = (id: string, body: object) => fetch(`/api/sources/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(apply);
   const remove = (id: string) => fetch(`/api/sources/${id}`, { method: "DELETE" }).then(apply);
@@ -95,6 +107,19 @@ export function Sources() {
           </div>
         </div>
       ))}
+      {confirm && (
+        <div className="rounded-xl border border-line bg-chrome px-4 py-3">
+          <p className="text-[13.5px] text-ink-2">{confirm.message}</p>
+          <div className="mt-2.5 flex justify-end gap-2">
+            <button onClick={() => setConfirm(undefined)} className={SECONDARY}>
+              Cancel
+            </button>
+            <button onClick={() => void link(confirm.path, true)} className={PRIMARY}>
+              Add anyway
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <button onClick={() => void add()} className={PRIMARY}>
           Add folder
