@@ -6,6 +6,7 @@ import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
 import type { AgentHarnessId, AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
 import { Sources } from "./Sources";
+import { TranscriptionChoice } from "./TranscriptionSection";
 
 type Lane = "fast" | "slow" | "command";
 interface SettingsData {
@@ -14,6 +15,7 @@ interface SettingsData {
   enrich: string[];
   prompts: Record<string, string | undefined>;
   dailySpendCapUsd: number;
+  transcription: "groq" | "local";
 }
 interface SettingsView {
   settings: SettingsData;
@@ -330,6 +332,11 @@ export function Settings() {
                 );
               })}
             </div>
+          </Section>
+        )}
+        {settings && view?.desktop && (
+          <Section title="Transcription">
+            <TranscriptionChoice value={settings.transcription} onChange={(transcription) => void update({ transcription })} />
           </Section>
         )}
         {view && settings && (

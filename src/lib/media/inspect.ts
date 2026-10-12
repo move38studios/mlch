@@ -96,8 +96,9 @@ export async function viewForModel(file: string, mime: string | undefined, model
     let transcript = "";
     try {
       const bytes = await fs.readFile(file);
-      if (bytes.length < 20 * 1024 * 1024 && getTranscriber().available()) {
-        transcript = await getTranscriber().transcribe(new Blob([new Uint8Array(bytes)], { type: mime ?? "audio/mpeg" }));
+      const transcriber = await getTranscriber();
+      if (bytes.length < 20 * 1024 * 1024 && transcriber.available()) {
+        transcript = await transcriber.transcribe(new Blob([new Uint8Array(bytes)], { type: mime ?? "audio/mpeg" }));
       }
     } catch {
       transcript = "";

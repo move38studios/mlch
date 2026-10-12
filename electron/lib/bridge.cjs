@@ -4,7 +4,7 @@
 // parentPort and waits for the reply carrying the same id. electron/server.cjs
 // exposes request() to route code as globalThis.__mlchDesktop
 // (src/lib/desktop/server.ts); lib/bridge-main.cjs answers.
-const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render', 'thumbnail', 'notify', 'activity', 'open-url']);
+const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render', 'thumbnail', 'notify', 'activity', 'open-url', 'audio']);
 const INGEST_PICKER_TITLE = 'Choose a folder';
 const REQUEST_TIMEOUT_MS = 30_000;
 // A folder picker waits on the user, not on main; this only bounds a lost reply
@@ -36,6 +36,10 @@ function bridgePayload(payload) {
     ...(typeof payload?.failed === 'boolean' ? { failed: payload.failed } : {}),
     ...(Number.isInteger(payload?.working) ? { working: payload.working } : {}),
     ...(Number.isInteger(payload?.unseen) ? { unseen: payload.unseen } : {}),
+    // mlch: the native audio helper (main checks each again).
+    ...(typeof payload?.action === 'string' ? { action: payload.action } : {}),
+    ...(typeof payload?.target === 'string' || Number.isInteger(payload?.target) ? { target: payload.target } : {}),
+    ...(typeof payload?.session === 'string' ? { session: payload.session } : {}),
   };
 }
 
@@ -80,7 +84,7 @@ function createBridgeClient({ post, timeoutMs = REQUEST_TIMEOUT_MS, pickerTimeou
   async function request(type, payload) {
     if (!BRIDGE_REQUESTS.has(type)) return { ok: false, error: 'The desktop app does not handle that request.' };
     const call = send({ type: 'bridge', request: { type, payload: bridgePayload(payload) } }, {
-      timeout: type === 'choose-directory' ? pickerTimeoutMs : type === 'render' || type === 'thumbnail' ? 60_000 : timeoutMs,
+      timeout: type === 'choose-directory' ? pickerTimeoutMs : type === 'render' || type === 'thumbnail' || type === 'audio' ? 60_000 : timeoutMs,
       fail: reason => ({ ok: false, error: reason === 'timeout' ? 'The desktop app did not answer in time.' : 'The desktop app is not reachable.' }),
     });
     return bridgeResult(await call.result);

@@ -4,6 +4,7 @@ import { submitInput } from "@/lib/agent/jobs";
 import { newClientId } from "@/lib/mulch/ids";
 import { appendTranscript, openMulch } from "@/lib/mulch/store";
 import { getTranscriber } from "@/lib/voice/transcriber";
+import { micSpeaker } from "@/lib/voice/local";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +25,12 @@ export async function POST(request: Request, { params }: Params) {
     const entry = await openMulch(id);
     const recent = entry.transcript.slice(-6).map((s) => s.text).join(" ");
     const started = Date.now();
-    const text = await getTranscriber().transcribe(new Blob([audio], { type: "audio/wav" }), { prompt: recent, signal: request.signal });
-    log.info("voice", "chunk transcribed", { mulchId: id, bytes: audio.size, ms: Date.now() - started, chars: text.length });
+    const transcriber = await getTranscriber();
+    const text = await transcriber.transcribe(new Blob([audio], { type: "audio/wav" }), { prompt: recent, signal: request.signal });
+    log.info("voice", "chunk transcribed", { mulchId: id, via: transcriber.id, bytes: audio.size, ms: Date.now() - started, chars: text.length });
     if (!text) return { segment: null };
-    const segment = { id: newClientId("s"), at: recordedAt, text, source: "speech" as const };
+    const speaker = micSpeaker(id);
+    const segment = { id: newClientId("s"), at: recordedAt, text, source: "speech" as const, ...(speaker ? { speaker } : {}) };
     await appendTranscript(id, segment);
     submitInput(id, segment);
     return { segment };

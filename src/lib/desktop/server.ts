@@ -38,7 +38,7 @@ export function isDesktop(): boolean {
 }
 
 export async function desktopRequest(
-  type: "reveal" | "open" | "choose-directory" | "render" | "notify" | "activity" | "thumbnail" | "open-url",
+  type: "reveal" | "open" | "choose-directory" | "render" | "notify" | "activity" | "thumbnail" | "open-url" | "audio",
   payload?: Record<string, unknown>,
 ): Promise<BridgeResult> {
   const bridge = (globalThis as DesktopGlobals).__mlchDesktop;

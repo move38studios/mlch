@@ -24,7 +24,8 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 - Research lane (`submitResearch` in jobs.ts): many searches and page reads, then sources, a comparison table and a write-up; resumes the session once if outputs are missing.
 - Logging: `src/lib/log.ts` writes JSON lines to `<logs>/mulch.jsonl` (redacted, rotated); main writes `desktop.log` and records process crashes; crash dumps stay local. Settings → Diagnostics saves a support report to ~/Downloads.
 - File reading for instructions: read-only, home folder, private places refused (`src/lib/agent/files.ts`).
-- `src/lib/voice/`: browser recorder (pause-cut WAV chunks) and server transcriber (Groq).
+- `src/lib/voice/`: browser recorder (pause-cut WAV chunks) and server transcriber (Groq, or local per Settings). `local.ts`: local transcription and system audio capture through the native helper (chunks become speech from "them"; the mic is "me" while one runs).
+- `native/mlch-audio/`: Swift helper binary (Parakeet via FluidAudio on the Neural Engine; Core Audio process tap for the Mac's sound output), JSON lines over stdio, started by main (`electron/lib/audio-helper.cjs`, restarted once after a crash) and reached through the bridge's `audio` request. Build with `node scripts/build-native.mjs [--test]` (uses a swift.org toolchain from ~/Library/Developer/Toolchains when present). Model in ~/Library/Application Support/mlch/models.
 - `electron/`: shell adapted from node-banana. Main injects a per-launch token; keys live in Keychain via safeStorage and reach the server process over parentPort, never through the page.
 
 ## Design

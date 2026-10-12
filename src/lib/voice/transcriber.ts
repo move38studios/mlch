@@ -1,11 +1,14 @@
 /**
  * Speech to text. Server-only.
  *
- * One interface so the backend can change: Groq Whisper now (user's key),
- * local Parakeet later.
+ * One interface, two backends: Groq Whisper (the person's key) or Parakeet
+ * on this Mac (local.ts, through the native helper). Settings choose; local
+ * falls back to Groq while its model is not downloaded.
  */
 
 import { getCredential } from "@/lib/desktop/server";
+import { readSettings } from "@/lib/settings";
+import { localReady, transcribeLocal } from "./local";
 
 export interface TranscribeOptions {
   /** Recent transcript, so names and terms carry across chunks. */
@@ -57,6 +60,18 @@ export function cleanTranscript(text: string): string {
   return HALLUCINATIONS.has(trimmed.toLowerCase().replace(/[!?]+$/, "")) ? "" : trimmed;
 }
 
-export function getTranscriber(): Transcriber {
+export const localTranscriber: Transcriber = {
+  id: "local",
+  // Checked with localReady() before it is chosen.
+  available: () => true,
+  async transcribe(audio) {
+    return cleanTranscript(await transcribeLocal(audio));
+  },
+};
+
+/** The transcriber the settings ask for, or Groq when local is not ready. */
+export async function getTranscriber(): Promise<Transcriber> {
+  const settings = await readSettings();
+  if (settings.transcription === "local" && (await localReady().catch(() => false))) return localTranscriber;
   return groqTranscriber;
 }

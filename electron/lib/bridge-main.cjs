@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const DEFAULT_PICKER_TITLE = 'Choose a folder';
 
-function createServerMessageHandler({ shell, dialog, fs, getWindow, render, notify, activity, thumbnail, log = () => {}, platform = process.platform }) {
+function createServerMessageHandler({ shell, dialog, fs, getWindow, render, notify, activity, thumbnail, audio, log = () => {}, platform = process.platform }) {
   const bin = platform === 'win32' ? 'Recycle Bin' : 'Trash';
   const fail = error => ({ ok: false, error });
 
@@ -104,6 +104,31 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
         activity({ working: count(payload.working), unseen: count(payload.unseen) });
         return { ok: true };
       }
+      case 'audio': {
+        // mlch: the native audio helper (see main.cjs and lib/audio-helper.cjs).
+        if (!audio) return fail('Local audio is not available.');
+        const action = payload.action;
+        if (!['status', 'download', 'warm', 'transcribe', 'tap-start', 'tap-stop'].includes(action)) return fail('Unknown audio action.');
+        const request = { action };
+        if (action === 'transcribe') {
+          const file = target(payload);
+          if (!file) return fail('Transcribing needs the full path of an audio file.');
+          request.path = file;
+        }
+        if (action === 'tap-start') {
+          const t = payload.target;
+          if (t !== undefined && !(t === 'all' || (Number.isInteger(t) && t > 0) || (typeof t === 'string' && /^[A-Za-z0-9.-]{3,200}$/.test(t)))) return fail('Capture target is "all", a bundle id or a process id.');
+          request.target = t ?? 'all';
+        }
+        if (action === 'tap-start' || action === 'tap-stop') {
+          if (payload.session !== undefined && !(typeof payload.session === 'string' && /^[\w-]{1,64}$/.test(payload.session))) return fail('Invalid capture session.');
+          if (action === 'tap-stop' && !payload.session) return fail('Stopping a capture needs its session.');
+          if (payload.session) request.session = payload.session;
+        }
+        // The helper's own messages are plain sentences for the person; pass them on.
+        try { return { ok: true, value: await audio(request) }; }
+        catch (error) { log(error); return fail(error?.message || 'The audio helper could not complete that request.'); }
+      }
       default:
         return fail('The desktop app does not handle that request.');
     }
@@ -114,6 +139,7 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
     open: 'The file could not be opened.',
     render: 'The page could not be rendered.',
     thumbnail: 'No preview could be made for that file.',
+    audio: 'The audio helper could not complete that request.',
     trash: `The file could not be moved to the ${bin}.`,
     'choose-directory': 'The folder picker could not open.',
   };

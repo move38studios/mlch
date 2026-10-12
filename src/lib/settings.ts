@@ -54,6 +54,8 @@ export const settingsSchema = z.object({
     .default([]),
   /** Random id for this install, sent when creating share links (they are counted per install). */
   installId: z.string().max(64).optional(),
+  /** Speech to text: Groq Whisper (key) or Parakeet on this Mac (native helper). */
+  transcription: z.enum(["groq", "local"]).default("groq"),
   /** Paid generation (fal) stops for the day at this many US dollars. */
   dailySpendCapUsd: z.number().min(0).max(1000).default(10),
 });

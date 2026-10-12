@@ -12,3 +12,5 @@ next-env.d.ts
 .claude/worktrees/
 cloud/dist/
 cloud/.wrangler/
+native/*/.build/
+native/*/.swiftpm/
