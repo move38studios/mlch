@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, FolderPlus, History, Link2, Share, X } from "lucide-react";
 import type { ShareView } from "@/lib/share/shares";
 import { copyLink, requestShare } from "./share";
-import { startCall } from "./Mic";
+import { startCall, startMic } from "./Mic";
 import { useBacklinks } from "./backlinks";
 import type { Mulch } from "@/lib/mulch/types";
 import { HistoryBar } from "./History";
@@ -218,8 +218,14 @@ export function MulchView({ id }: { id: string }) {
   const focusParam = params.get("focus");
   // New Call (menu bar, shortcut): start listening as soon as the mulch is here.
   const callParam = params.get("call") === "1";
+  const micParam = params.get("mic") === "1";
   const pageParam = params.get("page");
   const loaded = !!mulch;
+  useEffect(() => {
+    if (!loaded || !micParam) return;
+    void startMic(id);
+    window.history.replaceState(null, "", `/n/${id}`);
+  }, [loaded, micParam, id]);
   useEffect(() => {
     if (!loaded || !callParam) return;
     void startCall(id);

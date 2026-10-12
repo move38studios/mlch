@@ -52,6 +52,8 @@ export const settingsSchema = z.object({
     )
     .max(20)
     .default([]),
+  /** The first-run checklist was finished (or the library was in use before it existed). */
+  onboarded: z.boolean().default(false),
   /** Random id for this install, sent when creating share links (they are counted per install). */
   installId: z.string().max(64).optional(),
   /** Speech to text: Groq Whisper (key) or Parakeet on this Mac (native helper). */

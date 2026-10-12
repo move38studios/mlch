@@ -18,6 +18,16 @@ export function Home() {
   const [query, setQuery] = useState("");
   const { results } = useSearch(query);
 
+  // First run in the desktop app: the checklist.
+  useEffect(() => {
+    void fetch("/api/onboarding")
+      .then((r) => r.json() as Promise<{ onboarded?: boolean; desktop?: boolean }>)
+      .then((body) => {
+        if (body.desktop && body.onboarded === false) router.replace("/welcome");
+      })
+      .catch(() => {});
+  }, [router]);
+
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/mulches");

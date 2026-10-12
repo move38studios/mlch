@@ -113,6 +113,9 @@ function OpenAtLogin() {
         <input type="checkbox" checked={on} onChange={(e) => void desktop()?.openAtLogin?.(e.target.checked).then(setOn)} />
         Open at login
       </label>
+      <Link href="/welcome" className="inline-block mt-3 text-[13px] text-ink-2 hover:text-ink underline underline-offset-2">
+        Setup checklist
+      </Link>
     </Section>
   );
 }
