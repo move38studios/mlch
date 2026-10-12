@@ -6,6 +6,7 @@ import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
 import type { AgentHarnessId, AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
 import { Sources } from "./Sources";
+import { AiAccess, type AuthMode } from "./AiAccess";
 import { TranscriptionChoice } from "./TranscriptionSection";
 
 type Lane = "fast" | "slow" | "command";
@@ -16,10 +17,12 @@ interface SettingsData {
   prompts: Record<string, string | undefined>;
   dailySpendCapUsd: number;
   transcription: "groq" | "local";
+  agentAuth: Record<AgentHarnessId, AuthMode>;
+  subscriptionConsent: Partial<Record<AgentHarnessId, number>>;
 }
 interface SettingsView {
   settings: SettingsData;
-  keys: { groq: boolean; firecrawl: boolean; fal: boolean; exa: boolean };
+  keys: { groq: boolean; firecrawl: boolean; fal: boolean; exa: boolean; anthropic: boolean; openai: boolean };
   spentToday: number;
   usageToday: Record<string, { turns: number; inputTokens: number; outputTokens: number }>;
   desktop: boolean;
@@ -300,12 +303,30 @@ export function Settings() {
                     )}
                   </div>
                 </div>
-                {h.installed && !h.signedIn && (
+                {h.installed && !h.signedIn && h.auth !== "apiKey" && (
                   <button onClick={(e) => { e.preventDefault(); void signIn(h.id); }} className={PRIMARY}>
                     Sign in
                   </button>
                 )}
               </label>
+            ))}
+          </div>
+          <div className="mt-4 space-y-4">
+            {settings && view && harnesses?.map((h) => (
+              <div key={h.id}>
+                <div className="text-[13px] font-medium mb-1.5">{h.label}</div>
+                <AiAccess
+                  id={h.id}
+                  mode={settings.agentAuth[h.id]}
+                  consented={!!settings.subscriptionConsent[h.id]}
+                  keySaved={h.id === "claude" ? view.keys.anthropic : view.keys.openai}
+                  onChange={(change) => {
+                    if ("keySaved" in change) return void loadSettings().then(loadStatus);
+                    if (change.agentAuth) void update({ agentAuth: { ...settings.agentAuth, [h.id]: change.agentAuth } }).then(loadStatus);
+                    if (change.consent !== undefined) void update({ subscriptionConsent: { ...settings.subscriptionConsent, [h.id]: change.consent ? Date.now() : undefined } });
+                  }}
+                />
+              </div>
             ))}
           </div>
           {active && settings && (

@@ -77,6 +77,7 @@ function setup(handlers: Record<string, FakeHandler> = {}, overrides: Partial<Co
   });
   const state = createCodexHarnessState();
   const harness = createCodexHarness({
+    auth: async () => ({ mode: "subscription" }),
     lookupBinary: () => ({ path: "/opt/codex", source: "bundled" }),
     getServer: () => server,
     state,
@@ -273,6 +274,24 @@ describe("Codex harness runTurn", () => {
     expect(child().requests("turn/start")).toHaveLength(0);
   });
 
+  it("with the person's API key: runs on it, without the plan checks, and reports it", async () => {
+    const auth = async () => ({ mode: "apiKey" as const, key: "sk-openai-test" });
+    const { harness, child } = setup({ "account/read": () => ({ account: { type: "apiKey" }, requiresOpenaiAuth: true }) }, { auth });
+    const events = await collect(harness.runTurn(params()));
+    expect(events.some((e) => e.type === "error")).toBe(false);
+    expect(child().requests("turn/start")).toHaveLength(1);
+    expect(await harness.getStatus()).toMatchObject({ auth: "apiKey", billing: "api", signedIn: true });
+    expect((await harness.getStatus()).problem).toBeUndefined();
+  });
+
+  it("with API key mode but no key: refuses and says where to add one", async () => {
+    const { harness, children } = setup({}, { auth: async () => ({ mode: "apiKey" as const }) });
+    const events = await collect(harness.runTurn(params()));
+    expect(events).toEqual([{ type: "error", code: "not_signed_in", message: expect.stringMatching(/OpenAI API key/) }]);
+    expect(children).toHaveLength(0);
+    expect((await harness.getStatus()).problem).toMatch(/OpenAI API key/);
+  });
+
   it("refuses when config.toml would route turns to another provider", async () => {
     const { harness, child } = setup({ "config/read": () => ({ config: { mcp_servers: {}, model_provider: "azure" } }) });
     const events = await collect(harness.runTurn(params()));
@@ -348,6 +367,7 @@ describe("Codex harness runTurn", () => {
 
   it("reports a missing binary as not_installed", async () => {
     const harness = createCodexHarness({
+    auth: async () => ({ mode: "subscription" }),
       lookupBinary: () => ({ path: null, problem: "Codex wasn't found." }),
       state: createCodexHarnessState(),
     });
@@ -741,6 +761,7 @@ describe("Codex harness after the app-server goes away", () => {
     const b = make();
     let current = a.instance;
     const harness = createCodexHarness({
+    auth: async () => ({ mode: "subscription" }),
       lookupBinary: () => ({ path: "/opt/codex", source: "bundled" }),
       getServer: () => current,
       state: createCodexHarnessState(),
@@ -881,6 +902,7 @@ describe("Codex harness getStatus", () => {
       version: "0.157.0",
       signedIn: true,
       billing: "subscription",
+      auth: "subscription",
       account: { email: "person@example.com", plan: "Pro" },
       models: [
         { id: "gpt-6-astra", label: "GPT-6-Astra" },

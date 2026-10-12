@@ -18,6 +18,7 @@
  * error, so an approval can never be granted by default.
  */
 
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
@@ -156,6 +157,8 @@ export function parseCodexVersion(userAgent: string): string | undefined {
 
 export class CodexAppServer {
   readonly bin: string;
+  /** Which login source this server was started with (see keyTag). */
+  readonly keyTag: string;
   /** Incremented on every (re)start; threads from an earlier generation are gone. */
   generation = 0;
   info: CodexServerInfo | null = null;
@@ -179,6 +182,7 @@ export class CodexAppServer {
   constructor(options: CodexAppServerOptions) {
     this.options = options;
     this.bin = options.bin;
+    this.keyTag = keyTag(options.env);
   }
 
   get running(): boolean {
@@ -410,9 +414,16 @@ const globalState = globalThis as typeof globalThis & { __mlchCodexAppServer?: C
  * The process-wide app-server for this binary. A different binary (e.g.
  * MLCH_CODEX_BIN changed) replaces it.
  */
+/** A short fingerprint of the API key in a Codex environment ("" when it uses the ChatGPT login). */
+export function keyTag(env: Record<string, string> | undefined): string {
+  const key = env?.CODEX_API_KEY;
+  return key ? createHash("sha256").update(key).digest("hex").slice(0, 12) : "";
+}
+
 export function getCodexAppServer(bin: string, env: Record<string, string>): CodexAppServer {
   const current = globalState.__mlchCodexAppServer;
-  if (current && current.bin === bin) return current;
+  // A different login source (API key on or off, another key) needs a fresh app-server.
+  if (current && current.bin === bin && current.keyTag === keyTag(env)) return current;
   current?.stop();
   const server = new CodexAppServer({ bin, env });
   globalState.__mlchCodexAppServer = server;

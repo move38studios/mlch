@@ -60,6 +60,8 @@ export interface AgentHarnessStatus {
   version?: string;
   signedIn: boolean;
   billing: AgentBilling;
+  /** Paid by the person's subscription login, or by their API key (Settings). */
+  auth?: "subscription" | "apiKey";
   account?: { email?: string; plan?: string };
   models: AgentModelOption[];
   /**

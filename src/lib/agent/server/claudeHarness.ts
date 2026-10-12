@@ -73,6 +73,7 @@ import {
 } from "./claudeEvents";
 import { ClaudeSignIn } from "./claudeSignIn";
 import { buildClaudeEnv, MLCH_VERSION } from "./env";
+import { agentAuth, API_KEY_MISSING, type AgentAuth } from "./auth";
 import { withConversationHistory } from "./history";
 import { executeTool } from "./toolExecution";
 
@@ -111,6 +112,8 @@ const NEAR_LIMIT_PERCENT = 90;
 export interface ClaudeHarnessDeps {
   lookupBinary: () => BinaryLookup;
   buildEnv: () => Record<string, string>;
+  /** Subscription login or the person's API key (auth.ts). */
+  auth: () => Promise<AgentAuth>;
   runCommand: typeof runCommand;
   query: typeof sdkQuery;
   signIn: ClaudeSignIn;
@@ -466,6 +469,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
   const deps: ClaudeHarnessDeps = {
     lookupBinary: () => resolveClaudeBinary(),
     buildEnv: () => buildClaudeEnv(),
+    auth: () => agentAuth("claude"),
     runCommand,
     query: sdkQuery,
     signIn: overrides.signIn ?? sharedSignIn(),
@@ -634,7 +638,26 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     };
   }
 
+  /** API-key mode: ready when there is a key; nothing about plans or logins applies. */
+  async function apiKeyStatus(auth: Extract<AgentAuth, { mode: "apiKey" }>): Promise<AgentHarnessStatus> {
+    const lookup = deps.lookupBinary();
+    if (lookup.path === null) return { ...baseStatus(), auth: "apiKey", problem: lookup.problem };
+    const version = await versionOf(lookup.path, deps.buildEnv());
+    return {
+      ...baseStatus(),
+      auth: "apiKey",
+      installed: true,
+      version,
+      signedIn: !!auth.key,
+      billing: auth.key ? "api" : "none",
+      signIn: { state: "idle" },
+      ...(auth.key ? {} : { problem: API_KEY_MISSING.claude }),
+    };
+  }
+
   async function getStatus(options: { fresh?: boolean } = {}): Promise<AgentHarnessStatus> {
+    const auth = await deps.auth();
+    if (auth.mode === "apiKey") return apiKeyStatus(auth);
     if (
       !options.fresh &&
       cached &&
@@ -646,7 +669,8 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     }
     const signInSettled = deps.signIn.settled;
     inflight ??= readStatus()
-      .then((status) => {
+      .then((found) => {
+        const status = { ...found, auth: "subscription" as const };
         cached = { at: deps.now(), signInSettled, status };
         return status;
       })
@@ -659,6 +683,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
   /* ── sign-in ────────────────────────────────────────────────── */
 
   async function startSignIn(options: AgentSignInOptions = {}): Promise<AgentSignInStart> {
+    if ((await deps.auth()).mode === "apiKey") return { state: "failed", message: "mlch uses your Anthropic API key for Claude. Switch to your subscription in Settings → AI to sign in." };
     const status = await getStatus({ fresh: true });
     if (!status.installed) return { state: "failed", message: status.problem };
     const rejected = currentRejection() !== null;
@@ -757,6 +782,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     params: HarnessTurnParams,
     prompt: string,
     resume: string | undefined,
+    apiKey?: string,
   ): AsyncGenerator<HarnessEvent, QueryOutcome> {
     if (params.signal.aborted) return "done";
     const abortController = new AbortController();
@@ -781,7 +807,8 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
       prompt: input(),
       options: buildClaudeOptions({
         bin,
-        env: deps.buildEnv(),
+        // An API key in the environment outranks the login: only when the person chose it.
+        env: apiKey ? { ...deps.buildEnv(), ANTHROPIC_API_KEY: apiKey } : deps.buildEnv(),
         cwd: deps.agentCwd,
         params,
         resume,
@@ -828,7 +855,9 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
         return "done";
       }
       const verdict = classifyClaudeAccount(account);
-      if (verdict.billing !== "subscription") {
+      if (apiKey) {
+        // Billed to the person's API account by their choice: no plan to protect.
+      } else if (verdict.billing !== "subscription") {
         yield {
           type: "error",
           code: verdict.billing === "none" ? "not_signed_in" : "wrong_billing",
@@ -837,7 +866,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
         return "done";
       }
       // 2. Can the turn reach extra usage? Only a usage report that says no lets it start.
-      const usage = await checkPlanUsage(q, params.model || CLAUDE_DEFAULT_MODEL);
+      const usage: PlanUsageVerdict = apiKey ? { allowed: true } : await checkPlanUsage(q, params.model || CLAUDE_DEFAULT_MODEL);
       if (!usage.allowed) {
         if (usage.block) blockUsage(usage.block.resetsAt, usage.message);
         yield { type: "error", code: usage.code, message: usage.message };
@@ -891,7 +920,13 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
       yield { type: "error", code: "not_installed", message: lookup.problem };
       return;
     }
-    const block = currentUsageBlock();
+    const auth = await deps.auth();
+    if (auth.mode === "apiKey" && !auth.key) {
+      yield { type: "error", code: "not_signed_in", message: API_KEY_MISSING.claude };
+      return;
+    }
+    const apiKey = auth.mode === "apiKey" ? auth.key : undefined;
+    const block = apiKey ? null : currentUsageBlock();
     if (block) {
       // Claude Code would serve this turn from extra usage: don't start it at all.
       yield { type: "error", code: "usage_limit", message: block.message };
@@ -902,7 +937,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     let resume = params.sessionId || undefined;
     let prompt = resume ? params.prompt : withConversationHistory(params.history, params.prompt);
     for (;;) {
-      const outcome = yield* runQuery(lookup.path, params, prompt, resume);
+      const outcome = yield* runQuery(lookup.path, params, prompt, resume, apiKey);
       if (outcome !== "missing-session" || !resume) return;
       // The session is gone (cleared, or another machine): start over with the chat so far.
       resume = undefined;

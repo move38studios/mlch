@@ -164,6 +164,7 @@ function harness(overrides: Partial<ClaudeHarnessDeps> = {}) {
   return createClaudeHarness({
     lookupBinary: () => ({ path: BIN, source: "bundled" }),
     buildEnv: () => buildClaudeEnv({ HOME: "/Users/someone", PATH: "/bin", ANTHROPIC_API_KEY: "sk-ant-api", CLAUDECODE: "1" }),
+    auth: async () => ({ mode: "subscription" }),
     agentCwd: AGENT_CWD,
     signIn: stubSignIn(),
     state: createClaudeHarnessState(),
@@ -238,6 +239,31 @@ describe("Claude harness runTurn", () => {
     expect(made[0].sent).toEqual([]);
     // The prompt stream ends without ever yielding the message.
     expect(await made[0].prompt[Symbol.asyncIterator]().next()).toEqual({ done: true, value: undefined });
+  });
+
+  it("with the person's API key: sends the prompt on it, skips the plan checks, and reports it", async () => {
+    const { query, made } = fakeQueries({ account: { tokenSource: "none", apiKeySource: "ANTHROPIC_API_KEY", apiProvider: "firstParty" }, messages: recorded });
+    const auth = async () => ({ mode: "apiKey" as const, key: "sk-ant-person" });
+    const events = await collect(harness({ query, auth }).runTurn(params()));
+    expect(events.some((e) => e.type === "error")).toBe(false);
+    expect(made[0].options.env?.ANTHROPIC_API_KEY).toBe("sk-ant-person");
+    expect(made[0].sent).toHaveLength(1);
+    const status = await harness({ auth, runCommand: commands({ code: 0, stdout: "2.1.282 (Claude Code)", stderr: "" }) }).getStatus();
+    expect(status).toMatchObject({ auth: "apiKey", billing: "api", signedIn: true });
+    expect(status.problem).toBeUndefined();
+  });
+
+  it("with API key mode but no key: never starts Claude Code and says where to add one", async () => {
+    const { query, made } = fakeQueries({ messages: recorded });
+    const events = await collect(harness({ query, auth: async () => ({ mode: "apiKey" as const }) }).runTurn(params()));
+    expect(events).toEqual([{ type: "error", code: "not_signed_in", message: expect.stringMatching(/Anthropic API key/) }]);
+    expect(made).toHaveLength(0);
+  });
+
+  it("on a subscription, an API key in the environment never reaches Claude Code", async () => {
+    const { query, made } = fakeQueries({ messages: recorded });
+    await collect(harness({ query }).runTurn(params()));
+    expect(made[0].options.env?.ANTHROPIC_API_KEY).toBeUndefined();
   });
 
   it("locks the CLI down to our tools, our prompt and the stripped environment", async () => {
@@ -728,6 +754,7 @@ describe("Claude harness getStatus", () => {
       version: "2.1.282",
       signedIn: true,
       billing: "subscription",
+      auth: "subscription",
       account: { email: "person@example.com", plan: "Max" },
       models: [
         { id: "opus", label: "Opus 5.5", resolvedModel: "claude-opus-5-5" },

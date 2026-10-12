@@ -43,7 +43,8 @@ export function codexExecArgs(params: HarnessTurnParams): string[] {
   ];
 }
 
-export async function* runCodexExec(params: HarnessTurnParams): AsyncGenerator<HarnessEvent> {
+/** `apiKey`: the person chose to pay with their OpenAI API key (it outranks the ChatGPT login). */
+export async function* runCodexExec(params: HarnessTurnParams, apiKey?: string): AsyncGenerator<HarnessEvent> {
   const lookup = resolveCodexBinary();
   if (lookup.path === null) {
     yield { type: "error", code: "not_installed", message: lookup.problem };
@@ -51,7 +52,7 @@ export async function* runCodexExec(params: HarnessTurnParams): AsyncGenerator<H
   }
   const child = spawn(lookup.path, codexExecArgs(params), {
     cwd: params.workspace!.cwd,
-    env: { ...buildCodexEnv(), ...params.workspace!.env } as NodeJS.ProcessEnv,
+    env: { ...buildCodexEnv(), ...params.workspace!.env, ...(apiKey ? { CODEX_API_KEY: apiKey } : {}) } as NodeJS.ProcessEnv,
     stdio: ["pipe", "pipe", "pipe"],
   });
   const abort = () => child.kill("SIGTERM");

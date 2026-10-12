@@ -6,12 +6,15 @@ import { Check, Loader2 } from "lucide-react";
 import type { AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
 import { Sources } from "@/components/settings/Sources";
+import { AiAccess, type AuthMode } from "@/components/settings/AiAccess";
 
-type KeyName = "groq" | "exa" | "fal" | "firecrawl";
+type KeyName = "groq" | "exa" | "fal" | "firecrawl" | "anthropic" | "openai";
 interface Status {
   onboarded: boolean;
   desktop: boolean;
   harness: "claude" | "codex";
+  agentAuth: Record<"claude" | "codex", AuthMode>;
+  consent: Record<"claude" | "codex", boolean>;
   transcription: "groq" | "local";
   keys: Record<KeyName, boolean>;
   local: { installed: boolean; model: string; progress?: number };
@@ -20,7 +23,7 @@ interface Status {
 }
 
 /** Where each key comes from. Labels and lines are placeholders for George's wording. */
-const KEYS: Array<{ id: Exclude<KeyName, "groq">; label: string; use: string; url: string }> = [
+const KEYS: Array<{ id: "exa" | "fal" | "firecrawl"; label: string; use: string; url: string }> = [
   { id: "exa", label: "Exa", use: "Web search for enrichment and research", url: "https://dashboard.exa.ai/api-keys" },
   { id: "fal", label: "fal", use: "Images, video, voice and music", url: "https://fal.ai/dashboard/keys" },
   { id: "firecrawl", label: "Firecrawl", use: "Reading web pages and documents", url: "https://www.firecrawl.dev/app/api-keys" },
@@ -132,8 +135,19 @@ export function Welcome() {
   }, [downloading, load]);
 
   const put = (patch: object) => fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(load);
-  const ready = harnesses?.filter((h) => !h.problem) ?? [];
+  // Ready to use: works, and either paid by the person's API key or their subscription with the box ticked.
+  const usable = (h: AgentHarnessStatus) => !h.problem && (status?.agentAuth[h.id] === "apiKey" || !!status?.consent[h.id]);
+  const ready = harnesses?.filter(usable) ?? [];
   const aiDone = ready.some((h) => h.id === status?.harness);
+  async function access(id: "claude" | "codex", change: { agentAuth?: AuthMode; consent?: boolean } | { keySaved: true }) {
+    if (!status) return;
+    if ("keySaved" in change) return load();
+    if (change.agentAuth) await put({ agentAuth: { ...status.agentAuth, [id]: change.agentAuth } });
+    if (change.consent !== undefined) {
+      const settings = (await (await fetch("/api/settings")).json()) as { settings: { subscriptionConsent: Record<string, number | undefined> } };
+      await put({ subscriptionConsent: { ...settings.settings.subscriptionConsent, [id]: change.consent ? Date.now() : undefined } });
+    }
+  }
   const transcriptionDone = status ? (status.transcription === "local" ? status.local.model === "present" || status.local.model === "downloading" : status.keys.groq) : false;
 
   async function linkVault(vaultPath: string) {
@@ -167,15 +181,18 @@ export function Welcome() {
                 </div>
               )}
               {harnesses.map((h) => (
-                <div key={h.id} className="flex items-center gap-3 text-[14px]">
-                  <span className="w-20 font-medium">{HARNESS_NAMES[h.id] ?? h.label}</span>
-                  <span className="text-ink-3 flex-1 truncate">{h.problem ?? h.account?.email ?? ""}</span>
-                  {h.installed && !h.signedIn && (
-                    <button onClick={() => void fetch("/api/agent/sign-in", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ harness: h.id }) })} className={PRIMARY}>
-                      Sign in
-                    </button>
-                  )}
-                  {ready.length === 1 && !h.problem && status.harness !== h.id && (
+                <div key={h.id} className="rounded-xl border border-line px-4 py-3 space-y-2.5">
+                  <div className="flex items-center gap-3 text-[14px]">
+                    <span className="w-20 font-medium">{HARNESS_NAMES[h.id] ?? h.label}</span>
+                    <span className={`flex-1 truncate ${h.problem ? "text-ink-3" : "text-ink-2"}`}>{h.problem ?? (h.auth === "apiKey" ? "API key" : (h.account?.email ?? ""))}</span>
+                    {h.installed && !h.signedIn && h.auth !== "apiKey" && (
+                      <button onClick={() => void fetch("/api/agent/sign-in", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ harness: h.id }) })} className={PRIMARY}>
+                        Sign in
+                      </button>
+                    )}
+                  </div>
+                  <AiAccess id={h.id} mode={status.agentAuth[h.id]} consented={status.consent[h.id]} keySaved={h.id === "claude" ? status.keys.anthropic : status.keys.openai} onChange={(change) => void access(h.id, change)} />
+                  {ready.length === 1 && usable(h) && status.harness !== h.id && (
                     <button onClick={() => void put({ harness: h.id })} className={SECONDARY}>
                       Use
                     </button>

@@ -30,6 +30,15 @@ export const settingsSchema = z.object({
   models: z
     .object({ claude: lanes.default({}), codex: lanes.default({}) })
     .default({ claude: {}, codex: {} }),
+  /**
+   * How each AI is paid for: the person's own subscription login on this Mac,
+   * or an API key (Keychain: "anthropic", "openai") billed to their API account.
+   */
+  agentAuth: z
+    .object({ claude: z.enum(["subscription", "apiKey"]).default("subscription"), codex: z.enum(["subscription", "apiKey"]).default("subscription") })
+    .default({ claude: "subscription", codex: "subscription" }),
+  /** When the person confirmed using their own subscription (ms), per AI. */
+  subscriptionConsent: z.object({ claude: z.number().optional(), codex: z.number().optional() }).default({}),
   enrich: z.array(z.enum(ENRICHMENTS)).default([...ENRICHMENTS]),
   /** The person's own wording for prompt parts. Absent: the default. */
   prompts: z

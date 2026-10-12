@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { atomicWrite } = require('./files.cjs');
 // Adapted from node-banana (MIT, © William Falloon).
-const credentialNames = new Set(['groq', 'firecrawl', 'fal', 'exa']);
+const credentialNames = new Set(['groq', 'firecrawl', 'fal', 'exa', 'anthropic', 'openai']);
 function validateCredentials(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid credentials');
   for (const [key, secret] of Object.entries(value)) {

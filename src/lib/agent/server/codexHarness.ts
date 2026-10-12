@@ -52,6 +52,7 @@ import {
 } from "./codexStatus";
 import { buildCodexEnv } from "./env";
 import { runCodexExec } from "./codexExec";
+import { agentAuth, API_KEY_MISSING, type AgentAuth } from "./auth";
 import { withConversationHistory } from "./history";
 import { executeTool } from "./toolExecution";
 
@@ -202,6 +203,8 @@ export interface CodexHarnessDeps {
   lookupBinary: () => BinaryLookup;
   buildEnv: () => Record<string, string>;
   getServer: (bin: string, env: Record<string, string>) => CodexAppServer;
+  /** Subscription login or the person's API key (auth.ts). */
+  auth: () => Promise<AgentAuth>;
   state: CodexHarnessState;
   /**
    * Reasoning effort for turns. "medium": in the recorded evals "low" once
@@ -313,6 +316,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     lookupBinary: () => resolveCodexBinary(),
     buildEnv: () => buildCodexEnv(),
     getServer: getCodexAppServer,
+    auth: () => agentAuth("codex"),
     state: overrides.state ?? sharedState(),
     effort: process.env.MLCH_CODEX_EFFORT?.trim() || "medium",
     statusTtlMs: 5_000,
@@ -355,8 +359,9 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
   }
 
   /** The app-server for this binary, with our handlers attached. */
-  function connect(bin: string): CodexAppServer {
-    const server = deps.getServer(bin, deps.buildEnv());
+  function connect(bin: string, apiKey?: string): CodexAppServer {
+    // An API key outranks the ChatGPT login: only when the person chose it.
+    const server = deps.getServer(bin, apiKey ? { ...deps.buildEnv(), CODEX_API_KEY: apiKey } : deps.buildEnv());
     // Replaced on every connect (it is one map entry), so after a dev reload
     // tool calls go through this module's turn binding, not an older one.
     server.setRequestHandler("item/tool/call", (raw) => answerToolCall(raw));
@@ -549,13 +554,31 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
 
   let inflight: Promise<AgentHarnessStatus> | null = null;
 
+  /** API-key mode: ready when there is a key; nothing about plans or logins applies. */
+  async function apiKeyStatus(auth: Extract<AgentAuth, { mode: "apiKey" }>): Promise<AgentHarnessStatus> {
+    const lookup = deps.lookupBinary();
+    if (lookup.path === null) return { ...baseStatus(), auth: "apiKey", problem: lookup.problem };
+    if (!auth.key) return { ...baseStatus(), auth: "apiKey", installed: true, billing: "none", problem: API_KEY_MISSING.codex };
+    const server = connect(lookup.path, auth.key);
+    try {
+      await server.start();
+    } catch (error) {
+      return { ...baseStatus(), auth: "apiKey", problem: `Codex (${lookup.path}) couldn't be started: ${errorMessage(error)}` };
+    }
+    const models = await listModels(server).catch(() => []);
+    return { ...baseStatus(), auth: "apiKey", installed: true, version: server.info?.version, signedIn: true, billing: "api", models, signIn: { state: "idle" } };
+  }
+
   async function getStatus(options: { fresh?: boolean } = {}): Promise<AgentHarnessStatus> {
+    const auth = await deps.auth();
+    if (auth.mode === "apiKey") return apiKeyStatus(auth);
     const cached = state.status;
     if (!options.fresh && cached && deps.now() - cached.at < deps.statusTtlMs) {
       return withTurnFindings(cached.value.problem ? { ...cached.value, signIn: signInState() } : cached.value);
     }
     inflight ??= readStatus()
-      .then((value) => {
+      .then((found) => {
+        const value = { ...found, auth: "subscription" as const };
         state.status = { at: deps.now(), value };
         return value;
       })
@@ -568,6 +591,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
   /* ── sign-in ────────────────────────────────────────────────── */
 
   async function startSignIn(options: AgentSignInOptions = {}): Promise<AgentSignInStart> {
+    if ((await deps.auth()).mode === "apiKey") return { state: "failed", message: "mlch uses your OpenAI API key for Codex. Switch to your subscription in Settings → AI to sign in." };
     const status = await getStatus({ fresh: true });
     if (!status.installed) return { state: "failed", message: status.problem };
     // A login Codex rejected still reads as signed in; the status above already says otherwise then.
@@ -969,8 +993,14 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
 
   async function* runTurn(params: HarnessTurnParams): AsyncGenerator<HarnessEvent> {
     // mlch: making turns need Codex's own tools, which the app-server has switched off.
+    const auth = await deps.auth();
+    if (auth.mode === "apiKey" && !auth.key) {
+      yield { type: "error", code: "not_signed_in", message: API_KEY_MISSING.codex };
+      return;
+    }
+    const apiKey = auth.mode === "apiKey" ? auth.key : undefined;
     if (params.workspace) {
-      yield* runCodexExec(params);
+      yield* runCodexExec(params, apiKey);
       return;
     }
     const lookup = deps.lookupBinary();
@@ -978,7 +1008,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
       yield { type: "error", code: "not_installed", message: lookup.problem };
       return;
     }
-    const server = connect(lookup.path);
+    const server = connect(lookup.path, apiKey);
     try {
       await server.start();
     } catch (error) {
@@ -987,42 +1017,45 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     }
     sweepThreads(0);
 
-    // Billing gate: the account must be a ChatGPT login on a plan before anything is sent.
-    let verdict: BillingVerdict;
-    try {
-      verdict = await readVerdict(server);
-    } catch (error) {
-      yield { type: "error", code: "harness_error", message: `Couldn't read Codex's sign-in status: ${errorMessage(error)}` };
-      return;
-    }
-    if (!verdict.signedIn || verdict.billing !== "subscription") {
-      yield {
-        type: "error",
-        code: verdict.billing === "none" ? "not_signed_in" : "wrong_billing",
-        message: verdict.problem ?? "Codex isn't signed in with a ChatGPT account.",
-      };
-      return;
-    }
-
-    // Usage gate: the plan's included usage must have room (past it, purchased credits would pay).
     const model = await resolveModel(server, params.model);
-    let usage: CodexUsageVerdict;
-    try {
-      usage = await readUsage(server, model);
-    } catch (error) {
-      if (isAuthRequiredError(error)) {
-        state.rejection = { at: deps.now() };
-        yield { type: "error", code: "not_signed_in", message: REJECTED_PROBLEM };
-      } else {
-        yield { type: "error", code: "harness_error", message: `Couldn't read your ChatGPT plan's Codex usage: ${errorMessage(error)}` };
+    // Billing gate: the account must be a ChatGPT login on a plan before anything is sent
+    // (unless the person chose to pay with their API key).
+    if (!apiKey) {
+      let verdict: BillingVerdict;
+      try {
+        verdict = await readVerdict(server);
+      } catch (error) {
+        yield { type: "error", code: "harness_error", message: `Couldn't read Codex's sign-in status: ${errorMessage(error)}` };
+        return;
       }
-      return;
+      if (!verdict.signedIn || verdict.billing !== "subscription") {
+        yield {
+          type: "error",
+          code: verdict.billing === "none" ? "not_signed_in" : "wrong_billing",
+          message: verdict.problem ?? "Codex isn't signed in with a ChatGPT account.",
+        };
+        return;
+      }
+
+      // Usage gate: the plan's included usage must have room (past it, purchased credits would pay).
+      let usage: CodexUsageVerdict;
+      try {
+        usage = await readUsage(server, model);
+      } catch (error) {
+        if (isAuthRequiredError(error)) {
+          state.rejection = { at: deps.now() };
+          yield { type: "error", code: "not_signed_in", message: REJECTED_PROBLEM };
+        } else {
+          yield { type: "error", code: "harness_error", message: `Couldn't read your ChatGPT plan's Codex usage: ${errorMessage(error)}` };
+        }
+        return;
+      }
+      if (!usage.allowed) {
+        yield { type: "error", code: "usage_limit", message: blockUsage(usage) };
+        return;
+      }
+      state.usageBlock = null;
     }
-    if (!usage.allowed) {
-      yield { type: "error", code: "usage_limit", message: blockUsage(usage) };
-      return;
-    }
-    state.usageBlock = null;
 
     let tools: CodexToolNamespace;
     try {
