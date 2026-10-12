@@ -32,6 +32,7 @@ import { commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, mak
 import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
 import { search } from "@/lib/search";
+import { autoSources, syncSources } from "@/lib/sources/sources";
 import { exaAvailable } from "@/lib/search/exa";
 import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
 
@@ -506,7 +507,9 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
         signal,
         lane: "slow",
         systemPrompt: (s) => slowPrompt(s, web),
-        prompt: `<mulch>\n${await mulchContext(mulchId, about, 160)}\n</mulch>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>`,
+        prompt:
+          `<mulch>\n${await mulchContext(mulchId, about, 160)}\n</mulch>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>` +
+          (settings.enrich.includes("mulches") ? await relatedElsewhere(mulchId, about) : ""),
         tools: [
           "add_nodes", "connect", "say",
           ...(settings.enrich.includes("mulches") ? (["search_all_mulches", "read_source", "link_to"] as ToolName[]) : []),
@@ -550,7 +553,7 @@ export function submitResearch(mulchId: string, brief: string, options: LongOpti
         signal,
         lane: "command",
         systemPrompt: researchPrompt,
-        prompt: `<mulch>\n${await mulchContext(mulchId, brief, 300)}\n</mulch>\n\n<brief>\n${brief}\n</brief>`,
+        prompt: `<mulch>\n${await mulchContext(mulchId, brief, 300)}\n</mulch>\n\n<brief>\n${brief}\n</brief>${await relatedElsewhere(mulchId, brief, { limit: 10 })}`,
         tools: exa ? [...RESEARCH_TOOLS, "exa_search"] : RESEARCH_TOOLS,
         webAccess: true,
         brief,
@@ -592,6 +595,32 @@ function withKeyTools(tools: ToolName[]): ToolName[] {
  * when it is big, the newest items plus the ones that match what this turn
  * is about (the agent can search for more).
  */
+/**
+ * What the person already has elsewhere that may bear on this turn: the best
+ * search hits in their other mulches and linked folders, found in code so the
+ * model only judges the connection (it rarely searches on its own).
+ */
+async function relatedElsewhere(mulchId: string, about: string, options: { limit?: number; sources?: "all" | "auto" } = {}): Promise<string> {
+  if (!about.trim()) return "";
+  try {
+    const sources = options.sources === "all" ? await syncSources() : await autoSources();
+    const others = (await listMulches()).filter((m) => m.id !== mulchId);
+    const titles = new Map(others.map((m) => [m.id, m.title]));
+    const names = new Map(sources.map((s) => [s.id, s.name]));
+    const hits = await search(about, { mulchIds: others.map((m) => m.id), sources: sources.map((s) => s.id), limit: options.limit ?? 6 });
+    if (!hits.length) return "";
+    const lines = hits.map((hit) =>
+      hit.sourceId
+        ? `folder ${hit.sourceId} "${names.get(hit.sourceId) ?? ""}" · file ${hit.path}: ${hit.snippet}`
+        : `mulch ${hit.mulchId} "${titles.get(hit.mulchId) ?? ""}" · item ${hit.nodeId} [${hit.kind}]${hit.title ? ` "${hit.title}"` : ""}: ${hit.snippet}`,
+    );
+    return `\n\n<elsewhere>\nFrom the person's other mulches and linked folders, found by search (may or may not be related):\n${lines.join("\n")}\n</elsewhere>`;
+  } catch (error) {
+    log.warn("jobs", "searching elsewhere failed", { mulchId, error });
+    return "";
+  }
+}
+
 async function mulchContext(mulchId: string, about: string, textLimit: number): Promise<string> {
   const mulch = await getMulch(mulchId);
   const count = Object.keys(mulch.nodes).length;

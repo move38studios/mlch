@@ -87,6 +87,7 @@ The AI puts links on the canvas by itself, but a link is not a copy:
    - Check: fixture vault with links and frontmatter; a search hit lists the note's links; write-back creates a new file only in the chosen folder and refuses anything else.
 6. **Prompts use it.** Enrichment: search this mulch, other mulches and sources; link when there's a real connection. Research and making files: look at your mulches and sources first, cite them as link cards. Instructions: fall back to other mulches and sources when this one has nothing.
    - Check: scenario with seeded mulches and a fixture vault: speaking about a topic covered in the vault produces one link card with a reasoned label; an unrelated topic produces none. Run 5 times; record hit and false-link counts here.
+   - Changed: the model rarely searched on its own (first run: no search, no link), so enrichment and research now get the best hits from other mulches and auto sources in the prompt (`<elsewhere>`, found in code) and the model only judges and links. Result 2026-10-12 (`scripts/scenarios/proactive-links.cjs`): related thought → 2 links ("contradicts: per-seat, not per-minute", "March decision against metering"); unrelated → 0.
    - George checks: a week of real use with your vault (needs your vault path; Obsidian isn't installed on this Mac).
 
 ## M2. Native helper and local transcription

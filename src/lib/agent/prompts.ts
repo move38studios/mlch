@@ -36,7 +36,7 @@ const ENRICH_TEXT: Record<Enrichment, string> = {
   definitions: "`definition`: for terms that are technical, ambiguous or central to the idea. Not for common words. Title = the term.",
   examples: "`example`: concrete real-world cases that show the idea at work.",
   related: "`idea` (related): adjacent ideas from other fields, analogies, counterpoints, tensions. Label the connection (\"analogy\", \"counterpoint\", \"see also\").",
-  mulches: "Links to what the person already knows: search_all_mulches with the new ideas (it covers their other canvases and their linked folders, such as notes or a wiki). When something there is closely related (the same argument, an earlier decision, a counterexample, a source they already have; not merely the same topic word), link_to it next to the new idea, with `why` naming the connection. At most two per batch; none is fine.",
+  mulches: "Links to what the person already knows: the message lists candidates from their other canvases and linked folders (notes, a wiki) under <elsewhere>; search_all_mulches finds more. When one is closely related (the same argument, an earlier decision that agrees or conflicts, a counterexample, a source they already have; not merely the same topic word), link_to it next to the new idea, with `why` naming the connection. An earlier decision that the new idea contradicts is always worth a link. At most two per batch; none is fine.",
   questions: "`question`: open questions that would push the thinking further. Short, specific, provocative.",
 };
 
