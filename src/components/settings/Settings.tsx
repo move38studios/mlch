@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
 import type { AgentHarnessId, AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
 
@@ -11,6 +11,7 @@ interface SettingsData {
   harness: AgentHarnessId;
   models: Record<AgentHarnessId, Partial<Record<Lane, string>>>;
   enrich: string[];
+  prompts: Record<string, string | undefined>;
   dailySpendCapUsd: number;
 }
 interface SettingsView {
@@ -20,6 +21,7 @@ interface SettingsView {
   usageToday: Record<string, { turns: number; inputTokens: number; outputTokens: number }>;
   desktop: boolean;
   defaults: Record<AgentHarnessId, Partial<Record<Lane, string>>>;
+  promptDefaults: Record<string, string>;
 }
 
 const LANES: Array<{ id: Lane; label: string }> = [
@@ -34,6 +36,18 @@ const ENRICH: Array<{ id: string; label: string }> = [
   { id: "related", label: "Related ideas" },
   { id: "questions", label: "Questions" },
   { id: "mulches", label: "Links to your other mulches" },
+];
+const PROMPTS: Array<{ id: string; label: string; sub?: boolean }> = [
+  { id: "base", label: "General" },
+  { id: "fast", label: "Capture" },
+  { id: "slow", label: "Enrich" },
+  ...ENRICH.map((item) => ({ id: `enrich:${item.id}`, label: item.label, sub: true })),
+  { id: "command", label: "Instructions" },
+  { id: "research", label: "Research" },
+  { id: "maker", label: "Making files" },
+  { id: "ingest", label: "Documents" },
+  { id: "image", label: "Images" },
+  { id: "folder", label: "Folders" },
 ];
 const KEYS: Array<{ id: "groq" | "firecrawl" | "fal" | "exa"; label: string }> = [
   { id: "groq", label: "Groq API key" },
@@ -94,6 +108,44 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 const FIELD = "h-9 rounded-lg border border-line bg-chrome px-2.5 text-[14px] outline-none focus:border-ink";
 const PRIMARY = "h-8 px-3 rounded-lg bg-ink text-white text-[13px] font-medium disabled:bg-paper-2 disabled:text-ink-3";
 const SECONDARY = "h-8 px-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-paper-2 hover:text-ink";
+
+/** One editable prompt part. Saved on blur; empty or unchanged text means the default. */
+function PromptField({ label, sub, value, fallback, onSave }: { label: string; sub?: boolean; value?: string; fallback: string; onSave: (next: string | undefined) => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(value ?? fallback);
+  useEffect(() => setText(value ?? fallback), [value, fallback]);
+  function save() {
+    const trimmed = text.trim();
+    const next = !trimmed || trimmed === fallback.trim() ? undefined : text;
+    if (next !== value) onSave(next);
+  }
+  return (
+    <div className={sub ? "pl-5" : ""}>
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="w-full flex items-center gap-2 py-1.5 text-left text-[14px] hover:text-ink">
+        <ChevronRight size={14} className={`text-ink-3 transition-transform motion-reduce:transition-none ${open ? "rotate-90" : ""}`} />
+        <span>{label}</span>
+        {value !== undefined && <span className="text-[12.5px] text-ink-3">Edited</span>}
+      </button>
+      {open && (
+        <div className="pl-5 pb-3">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={save}
+            rows={Math.min(24, Math.max(4, text.split("\n").reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 90)), 1)))}
+            spellCheck={false}
+            className="w-full rounded-lg border border-line bg-chrome px-3 py-2 text-[13px] leading-relaxed outline-none focus:border-ink resize-y"
+          />
+          {value !== undefined && (
+            <button onClick={() => onSave(undefined)} className={`mt-1 -ml-2.5 ${SECONDARY}`}>
+              Reset to default
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function KeyField({ id, label, set, stored, onSaved }: { id: string; label: string; set: boolean; stored: boolean; onSaved: () => void }) {
   const [value, setValue] = useState("");
@@ -274,6 +326,20 @@ export function Settings() {
                 );
               })}
             </div>
+          </Section>
+        )}
+        {view && settings && (
+          <Section title="Prompts">
+            {PROMPTS.map((item) => (
+              <PromptField
+                key={item.id}
+                label={item.label}
+                sub={item.sub}
+                value={settings.prompts[item.id]}
+                fallback={view.promptDefaults[item.id]}
+                onSave={(next) => update({ prompts: { ...settings.prompts, [item.id]: next } })}
+              />
+            ))}
           </Section>
         )}
         {view && settings && (

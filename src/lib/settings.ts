@@ -12,6 +12,12 @@ import { atomicWriteFile } from "@/lib/mulch/store";
 export const ENRICHMENTS = ["search", "definitions", "examples", "related", "questions", "mulches"] as const;
 export type Enrichment = (typeof ENRICHMENTS)[number];
 
+/** Parts of the agent's prompts the person can rewrite; defaults in agent/prompts.ts. */
+export const PROMPT_KEYS = [
+  "base", "fast", "slow", ...ENRICHMENTS.map((e) => `enrich:${e}` as const), "command", "research", "maker", "ingest", "image", "folder",
+] as const;
+export type PromptKey = (typeof PROMPT_KEYS)[number];
+
 const lanes = z.object({
   fast: z.string().max(80).optional(),
   slow: z.string().max(80).optional(),
@@ -25,6 +31,10 @@ export const settingsSchema = z.object({
     .object({ claude: lanes.default({}), codex: lanes.default({}) })
     .default({ claude: {}, codex: {} }),
   enrich: z.array(z.enum(ENRICHMENTS)).default([...ENRICHMENTS]),
+  /** The person's own wording for prompt parts. Absent: the default. */
+  prompts: z
+    .object(Object.fromEntries(PROMPT_KEYS.map((key) => [key, z.string().max(20_000).optional()])) as Record<PromptKey, z.ZodOptional<z.ZodString>>)
+    .default({}),
   /** Paid generation (fal) stops for the day at this many US dollars. */
   dailySpendCapUsd: z.number().min(0).max(1000).default(10),
 });

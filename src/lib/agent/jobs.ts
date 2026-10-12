@@ -20,7 +20,7 @@ import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
 import { applyToMulch, emit, getJobs, getMulch, listMulches, mulchDir, onAfterApply, onJobChanged, setJob } from "@/lib/mulch/store";
 import { desktopRequest } from "@/lib/desktop/server";
-import { modelFor, readSettings, type Lane } from "@/lib/settings";
+import { modelFor, readSettings, type Lane, type Settings } from "@/lib/settings";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -109,7 +109,8 @@ interface TurnSpec {
   job: JobStatus;
   signal: AbortSignal;
   lane: Lane;
-  systemPrompt: string;
+  /** Built from the settings at the start of the turn, so edited prompts apply at once. */
+  systemPrompt: string | ((settings: Settings) => string);
   prompt: string;
   tools: ToolName[];
   webAccess?: boolean;
@@ -236,7 +237,7 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     ...(spec.sessionId ? { sessionId: spec.sessionId } : {}),
     history: [],
     prompt: spec.prompt,
-    systemPrompt: spec.systemPrompt,
+    systemPrompt: typeof spec.systemPrompt === "string" ? spec.systemPrompt : spec.systemPrompt(settings),
     tools: createMulchTools(ctx),
     model: modelFor(settings, spec.lane),
     webAccess: spec.webAccess,
@@ -467,7 +468,7 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
         job,
         signal,
         lane: "fast",
-        systemPrompt: fastPrompt(),
+        systemPrompt: fastPrompt,
         prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
         tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
         origin: `speech:${job.id}`,
@@ -499,7 +500,7 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
         job,
         signal,
         lane: "slow",
-        systemPrompt: slowPrompt(settings.enrich, web),
+        systemPrompt: (s) => slowPrompt(s, web),
         prompt: `<mulch>\n${await mulchContext(mulchId, about, 160)}\n</mulch>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>`,
         tools: [
           "add_nodes", "connect", "say",
@@ -542,7 +543,7 @@ export function submitResearch(mulchId: string, brief: string, options: LongOpti
         job,
         signal,
         lane: "command",
-        systemPrompt: researchPrompt(exa),
+        systemPrompt: researchPrompt,
         prompt: `<mulch>\n${await mulchContext(mulchId, brief, 300)}\n</mulch>\n\n<brief>\n${brief}\n</brief>`,
         tools: exa ? [...RESEARCH_TOOLS, "exa_search"] : RESEARCH_TOOLS,
         webAccess: true,
@@ -614,7 +615,7 @@ function submitReview(mulchId: string, record: GenerationRecord): void {
         job,
         signal,
         lane: "command",
-        systemPrompt: commandPrompt(),
+        systemPrompt: commandPrompt,
         prompt:
           `<mulch>\n${describeMulch(mulch, { textLimit: 300 })}\n</mulch>\n\n` +
           `Generation ${record.id} "${record.title}" (${record.endpoint}) ${outcome}\n` +
@@ -737,7 +738,7 @@ export function submitCommand(mulchId: string, instruction: string): JobStatus {
         job,
         signal,
         lane: "command",
-        systemPrompt: commandPrompt(),
+        systemPrompt: commandPrompt,
         prompt: `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
         tools: withKeyTools(COMMAND_TOOLS),
         brief: instruction,
@@ -764,7 +765,7 @@ export function submitIngest(mulchId: string, sourceId: string, label: string, c
         job,
         signal,
         lane: "slow",
-        systemPrompt: ingestPrompt(),
+        systemPrompt: ingestPrompt,
         prompt:
           `<mulch>\n${await mulchContext(mulchId, content.slice(0, 1000), 140)}\n</mulch>\n\n` +
           (content.length > LONG_SOURCE
@@ -834,13 +835,12 @@ export function submitMake(mulchId: string, brief: string, options: LongOptions 
       await fs.mkdir(workspace.cwd, { recursive: true });
       await fs.mkdir(workspace.writable[0], { recursive: true });
       const mulch = await getMulch(mulchId);
-      const settings = await readSettings();
       await runTurn({
         mulchId,
         job,
         signal,
         lane: "command",
-        systemPrompt: makerPrompt(settings.harness),
+        systemPrompt: makerPrompt,
         prompt:
           `<mulch>\n${describeMulch(mulch, { textLimit: 2000 })}\n</mulch>\n\n` +
           `Working folder (scratch): ${workspace.cwd}\nSave finished files in: ${workspace.writable[0]}\n` +
@@ -884,7 +884,7 @@ export function submitImage(mulchId: string, nodeId: string, label: string): voi
         job,
         signal,
         lane: "slow",
-        systemPrompt: imagePrompt(),
+        systemPrompt: imagePrompt,
         prompt: `<mulch>\n${describeMulch(mulch, { textLimit: 140, maxNodes: 120 })}\n</mulch>\n\nNew image: ${nodeId}`,
         tools: ["view_image", "caption_image", "add_nodes", "connect"],
       });
@@ -904,7 +904,7 @@ export function submitFolder(mulchId: string, folder: string): JobStatus {
         job,
         signal,
         lane: "command",
-        systemPrompt: folderPrompt(),
+        systemPrompt: folderPrompt,
         prompt: `Folder: ${folder}`,
         tools: ["list_files", "find_files", "read_file", "add_nodes", "connect", "arrange", "say", "set_title"],
         readRoot: folder,
