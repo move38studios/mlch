@@ -54,10 +54,12 @@ export const settingsSchema = z.object({
     .default([]),
   /** The first-run checklist was finished (or the library was in use before it existed). */
   onboarded: z.boolean().default(false),
+  /** The "Start here" mulch was made (once per library, even if deleted later). */
+  startHere: z.boolean().default(false),
   /** Random id for this install, sent when creating share links (they are counted per install). */
   installId: z.string().max(64).optional(),
   /** Speech to text: Groq Whisper (key) or Parakeet on this Mac (native helper). */
-  transcription: z.enum(["groq", "local"]).default("groq"),
+  transcription: z.enum(["groq", "local"]).default("local"),
   /** Paid generation (fal) stops for the day at this many US dollars. */
   dailySpendCapUsd: z.number().min(0).max(1000).default(10),
 });

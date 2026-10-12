@@ -4,10 +4,30 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+// SwiftPM's resource bundle for the audio helper is flat; codesign needs a
+// macOS bundle (Contents/Info.plist, Contents/Resources). Foundation finds
+// resources in either layout.
+function macBundle(bundle) {
+  if (!fs.existsSync(bundle) || fs.existsSync(path.join(bundle, 'Contents'))) return;
+  const resources = path.join(bundle, 'Contents', 'Resources');
+  fs.mkdirSync(resources, { recursive: true });
+  for (const name of fs.readdirSync(bundle)) if (name !== 'Contents') fs.renameSync(path.join(bundle, name), path.join(resources, name));
+  fs.writeFileSync(path.join(bundle, 'Contents', 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>app.mlch.mac.FluidAudio</string>
+<key>CFBundleName</key><string>FluidAudio_FluidAudio</string>
+<key>CFBundlePackageType</key><string>BNDL</string>
+</dict></plist>
+`);
+}
+
 exports.default = async function afterPack(context) {
+  const resources = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources');
+  macBundle(path.join(resources, 'FluidAudio_FluidAudio.bundle'));
   const source = path.join(context.packager.projectDir, '.next', 'node_modules');
   if (!fs.existsSync(source)) return;
-  const app = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources', 'app');
+  const app = path.join(resources, 'app');
   const target = path.join(app, '.next', 'node_modules');
   const copy = (from, to) => {
     fs.mkdirSync(to, { recursive: true });
