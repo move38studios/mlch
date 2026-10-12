@@ -53,3 +53,16 @@ afterPack: build/after-pack.cjs
 dmg:
   # lzfse: smaller and faster to open than the default zlib.
   format: ULFO
+  # Paper with an arrow to Applications (scripts/brand-assets.mjs draws build/background.png and @2x).
+  background: build/background.png
+  iconSize: 112
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 140
+      y: 190
+    - x: 400
+      y: 190
+      type: link
+      path: /Applications

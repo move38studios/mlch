@@ -457,6 +457,33 @@ function buildMenu() {
   ]);
 }
 
+/**
+ * Opened from the disk image (or anywhere outside Applications): offer to move there, the
+ * way Mac apps from outside the App Store do. Updates and mlch:// links need the installed copy.
+ * Returns true when the app is moving (it relaunches from Applications).
+ */
+function offerMoveToApplications() {
+  if (!app.isPackaged || process.platform !== 'darwin' || process.env.MLCH_NO_MOVE || app.isInApplicationsFolder()) return false;
+  // Placeholder wording (George).
+  const response = dialog.showMessageBoxSync({
+    type: 'question',
+    message: 'Move mlch to Applications?',
+    buttons: ['Move', 'Not now'], defaultId: 0, cancelId: 1,
+  });
+  if (response !== 0) return false;
+  // Eject the disk image once this copy has quit.
+  const volume = /^\/Volumes\/[^/]+/.exec(app.getPath('exe'))?.[0];
+  try {
+    const moved = app.moveToApplicationsFolder({ conflictHandler: () => true });
+    if (moved && volume) spawn('/bin/sh', ['-c', 'sleep 3; /usr/bin/hdiutil detach "$0" -quiet', volume], { detached: true, stdio: 'ignore' }).unref();
+    return moved;
+  } catch (error) {
+    log(error);
+    dialog.showMessageBoxSync({ type: 'warning', message: 'Could not move mlch to Applications.', detail: String(error?.message ?? error) });
+    return false;
+  }
+}
+
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   registerBridge();
@@ -492,6 +519,7 @@ else {
   });
   process.on('unhandledRejection', log);
   app.whenReady().then(async () => {
+    if (offerMoveToApplications()) return;
     // A packaged app gets its icon from the bundle; in development, set it here.
     if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, 'icon.png'));
     diagnostics = createDiagnostics(app.getPath('logs'), redactor);

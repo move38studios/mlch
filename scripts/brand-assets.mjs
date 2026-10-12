@@ -83,3 +83,12 @@ console.log("brand assets written");
     }
   }
 }
+
+// The disk image window (electron-builder.yml dmg): paper, with a marker arrow from the app to Applications.
+// Icons sit at (140, 190) and (400, 190) in a 540x380 window.
+{
+  const background = (scale) => `<svg xmlns="http://www.w3.org/2000/svg" width="${540 * scale}" height="${380 * scale}" viewBox="0 0 540 380"><rect width="540" height="380" fill="#FCFCFA"/><g fill="none" stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M222 196 C 250 178, 290 176, 318 190"/><path d="M302 176 L 320 191 L 299 201"/></g></svg>`;
+  for (const scale of [1, 2]) {
+    await sharp(Buffer.from(background(scale))).png().toFile(path.join(root, "build", `background${scale === 2 ? "@2x" : ""}.png`));
+  }
+}
