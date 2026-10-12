@@ -526,7 +526,8 @@ else {
     if (await startWithRetry()) await createWindow();
     createTray();
     startUpdates();
-    if (!process.env.MLCH_ELECTRON_USER_DATA) {
+    // Scripted dev runs (a throwaway profile, unpackaged) leave the system's mlch:// handler alone.
+    if (app.isPackaged || !process.env.MLCH_ELECTRON_USER_DATA) {
       if (app.isPackaged) app.setAsDefaultProtocolClient('mlch');
       else app.setAsDefaultProtocolClient('mlch', process.execPath, [path.resolve(process.argv[1] ?? root), '--dev']);
     }
