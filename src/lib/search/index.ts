@@ -12,6 +12,9 @@
  * Embeddings are filled in by a background worker; search merges the
  * keyword ranking and the vector ranking (reciprocal rank fusion), so it
  * works before embeddings exist and when they are off.
+ *
+ * Linked folders (sources.ts) live in the same tables under the scope
+ * `src:<sourceId>`, with the file's path as the item id.
  */
 
 import { log } from "@/lib/log";
@@ -92,7 +95,10 @@ function db(): DatabaseSync {
 
 const TRANSCRIPT = "transcript";
 
-interface Row {
+/** Index scope prefix for linked folders. */
+export const SOURCE_SCOPE = "src:";
+
+export interface Row {
   kind: string;
   source: string;
   title?: string;
@@ -127,7 +133,8 @@ async function rowsFor(mulchId: string, node: MulchNode): Promise<Row[]> {
   return rows;
 }
 
-function replaceRows(mulchId: string, nodeId: string, rows: Row[], sig: string | undefined): void {
+/** Replace one item's rows. `mulchId` is a mulch id or a source scope. */
+export function replaceRows(mulchId: string, nodeId: string, rows: Row[], sig: string | undefined): void {
   const database = db();
   database.exec("BEGIN");
   try {
@@ -182,7 +189,12 @@ async function ensureIndexed(mulchId: string): Promise<void> {
   if (!state().indexed.has(mulchId)) await indexMulch(mulchId);
 }
 
-/** Remove a mulch from the index (it was moved to the trash). */
+/** Item id → signature for what is indexed under a mulch or source scope. */
+export function knownSignatures(scope: string): Map<string, string> {
+  return new Map((db().prepare("SELECT node_id, signature FROM items WHERE mulch_id = ?").all(scope) as Array<{ node_id: string; signature: string }>).map((r) => [r.node_id, r.signature]));
+}
+
+/** Remove a mulch (moved to the trash) or a source scope from the index. */
 export function dropMulch(mulchId: string): void {
   db().prepare("DELETE FROM chunks WHERE mulch_id = ?").run(mulchId);
   db().prepare("DELETE FROM items WHERE mulch_id = ?").run(mulchId);
@@ -191,7 +203,7 @@ export function dropMulch(mulchId: string): void {
 }
 
 /** Embed passages that have no vector yet, in the background. */
-async function embedPending(): Promise<void> {
+export async function embedPending(): Promise<void> {
   const s = state();
   if (s.embedding || !embeddingsEnabled()) return;
   s.embedding = true;
@@ -247,9 +259,13 @@ onAfterApply((mulchId, batch) => {
 /* ── searching ─────────────────────────────────────────────────── */
 
 export interface SearchHit {
+  /** The mulch; empty for a hit in a linked folder (then `sourceId` and `path`). */
   mulchId: string;
+  /** The item; for a linked folder, the file's path in it. */
   nodeId: string;
-  kind: NodeKind | "transcript";
+  sourceId?: string;
+  path?: string;
+  kind: NodeKind | "transcript" | "file";
   title?: string;
   /** The passage, trimmed around the match. */
   snippet: string;
@@ -293,13 +309,17 @@ function vectorsFor(mulchIds: string[]): Array<{ ids: number[]; data: Float32Arr
 export interface SearchOptions {
   /** Mulches to search; all mulches when absent. */
   mulchIds?: string[];
+  /** Linked folders to search too (source ids). */
+  sources?: string[];
   kinds?: string[];
   limit?: number;
 }
 
 export async function search(query: string, options: SearchOptions = {}): Promise<SearchHit[]> {
-  const mulchIds = options.mulchIds ?? (await listMulches()).map((n) => n.id);
-  for (const id of mulchIds) await ensureIndexed(id);
+  const mulchIdsOnly = options.mulchIds ?? (await listMulches()).map((n) => n.id);
+  for (const id of mulchIdsOnly) await ensureIndexed(id);
+  // Scopes: mulches and linked folders share the tables.
+  const mulchIds = [...mulchIdsOnly, ...(options.sources ?? []).map((id) => `${SOURCE_SCOPE}${id}`)];
   const database = db();
   const limit = options.limit ?? 12;
   const placeholders = mulchIds.map(() => "?").join(",") || "''";
@@ -355,9 +375,11 @@ export async function search(query: string, options: SearchOptions = {}): Promis
     const key = `${row.mulch_id}/${row.node_id}`;
     if ((seen.get(key) ?? 0) >= 2) continue;
     seen.set(key, (seen.get(key) ?? 0) + 1);
+    const sourceId = row.mulch_id.startsWith(SOURCE_SCOPE) ? row.mulch_id.slice(SOURCE_SCOPE.length) : undefined;
     hits.push({
-      mulchId: row.mulch_id,
+      mulchId: sourceId ? "" : row.mulch_id,
       nodeId: row.node_id,
+      ...(sourceId ? { sourceId, path: row.node_id } : {}),
       kind: row.kind as SearchHit["kind"],
       ...(row.title ? { title: row.title } : {}),
       snippet: snippetAround(row.text, query),
@@ -379,6 +401,11 @@ export async function readAround(mulchId: string, nodeId: string, at: { page?: n
   if (node.assetId && (node.kind === "doc" || node.kind === "link")) full = await readAssetText(mulchId, node.assetId);
   else if (node.docPath) full = await fs.readFile(path.join(mulchDir(mulchId), node.docPath), "utf8").catch(() => undefined);
   full ??= [node.title, node.text].filter(Boolean).join("\n\n");
+  return sliceAround(full, at, size);
+}
+
+/** A window of a long text around a page marker or a character offset. */
+export function sliceAround(full: string, at: { page?: number; offset?: number }, size = 6000): string {
   let start = at.offset ?? 0;
   if (at.page !== undefined) {
     const marker = full.indexOf(`--- page ${at.page} ---`);

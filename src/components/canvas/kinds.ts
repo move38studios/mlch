@@ -33,5 +33,6 @@ export const KIND_STYLES: Record<NodeKind, KindStyle> = {
   image: { card: "bg-chrome text-[12.5px]", clamp: 3 },
   media: { card: "bg-chrome text-[12.5px]", clamp: 3 },
   artifact: { label: "made", card: "bg-chrome text-[13.5px] leading-[1.45]", clamp: 4 },
+  ref: { card: "bg-chrome text-[13.5px] leading-[1.45]", clamp: 3 },
   writeup: { label: "write-up", card: "bg-chrome text-[13.5px] leading-[1.5]", markdown: true, clamp: 14 },
 };

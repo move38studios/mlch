@@ -4,7 +4,9 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Handle, NodeResizeControl, Position, ResizeControlVariant, type NodeProps, type Node } from "@xyflow/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ExternalLink, FileText, Maximize2 } from "lucide-react";
+import { ExternalLink, FileText, Link2, Maximize2 } from "lucide-react";
+import { formatDateTime } from "@/lib/format";
+import { useResolvedRef } from "./refs";
 import { useMulch } from "@/lib/mulch/client";
 import { jitter } from "@/lib/mulch/place";
 import type { MulchNode } from "@/lib/mulch/types";
@@ -127,8 +129,27 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   );
 }
 
+/** A link to an item in another mulch or a note in a linked folder, shown live; the panel opens it. */
+function RefBody({ node }: { node: MulchNode }) {
+  const target = useResolvedRef(node.ref);
+  const gone = target && !target.exists;
+  const title = target?.title ?? node.title;
+  return (
+    <div className={`px-3.5 py-3 ${gone ? "opacity-55" : ""}`}>
+      <div className="flex items-center gap-1.5 mb-1 text-[12px] text-ink-3 min-w-0">
+        <Link2 size={12} strokeWidth={1.75} className="shrink-0" />
+        <span className="truncate">{target?.place || (node.ref && "sourceId" in node.ref ? node.ref.path : "")}</span>
+        {target?.updatedAt && !gone && <span className="shrink-0">{formatDateTime(target.updatedAt)}</span>}
+      </div>
+      {title && <div className="font-semibold mb-0.5 leading-[1.3]">{title}</div>}
+      {gone ? <p className="text-ink-3">Removed</p> : target?.text && <p className="whitespace-pre-wrap text-ink-2 line-clamp-3">{target.text}</p>}
+    </div>
+  );
+}
+
 function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   const style = KIND_STYLES[node.kind];
+  if (node.kind === "ref") return <RefBody node={node} />;
   if (node.kind === "artifact") return <ArtifactBody node={node} mulchId={mulchId} />;
   if (node.kind === "media") return <MediaBody node={node} mulchId={mulchId} />;
   if (node.kind === "image" && node.assetId) {
@@ -182,7 +203,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const setOpen = useCanvasUi((s) => s.setOpen);
   const apply = useMulch((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
-  const long = node.text.length > 400 || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || (node.kind === "link" && !!node.assetId);
+  const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || (node.kind === "link" && !!node.assetId);
 
   return (
     <div
@@ -190,7 +211,8 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
+        if (node.kind === "ref") setOpen(node.id);
+        else if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
       }}
     >
       <Handle type="target" position={Position.Left} className="mlch-handle-target" isConnectableStart={false} />

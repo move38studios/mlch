@@ -19,6 +19,7 @@ export const NODE_WIDTH: Record<NodeKind, number> = {
   artifact: 320,
   media: 320,
   note: 220,
+  ref: 240,
 };
 
 const FALLBACK_HEIGHT: Record<NodeKind, number> = {
@@ -34,6 +35,7 @@ const FALLBACK_HEIGHT: Record<NodeKind, number> = {
   artifact: 240,
   media: 300,
   note: 120,
+  ref: 100,
 };
 
 /** Artifact cards with a live preview are taller. */

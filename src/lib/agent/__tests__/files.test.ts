@@ -14,6 +14,13 @@ describe("resolveReadable", () => {
     expect(resolveReadable(home, "")).toBe(home);
   });
 
+  it("allows synced document folders inside Library (iCloud Drive, cloud storage)", () => {
+    expect(resolveReadable(home, "Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault/a.md")).toBe(path.join(home, "Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault/a.md"));
+    expect(resolveReadable(home, "Library/CloudStorage/Dropbox/notes.md")).toBeDefined();
+    expect(resolveReadable(home, "Library/Mobile Documents/x/.env")).toBeUndefined();
+    expect(resolveReadable(home, "Library/Application Support/x")).toBeUndefined();
+  });
+
   it("refuses escapes and private places", () => {
     for (const p of ["../etc/passwd", "/etc/passwd", ".ssh/id_rsa", ".aws/credentials", "Library/Keychains/login.keychain-db", "dev/app/.env", "dev/app/.env.local", "dev/certs/server.pem", ".mlch/agent/x"]) {
       expect(resolveReadable(home, p), p).toBeUndefined();

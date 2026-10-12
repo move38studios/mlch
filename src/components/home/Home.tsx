@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Settings, Trash2 } from "lucide-react";
 import { Scribble, Wordmark } from "@/components/brand/Scribble";
 import Link from "next/link";
-import { ResultList, useSearch } from "@/components/search/SearchPalette";
+import { openResult, ResultList, useSearch } from "@/components/search/SearchPalette";
 import { formatDateTime } from "@/lib/format";
 import type { MulchSummary } from "@/lib/mulch/types";
 
@@ -97,7 +97,7 @@ export function Home() {
         </div>
         {results && (
           <div className="mb-8 rounded-xl float overflow-hidden">
-            <ResultList results={results} showMulch onPick={(hit) => router.push(`/n/${hit.mulchId}?focus=${hit.nodeId}${hit.page ? `&page=${hit.page}` : ""}`)} />
+            <ResultList results={results} showMulch onPick={(hit) => openResult(router, hit)} />
           </div>
         )}
         {error && <p className="text-sm text-danger mb-4">{error}</p>}

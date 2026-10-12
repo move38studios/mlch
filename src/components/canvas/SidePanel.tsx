@@ -1,14 +1,125 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ExternalLink, FolderOpen, X } from "lucide-react";
+import { ExternalLink, FolderOpen, Link2, X } from "lucide-react";
 import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import { KIND_STYLES } from "./kinds";
 import { MediaPlayer } from "./MediaBody";
 import { useCanvasUi } from "./ui";
+import { useResolvedRef } from "./refs";
+import { useBacklinks } from "./backlinks";
+import type { Mulch, MulchNode } from "@/lib/mulch/types";
+
+const BUTTON = "px-2.5 py-1 rounded-lg text-[13px]";
+
+/** Items connected to the target in its own mulch, for context. */
+function useNeighbours(mulchId?: string, itemId?: string): MulchNode[] {
+  const [mulch, setMulch] = useState<Mulch>();
+  useEffect(() => {
+    if (!mulchId) return;
+    let cancelled = false;
+    fetch(`/api/mulches/${mulchId}`)
+      .then((response) => (response.ok ? (response.json() as Promise<{ mulch: Mulch }>) : undefined))
+      .then((body) => !cancelled && setMulch(body?.mulch))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [mulchId]);
+  if (!mulch || !itemId) return [];
+  const ids = Object.values(mulch.edges).flatMap((edge) => (edge.source === itemId ? [edge.target] : edge.target === itemId ? [edge.source] : []));
+  return [...new Set(ids)].map((id) => mulch.nodes[id]).filter((node): node is MulchNode => !!node && node.kind !== "ref").slice(0, 8);
+}
+
+/** A link card opened: the target in full, where it lives, and what it connects to there. */
+function RefPanel({ node, mulchId, onClose }: { node: MulchNode; mulchId: string; onClose: () => void }) {
+  const router = useRouter();
+  const readOnly = useCanvasUi((s) => s.readOnly);
+  const ref = node.ref!;
+  const target = useResolvedRef(ref, true);
+  const inMulch = "mulchId" in ref ? ref : undefined;
+  const neighbours = useNeighbours(inMulch?.mulchId, inMulch?.itemId);
+  const open = () => {
+    if ("mulchId" in ref) router.push(`/n/${ref.mulchId}?focus=${ref.itemId}`);
+    else void fetch("/api/sources/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sourceId: ref.sourceId, path: ref.path }) });
+  };
+  const bring = async () => {
+    const response = await fetch(`/api/mulches/${mulchId}/bring`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nodeId: node.id }) });
+    if (response.ok) onClose();
+  };
+  return (
+    <aside className="float w-[min(560px,45%)] shrink-0 my-3 mr-3 rounded-2xl flex flex-col overflow-hidden">
+      <div className="h-12 shrink-0 flex items-center gap-2 pl-6 pr-3 text-[12.5px] text-ink-3 min-w-0">
+        <Link2 size={13} strokeWidth={1.75} className="shrink-0" />
+        <span className="truncate">{target?.place}</span>
+        {"sourceId" in ref && <span className="truncate">{ref.path}</span>}
+        <div className="flex-1" />
+        {target?.exists && (
+          <button onClick={open} className={`${BUTTON} bg-ink text-white`}>
+            Open
+          </button>
+        )}
+        {target?.exists && !readOnly && (
+          <button onClick={() => void bring()} className={`${BUTTON} text-ink-2 hover:bg-paper-2 hover:text-ink`}>
+            Bring here
+          </button>
+        )}
+        <button onClick={onClose} title="Close" aria-label="Close" className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink">
+          <X size={16} strokeWidth={1.75} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-auto px-6 pt-1 pb-8">
+        {(target?.title ?? node.title) && <h2 className="text-[22px] font-semibold leading-[1.2] tracking-[-0.015em] mb-4">{target?.title ?? node.title}</h2>}
+        {target && !target.exists ? (
+          <p className="text-[15px] text-ink-3">Removed</p>
+        ) : (
+          <div className="mlch-md mlch-md-full text-[15px] leading-[1.6]">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{target?.text ?? ""}</ReactMarkdown>
+          </div>
+        )}
+        {neighbours.length > 0 && (
+          <div className="mt-6 pt-4 border-t border-line">
+            <div className="text-[12.5px] text-ink-3 mb-2">Connected there</div>
+            <ul className="space-y-1.5">
+              {neighbours.map((n) => (
+                <li key={n.id}>
+                  <Link href={`/n/${inMulch!.mulchId}?focus=${n.id}`} className="block text-[14px] text-ink-2 hover:text-ink line-clamp-2">
+                    {n.title || n.text}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+/** Link cards elsewhere that point at this item. */
+function LinkedFrom({ mulchId, itemId }: { mulchId: string; itemId: string }) {
+  const links = useBacklinks(mulchId).filter((link) => link.itemId === itemId);
+  if (!links.length) return null;
+  return (
+    <div className="mt-6 pt-4 border-t border-line">
+      <div className="text-[12.5px] text-ink-3 mb-2">Linked from</div>
+      <ul className="space-y-1.5">
+        {links.map((link) => (
+          <li key={`${link.mulchId}/${link.nodeId}`}>
+            <Link href={`/n/${link.mulchId}?focus=${link.nodeId}`} className="text-[14px] text-ink-2 hover:text-ink">
+              {link.mulchTitle}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // The colour of a found passage. Kept out of the stylesheet: the CSS optimiser
 // does not know ::highlight() (the CSS Custom Highlight API) and warns about it.
@@ -63,6 +174,7 @@ export function SidePanel() {
   }, [highlight, full, node?.id]);
 
   if (!node) return null;
+  if (node.kind === "ref" && node.ref && mulchId) return <RefPanel key={node.id} node={node} mulchId={mulchId} onClose={() => setOpen(undefined)} />;
   const body = full && full.assetId === textAsset ? full.text : node.text;
   const revealable = desktop() && ((node.assetId && node.kind !== "link") || node.docPath);
   const reveal = () =>
@@ -110,6 +222,7 @@ export function SidePanel() {
         <div className="mlch-md mlch-md-full text-[15px] leading-[1.6]">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
         </div>
+        {mulchId && <LinkedFrom mulchId={mulchId} itemId={node.id} />}
       </div>
     </aside>
   );

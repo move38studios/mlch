@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, FolderPlus, History, X } from "lucide-react";
+import { ArrowLeft, FolderPlus, History, Link2, X } from "lucide-react";
+import { useBacklinks } from "./backlinks";
 import type { Mulch } from "@/lib/mulch/types";
 import { HistoryBar } from "./History";
 import { useCanvasUi } from "./ui";
@@ -61,6 +62,38 @@ function AddFolder({ mulchId }: { mulchId: string }) {
     <button onClick={choose} className="p-1.5 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink" title="Add folder" aria-label="Add folder">
       <FolderPlus size={16} strokeWidth={1.75} />
     </button>
+  );
+}
+
+/** Other mulches linking into this one. */
+function LinkedFromMenu({ mulchId }: { mulchId: string }) {
+  const links = useBacklinks(mulchId);
+  const [open, setOpen] = useState(false);
+  if (!links.length) return null;
+  const byMulch = [...new Map(links.map((link) => [link.mulchId, link])).values()];
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`h-7 px-1.5 rounded-lg inline-flex items-center gap-1 text-[13px] ${open ? "bg-paper-2 text-ink" : "text-ink-2 hover:bg-paper-2 hover:text-ink"}`}
+        title="Linked from"
+        aria-label="Linked from"
+        aria-expanded={open}
+      >
+        <Link2 size={15} strokeWidth={1.75} />
+        {byMulch.length}
+      </button>
+      {open && (
+        <div className="float absolute right-0 top-10 w-64 rounded-xl p-1.5 z-20">
+          <div className="px-2.5 pt-1 pb-1.5 text-[12.5px] text-ink-3">Linked from</div>
+          {byMulch.map((link) => (
+            <Link key={link.mulchId} href={`/n/${link.mulchId}?focus=${link.nodeId}`} className="block px-2.5 py-1.5 rounded-lg text-[14px] text-ink-2 hover:bg-paper-2 hover:text-ink truncate">
+              {link.mulchTitle}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -140,6 +173,7 @@ export function MulchView({ id }: { id: string }) {
           {mulch && (
             <div className="no-drag pointer-events-auto float rounded-xl h-9 flex items-center px-1 gap-0.5">
               <JobStatus mulchId={id} />
+              <LinkedFromMenu mulchId={id} />
               <AddFolder mulchId={id} />
               <button
                 onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}

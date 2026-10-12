@@ -13,6 +13,8 @@ const DENIED_DIRS = [
   ".ssh", ".aws", ".gnupg", ".gpg", ".azure", ".kube", ".docker", ".config/gcloud", ".config/gh",
   ".password-store", ".netrc", "Library", ".Trash", ".mlch",
 ];
+/** Under the denied Library folder: synced document folders (iCloud Drive, Dropbox, Google Drive…), which hold the person's own files. */
+const ALLOWED_IN_DENIED = ["Library/Mobile Documents", "Library/CloudStorage"];
 const DENIED_FILES = /(^|\/)(\.env(\..*)?|\.npmrc|\.pypirc|\.netrc|\.git-credentials|id_[a-z0-9]+|.*\.(pem|key|p12|pfx|keychain-db|kdbx))$/i;
 
 /** The private folders under the home folder, as absolute paths. */
@@ -29,7 +31,8 @@ export function resolveReadable(root: string, relative: string): string | undefi
   if (target !== root && !target.startsWith(root + path.sep)) return undefined;
   const home = os.homedir();
   const fromHome = target.startsWith(home + path.sep) ? target.slice(home.length + 1) : undefined;
-  if (fromHome && DENIED_DIRS.some((dir) => fromHome === dir || fromHome.startsWith(dir + "/"))) return undefined;
+  const allowed = fromHome && ALLOWED_IN_DENIED.some((dir) => fromHome === dir || fromHome.startsWith(dir + "/"));
+  if (fromHome && !allowed && DENIED_DIRS.some((dir) => fromHome === dir || fromHome.startsWith(dir + "/"))) return undefined;
   if (DENIED_FILES.test(target)) return undefined;
   return target;
 }

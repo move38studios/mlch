@@ -157,6 +157,18 @@ export async function listMulches(): Promise<MulchSummary[]> {
   return summaries.filter((s): s is MulchSummary => !!s).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+/** A mulch as it is now, without opening it (for reading many: links, backlinks). */
+export async function peekMulch(id: string): Promise<Mulch | undefined> {
+  if (!isMulchId(id)) return undefined;
+  const open = state().open.get(id);
+  if (open) return open.mulch;
+  try {
+    return JSON.parse(await fs.readFile(path.join(mulchDir(id), "mulch.json"), "utf8")) as Mulch;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function createMulch(title = "Untitled"): Promise<Mulch> {
   const id = newId();
   const mulch = emptyMulch(id, title, Date.now());

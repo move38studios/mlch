@@ -36,7 +36,7 @@ const ENRICH_TEXT: Record<Enrichment, string> = {
   definitions: "`definition`: for terms that are technical, ambiguous or central to the idea. Not for common words. Title = the term.",
   examples: "`example`: concrete real-world cases that show the idea at work.",
   related: "`idea` (related): adjacent ideas from other fields, analogies, counterpoints, tensions. Label the connection (\"analogy\", \"counterpoint\", \"see also\").",
-  mulches: "Links to the person's other canvases: search_all_mulches with the new ideas; when another mulch has something closely related (not merely the same topic word), bring_in that one item near the new idea and connect them. At most one per batch.",
+  mulches: "Links to what the person already knows: search_all_mulches with the new ideas (it covers their other canvases and their linked folders, such as notes or a wiki). When something there is closely related (the same argument, an earlier decision, a counterexample, a source they already have; not merely the same topic word), link_to it next to the new idea, with `why` naming the connection. At most two per batch; none is fine.",
   questions: "`question`: open questions that would push the thinking further. Short, specific, provocative.",
 };
 
@@ -50,7 +50,8 @@ const COMMAND = `Your job now: carry out the person's instruction, given in the 
 - Summary, write-up, outline, essay, plan: call \`write_doc\` with well-structured markdown grounded in what is on the canvas (cite source URLs from search items where used). Put it near the items it draws on.
 - Look things up: use the web tools and add \`search\` items. For companies or competitors, research papers and recent news use exa_search if you have it (category company / research paper / news); otherwise the built-in web search.
 - Competitor or market scans, prior art, literature reviews, landscape overviews: call \`research\` with a complete brief and say that it is running. Do not do these yourself in one go.
-- Finding things on this canvas ("find that image where…", "the quote about…", "what did I say about…"): search_mulch, read_source to check, then focus on what you found (with the quote) and say one line. Across the person's canvases: search_all_mulches, and bring_in if they want it here.
+- Finding things on this canvas ("find that image where…", "the quote about…", "what did I say about…"): search_mulch, read_source to check, then focus on what you found (with the quote) and say one line. Across the person's canvases and linked folders (notes, wiki, vault): search_all_mulches; link_to puts a link card here, bring_in only when they want a copy to work with.
+- Saving to their notes, wiki or vault: save_note.
 - Files on this computer ("look at my dev/briefbuster folder"): find and read them with find_files / list_files / read_file (read-only). Put what you learn on the canvas as items (ideas, structure, open questions), not the files themselves; mention paths where useful. Read broadly enough to be right.
 - Images: view_image to see an image item; read_file shows image files.
 - Slides, deck, presentation (no format named): an HTML deck via \`write_artifact\` (extension html), designed like a good keynote, not plain markup: one self-contained file; 16:9 slides scaled to fit the window; arrow keys, space and click to move; slide counter; a strong type scale (large headlines, few words per slide), a restrained palette with one accent, generous whitespace, varied layouts (title, big statement, two columns, quote, key number). One idea per slide; detail goes in speaker-notes-style small print only where needed. Keep the script simple and robust. Then check it: preview_artifact with several slides, read any script errors, fix with write_artifact \`replace\`, and look again until it is right.
@@ -84,11 +85,13 @@ You have a shell and file tools in a sandbox: you can write only in the working 
 - Word: python-docx. PDF: build HTML and convert, or reportlab. Spreadsheets: openpyxl. Charts: matplotlib.
 - Check your output: reopen the file with the same library and verify it (slide count, text that would overflow its box, empty placeholders). Rendering previews is not available.
 - Ground everything in the canvas's content and the brief. Do not invent facts; mark open questions as such.
-- Write in the person's language.`;
+- Write in the person's language.
+- If the brief or the canvas refers to earlier work, notes or decisions, find them with search_all_mulches and read_source.`;
 
 const RESEARCH = `Your job now: a research job on the brief in the message. This is several minutes of work, not one search.
 
 Method:
+0. Start from what the person already has: search_all_mulches for the brief (their canvases and linked folders). link_to the most relevant (at most 3) near the items they bear on, and build on them.
 1. Search from several angles (at least 4 searches): exa_search if you have it (category company with a plain description of the product, or research paper / news as fits), the built-in web search for well-known names and "alternatives to …" lists, and follow promising leads.
 2. Read the strongest candidates' own pages (read_page) rather than relying on directories or listicles. Keep only real, current products or sources; prefer primary sources.
 3. Keep 8-15 results for a scan (fewer, deeper ones for a literature question).

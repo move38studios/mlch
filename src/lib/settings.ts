@@ -35,6 +35,23 @@ export const settingsSchema = z.object({
   prompts: z
     .object(Object.fromEntries(PROMPT_KEYS.map((key) => [key, z.string().max(20_000).optional()])) as Record<PromptKey, z.ZodOptional<z.ZodString>>)
     .default({}),
+  /**
+   * Folders linked once and searched from every mulch (read-only). `auto`:
+   * the AI uses them on its own; `asked`: only when the person asks.
+   * `writeFolder` (relative to the source): where mlch may add new notes.
+   */
+  sources: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[a-z0-9]{6,24}$/),
+        path: z.string().min(1).max(1000),
+        name: z.string().min(1).max(200),
+        mode: z.enum(["auto", "asked"]).default("auto"),
+        writeFolder: z.string().max(300).optional(),
+      }),
+    )
+    .max(20)
+    .default([]),
   /** Paid generation (fal) stops for the day at this many US dollars. */
   dailySpendCapUsd: z.number().min(0).max(1000).default(10),
 });

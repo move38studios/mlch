@@ -36,6 +36,7 @@ const nodeFields = {
   gen: gen.optional(),
   origin: z.string().max(120),
   userTouched: z.boolean().optional(),
+  ref: z.union([z.object({ mulchId: id, itemId: id }).strict(), z.object({ sourceId: id, path: z.string().min(1).max(1000) }).strict()]).optional(),
   updatedAt: num.optional(),
 };
 

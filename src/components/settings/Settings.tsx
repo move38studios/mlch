@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
 import type { AgentHarnessId, AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
+import { Sources } from "./Sources";
 
 type Lane = "fast" | "slow" | "command";
 interface SettingsData {
@@ -35,7 +36,7 @@ const ENRICH: Array<{ id: string; label: string }> = [
   { id: "examples", label: "Examples" },
   { id: "related", label: "Related ideas" },
   { id: "questions", label: "Questions" },
-  { id: "mulches", label: "Links to your other mulches" },
+  { id: "mulches", label: "Links to your mulches and sources" },
 ];
 const PROMPTS: Array<{ id: string; label: string; sub?: boolean }> = [
   { id: "base", label: "General" },
@@ -307,6 +308,9 @@ export function Settings() {
               ))}
             </div>
           )}
+        </Section>
+        <Section title="Sources">
+          <Sources />
         </Section>
         {settings && (
           <Section title="Enrichment">

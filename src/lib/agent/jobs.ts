@@ -128,6 +128,8 @@ interface TurnSpec {
   /** Resume this vendor session. */
   sessionId?: string;
   reviewRound?: number;
+  /** Linked folders it may search: all when the person asked for this job. */
+  sources?: "all" | "auto";
 }
 
 class JobError extends Error {}
@@ -155,7 +157,9 @@ const TOOL_ACTIVITY: Record<string, string> = {
   present_file: "Putting it on the canvas",
   view_image: "Looking at an image",
   search_mulch: "Searching this canvas",
-  search_all_mulches: "Searching all canvases",
+  search_all_mulches: "Searching your mulches and notes",
+  link_to: "Linking",
+  save_note: "Saving a note",
   read_source: "Reading a source",
   read_file: "Reading a file",
   list_files: "Looking through files",
@@ -229,6 +233,7 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     origin: spec.origin,
     brief: spec.brief,
     reviewRound: spec.reviewRound,
+    sources: spec.sources,
     session: { id: spec.sessionId } as { id?: string },
     added: [] as string[],
   };
@@ -504,7 +509,7 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
         prompt: `<mulch>\n${await mulchContext(mulchId, about, 160)}\n</mulch>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>`,
         tools: [
           "add_nodes", "connect", "say",
-          ...(settings.enrich.includes("mulches") ? (["search_all_mulches", "bring_in"] as ToolName[]) : []),
+          ...(settings.enrich.includes("mulches") ? (["search_all_mulches", "read_source", "link_to"] as ToolName[]) : []),
           ...(web && exaAvailable() ? (["exa_search"] as ToolName[]) : []),
         ],
         webAccess: web,
@@ -518,11 +523,12 @@ const COMMAND_TOOLS: ToolName[] = [
   "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
-  "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "research", "read_page",
+  "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "link_to", "save_note", "research", "read_page",
 ];
 
 const RESEARCH_TOOLS: ToolName[] = [
   "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "get_mulch", "search_mulch",
+  "search_all_mulches", "read_source", "link_to",
 ];
 
 /**
@@ -741,6 +747,8 @@ export function submitCommand(mulchId: string, instruction: string): JobStatus {
         systemPrompt: commandPrompt,
         prompt: `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
         tools: withKeyTools(COMMAND_TOOLS),
+        // The person asked: every linked folder, including ones kept for when they ask.
+        sources: "all",
         brief: instruction,
         onResearch: (brief, options) => submitResearch(mulchId, brief, options),
         onMake: (brief, options) => submitMake(mulchId, brief, options),
@@ -845,7 +853,7 @@ export function submitMake(mulchId: string, brief: string, options: LongOptions 
           `<mulch>\n${describeMulch(mulch, { textLimit: 2000 })}\n</mulch>\n\n` +
           `Working folder (scratch): ${workspace.cwd}\nSave finished files in: ${workspace.writable[0]}\n` +
           `Canvas files (images, documents) are in: ${path.join(mulchDir(mulchId), "assets")}\n\n<brief>\n${brief}\n</brief>`,
-        tools: ["get_mulch", "view_image", "present_file", "preview_artifact", "say"],
+        tools: ["get_mulch", "view_image", "present_file", "preview_artifact", "say", "search_all_mulches", "read_source"],
         workspace,
         webAccess: true,
       });

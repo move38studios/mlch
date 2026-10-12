@@ -4,7 +4,7 @@
 // parentPort and waits for the reply carrying the same id. electron/server.cjs
 // exposes request() to route code as globalThis.__mlchDesktop
 // (src/lib/desktop/server.ts); lib/bridge-main.cjs answers.
-const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render', 'thumbnail', 'notify', 'activity']);
+const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render', 'thumbnail', 'notify', 'activity', 'open-url']);
 const INGEST_PICKER_TITLE = 'Choose a folder';
 const REQUEST_TIMEOUT_MS = 30_000;
 // A folder picker waits on the user, not on main; this only bounds a lost reply

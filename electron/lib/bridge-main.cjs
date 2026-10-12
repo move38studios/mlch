@@ -52,6 +52,13 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
         const error = await shell.openPath(file);
         return error ? fail(error) : { ok: true };
       }
+      case 'open-url': {
+        // mlch: a note from a linked Obsidian vault, opened in Obsidian.
+        const url = typeof payload.url === 'string' ? payload.url : '';
+        if (!/^obsidian:\/\/open\?vault=[^&\s]+&file=[^&\s]+$/.test(url)) return fail('Only an Obsidian note link can be opened.');
+        await shell.openExternal(url);
+        return { ok: true };
+      }
       case 'render': {
         // mlch: screenshots of an artifact page for the agent (see main.cjs renderArtifact).
         if (!render) return fail('Rendering is not available.');

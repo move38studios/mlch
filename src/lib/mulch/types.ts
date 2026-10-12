@@ -31,7 +31,12 @@ export type NodeKind =
   /** Generated image, video, audio or 3D model (fal). */
   | "media"
   /** Free text the user typed onto the canvas. */
-  | "note";
+  | "note"
+  /** A link to an item in another mulch or a file in a linked folder; shows the target live, copies nothing. */
+  | "ref";
+
+/** What a link card points at. Ids only, no local paths beyond a source-relative one, so it survives sharing. */
+export type NodeRef = { mulchId: string; itemId: string } | { sourceId: string; path: string };
 
 export const NODE_KINDS: readonly NodeKind[] = [
   "idea",
@@ -46,6 +51,7 @@ export const NODE_KINDS: readonly NodeKind[] = [
   "artifact",
   "media",
   "note",
+  "ref",
 ];
 
 /**
@@ -83,6 +89,8 @@ export interface MulchNode {
    * touched node unless the user asks for it in a command.
    */
   userTouched?: boolean;
+  /** Link cards: the target. `title` keeps its title from when it was linked, for when it is gone or not shared. */
+  ref?: NodeRef;
   createdAt: number;
   updatedAt?: number;
 }

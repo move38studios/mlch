@@ -15,7 +15,7 @@ import { newClientId } from "@/lib/mulch/ids";
 import { arrangeGroups, boundsOf, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/mulch/sizes";
 import { applyToMulch, atomicWriteFile, emit, getMulch, listMulches, mulchDir } from "@/lib/mulch/store";
-import { NODE_KINDS, type Mulch, type MulchNode, type MulchOp, type NodeKind } from "@/lib/mulch/types";
+import { NODE_KINDS, type Mulch, type MulchNode, type MulchOp, type NodeKind, type NodeRef } from "@/lib/mulch/types";
 import { assetPath, isHttpUrl, isImage, readLink } from "@/lib/ingest/ingest";
 import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
 import { desktopRequest } from "@/lib/desktop/server";
@@ -23,7 +23,9 @@ import { modelSchema, searchModels } from "@/lib/media/fal";
 import { startGeneration, waitFor } from "@/lib/media/generations";
 import { viewForModel } from "@/lib/media/inspect";
 import { checkBudget, estimateCost } from "@/lib/media/spend";
-import { readAround, search, type SearchHit } from "@/lib/search";
+import { readAround, search, sliceAround, type SearchHit } from "@/lib/search";
+import { copyItem, resolveRef } from "@/lib/links/links";
+import { addNote, autoSources, getSource, readSourceText, syncSources } from "@/lib/sources/sources";
 import { exaSearch } from "@/lib/search/exa";
 import { buildPptx, slideSchema, type Slide } from "@/lib/artifacts/pptx";
 import { hiddenEntry, imageForModel, resolveReadable } from "./files";
@@ -61,6 +63,8 @@ export type ToolName =
   | "focus"
   | "view"
   | "bring_in"
+  | "link_to"
+  | "save_note"
   | "exa_search"
   | "research"
   | "read_page";
@@ -93,6 +97,8 @@ export interface ToolContext {
   reviewRound?: number;
   /** Origin stamped on what this job adds; default `agent:<jobId>`. The fast lane uses `speech:<jobId>`. */
   origin?: string;
+  /** Linked folders this job may search: all (the person asked), or only those set to be used without asking (default). */
+  sources?: "all" | "auto";
 }
 
 /* ── describing the canvas to the model ────────────────────────── */
@@ -107,6 +113,7 @@ function nodeLine(node: MulchNode, textLimit: number): string {
     node.groupId ? `group=${node.groupId}` : undefined,
   ].filter(Boolean);
   const head = `${node.id} [${node.kind}] @${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.w)}x${Math.round(r.h)}${flags.length ? ` (${flags.join(", ")})` : ""}`;
+  if (node.ref) return `${head}: link to ${"mulchId" in node.ref ? `item ${node.ref.itemId} in mulch ${node.ref.mulchId}` : `${node.ref.path} in source ${node.ref.sourceId}`}${node.title ? ` "${oneLine(node.title)}"` : ""}`;
   const body = [node.title ? `"${oneLine(node.title)}"` : undefined, node.url, clip(oneLine(node.text), textLimit)].filter(Boolean).join(" — ");
   return `${head}: ${body}`;
 }
@@ -141,7 +148,7 @@ export function describeMulch(mulch: Mulch, options: { textLimit?: number; maxNo
 
 /* ── definitions ───────────────────────────────────────────────── */
 
-const AI_KINDS = NODE_KINDS.filter((kind) => !["doc", "image", "note", "artifact", "writeup", "media"].includes(kind)) as [NodeKind, ...NodeKind[]];
+const AI_KINDS = NODE_KINDS.filter((kind) => !["doc", "image", "note", "artifact", "writeup", "media", "ref"].includes(kind)) as [NodeKind, ...NodeKind[]];
 
 const newNodeShape = z.object({
   ref: z.string().max(40).optional().describe("Your temporary name for this item, to connect it to others in the same call."),
@@ -316,15 +323,49 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   search_all_mulches: {
     name: "search_all_mulches",
     title: "Search all canvases",
-    description: "Search every canvas of the person's (same as search_mulch, across all). Results name the canvas. Bring an item over with bring_in.",
+    description:
+      "Search everything the person knows: all their canvases and their linked folders (notes, wiki, an Obsidian vault, company documents). Results name the canvas or folder. " +
+      "Link a closely related result here with link_to; read more with read_source.",
     inputShape: { query: z.string().min(1).max(500), limit: z.number().int().min(1).max(30).optional() },
     readOnly: true,
+  },
+  link_to: {
+    name: "link_to",
+    title: "Link",
+    description:
+      "Put a link card on this canvas pointing at an item in another canvas (mulch_id + item_id) or a file in a linked folder (source_id + path), next to and connected to the item it relates to. " +
+      "It copies nothing: the card shows the target live and opens it. Give `why`: the connection in 1-6 words (it labels the connection). Only for a real, specific connection, not a shared topic word.",
+    inputShape: {
+      mulch_id: z.string().optional(),
+      item_id: z.string().optional(),
+      source_id: z.string().optional(),
+      path: z.string().max(1000).optional(),
+      near: z.string().describe("Id of the item on this canvas it relates to."),
+      why: z.string().min(2).max(60).describe('How they connect, 1-6 words ("same argument, 2024", "counterexample", "earlier decision").'),
+    },
+    readOnly: false,
+  },
+  save_note: {
+    name: "save_note",
+    title: "Save note",
+    description: "Add a new markdown note to one of the person's linked folders (only where they allowed it; never changes existing notes). Use when they ask to save something to their notes, wiki or vault.",
+    inputShape: { source_id: z.string(), name: z.string().min(1).max(120).describe("File name without extension."), markdown: z.string().min(1).max(200_000) },
+    readOnly: false,
   },
   read_source: {
     name: "read_source",
     title: "Read source",
-    description: "Read the full text of an item's source around a page or character offset from a search hit (documents, links, write-ups, artifacts).",
-    inputShape: { id: z.string(), page: z.number().int().min(1).optional(), offset: z.number().int().min(0).optional() },
+    description:
+      "Read the full text of an item around a page or character offset from a search hit (documents, links, write-ups, artifacts). " +
+      "For another canvas give its mulch_id; for a file in a linked folder give source_id and path (id is then ignored).",
+    inputShape: {
+      id: z.string().optional(),
+      mulch_id: z.string().optional(),
+      source_id: z.string().optional(),
+      path: z.string().max(1000).optional(),
+      page: z.number().int().min(1).optional(),
+      offset: z.number().int().min(0).optional(),
+    },
     readOnly: true,
   },
   focus: {
@@ -829,16 +870,70 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
 
     async search_all_mulches(args) {
       const { query, limit } = args as { query: string; limit?: number };
-      const hits = await search(query, { limit: limit ?? 12 });
+      const sources = ctx.sources === "all" ? await syncSources() : await autoSources();
+      const hits = await search(query, { limit: limit ?? 12, sources: sources.map((source) => source.id) });
       if (!hits.length) return ok("Nothing found.", "Found nothing");
       const titles = new Map((await listMulches()).map((n) => [n.id, n.title]));
-      return ok(hits.map((hit) => `mulch ${hit.mulchId} "${titles.get(hit.mulchId) ?? ""}"${hit.mulchId === ctx.mulchId ? " (this one)" : ""} · ${hitLine(hit)}`).join("\n\n"), `Found ${hits.length}`);
+      const names = new Map(sources.map((source) => [source.id, source.name]));
+      const line = (hit: SearchHit) =>
+        hit.sourceId
+          ? `folder ${hit.sourceId} "${names.get(hit.sourceId) ?? ""}" · file ${hit.path}${hit.page ? ` p.${hit.page}` : ""}${hit.offset !== undefined ? ` @${hit.offset}` : ""}: ${hit.snippet}`
+          : `mulch ${hit.mulchId} "${titles.get(hit.mulchId) ?? ""}"${hit.mulchId === ctx.mulchId ? " (this one)" : ""} · ${hitLine(hit)}`;
+      return ok(hits.map(line).join("\n\n"), `Found ${hits.length}`);
     },
 
     async read_source(args) {
-      const { id, page, offset } = args as { id: string; page?: number; offset?: number };
-      const text = await readAround(ctx.mulchId, id, { page, offset });
-      return text ? ok(text, "Read source") : fail(`No item ${id}.`);
+      const { id, mulch_id, source_id, path: file, page, offset } = args as { id?: string; mulch_id?: string; source_id?: string; path?: string; page?: number; offset?: number };
+      if (source_id || file) {
+        const source = source_id ? await getSource(source_id) : undefined;
+        if (!source || !file) return fail("Give source_id and path from a search_all_mulches result (folder <source_id> · file <path>).");
+        if (ctx.sources !== "all" && source.mode !== "auto") return fail(`The person keeps "${source.name}" for when they ask; use it only if they do.`);
+        const text = await readSourceText(source, file);
+        return text ? ok(sliceAround(text, { page, offset }), "Read a note") : fail(`No readable file ${file} in "${source.name}".`);
+      }
+      if (!id) return fail("Give the item id (and mulch_id for another canvas), or source_id and path for a linked folder.");
+      const text = await readAround(mulch_id ?? ctx.mulchId, id, { page, offset }).catch(() => undefined);
+      return text ? ok(text, "Read source") : fail(`No item ${id}${mulch_id ? ` in mulch ${mulch_id}` : ""}.`);
+    },
+
+    async link_to(args) {
+      const { mulch_id, item_id, source_id, path: file, near, why } = args as { mulch_id?: string; item_id?: string; source_id?: string; path?: string; near: string; why: string };
+      const ref: NodeRef | undefined = mulch_id && item_id ? { mulchId: mulch_id, itemId: item_id } : source_id && file ? { sourceId: source_id, path: file } : undefined;
+      if (!ref) return fail("Give mulch_id and item_id (an item in another canvas), or source_id and path (a file in a linked folder), from search_all_mulches.");
+      if ("mulchId" in ref && ref.mulchId === ctx.mulchId) return fail("That item is on this canvas already; connect to it instead.");
+      if ("sourceId" in ref) {
+        const source = await getSource(ref.sourceId);
+        if (source && ctx.sources !== "all" && source.mode !== "auto") return fail(`The person keeps "${source.name}" for when they ask; link to it only if they do.`);
+      }
+      const mulch = await getMulch(ctx.mulchId);
+      const anchor = mulch.nodes[near];
+      if (!anchor) return fail(`No item ${near} on this canvas. near is the id of the item the link relates to.`);
+      const same = (node: MulchNode) => node.ref && JSON.stringify(node.ref) === JSON.stringify(ref);
+      if (Object.values(mulch.nodes).some(same)) return fail("This canvas already links to that; connect to the existing link card instead.");
+      const target = await resolveRef(ref);
+      if (!target.exists) return fail("Nothing there: use ids and paths exactly as search_all_mulches gave them.");
+      const id = newClientId("n");
+      const position = placeNear(mulch, { w: NODE_WIDTH.ref, h: estimateHeight("ref", (target.text ?? "").slice(0, 160), target.title) }, { anchorIds: [near], seed: id });
+      const ops: MulchOp[] = [
+        { op: "addNode", node: { id, kind: "ref", x: position.x, y: position.y, ...(target.title ? { title: target.title.slice(0, 200) } : {}), text: "", ref, origin, createdAt: Date.now() } },
+        { op: "addEdge", edge: { id: newClientId("e"), source: near, target: id, label: why.trim().slice(0, 60), origin, createdAt: Date.now() } },
+      ];
+      await commit(ops);
+      ctx.added.push(id);
+      return ok(`Linked as ${id} (${target.place}${target.title ? `: ${target.title}` : ""}).`, "Linked", ops);
+    },
+
+    async save_note(args) {
+      const { source_id, name, markdown } = args as { source_id: string; name: string; markdown: string };
+      const sources = await syncSources();
+      const source = sources.find((s) => s.id === source_id);
+      if (!source) return fail(`No linked folder ${source_id}. Linked folders: ${sources.map((s) => `${s.id} "${s.name}"${s.writeFolder !== undefined ? " (can add notes)" : ""}`).join(", ") || "none"}.`);
+      try {
+        const file = await addNote(source, name, markdown);
+        return ok(`Saved as ${file} in "${source.name}".`, "Saved a note");
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
     },
 
     async focus(args) {
@@ -862,31 +957,13 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const source = await getMulch(mulch_id).catch(() => undefined);
       const node = source?.nodes[item_id];
       if (!source || !node) return fail(`No item ${item_id} in mulch ${mulch_id}.`);
-      // Files come along, so the copy works on its own.
-      if (node.assetId) {
-        for (const asset of [node.assetId, `${node.assetId.split(".")[0]}.md`]) {
-          await fs.mkdir(path.join(mulchDir(ctx.mulchId), "assets"), { recursive: true });
-          await fs.copyFile(assetPath(mulch_id, asset), assetPath(ctx.mulchId, asset)).catch(() => undefined);
-        }
-      }
       const mulch = await getMulch(ctx.mulchId);
-      const id = newClientId("n");
       const anchors = (near ?? []).filter((key) => mulch.nodes[key]);
-      const position = placeNear(mulch, { w: NODE_WIDTH[node.kind], h: rectOf(node).h }, { anchorIds: anchors, seed: id });
-      const copy: MulchNode = {
-        ...node,
-        id,
-        x: position.x,
-        y: position.y,
-        groupId: undefined,
-        docPath: undefined,
-        title: node.title ?? undefined,
-        text: `${node.text}\n\n(From "${source.title}")`,
-        origin,
-        userTouched: undefined,
-        createdAt: Date.now(),
-      };
-      const ops: MulchOp[] = [{ op: "addNode", node: JSON.parse(JSON.stringify(copy)) }];
+      const position = placeNear(mulch, { w: NODE_WIDTH[node.kind], h: rectOf(node).h }, { anchorIds: anchors, seed: item_id });
+      const copy = await copyItem(ctx.mulchId, mulch_id, item_id, position, origin);
+      if (!copy) return fail(`No item ${item_id} in mulch ${mulch_id}.`);
+      const id = copy.id;
+      const ops: MulchOp[] = [{ op: "addNode", node: copy }];
       await commit(ops);
       ctx.added.push(id);
       return ok(`Brought in as ${id}.`, "Brought in an item", ops);

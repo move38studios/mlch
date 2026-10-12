@@ -5,8 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 
 export interface SearchResult {
+  /** Empty for a file in a linked folder (then sourceId and path). */
   mulchId: string;
+  /** The mulch's title, or the linked folder's name. */
   mulchTitle: string;
+  sourceId?: string;
+  path?: string;
   nodeId: string;
   kind: string;
   title?: string;
@@ -67,7 +71,17 @@ const KIND_LABEL: Record<string, string> = {
   example: "example",
   idea: "idea",
   note: "note",
+  file: "file",
 };
+
+/** Go to a result: an item in a mulch, or a file of a linked folder (Obsidian for vault notes). */
+export function openResult(router: ReturnType<typeof useRouter>, result: SearchResult) {
+  if (result.sourceId && result.path) {
+    void fetch("/api/sources/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sourceId: result.sourceId, path: result.path }) });
+    return;
+  }
+  router.push(`/n/${result.mulchId}?focus=${result.nodeId}${result.page ? `&page=${result.page}` : ""}`);
+}
 
 export function ResultList({
   results,
@@ -132,7 +146,7 @@ export function SearchPalette({ mulchId, onFocus }: { mulchId: string; onFocus(r
   const pick = (result: SearchResult) => {
     setOpen(false);
     if (result.mulchId === mulchId) onFocus(result);
-    else router.push(`/n/${result.mulchId}?focus=${result.nodeId}${result.page ? `&page=${result.page}` : ""}`);
+    else openResult(router, result);
   };
   return (
     <div className="absolute inset-0 z-40 bg-paper/50 backdrop-blur-[2px] flex justify-center pt-[12vh]" onMouseDown={() => setOpen(false)}>
