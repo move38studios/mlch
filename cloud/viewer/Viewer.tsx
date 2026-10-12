@@ -5,8 +5,9 @@
  * look for them (/api/mulches/<share id>/…).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyNodeChanges, Background, BackgroundVariant, Controls, ReactFlow, ReactFlowProvider, useNodesInitialized, useReactFlow } from "@xyflow/react";
+import { useCanvasGestures } from "@/components/canvas/gestures";
 import { useMulch } from "@/lib/mulch/client";
 import { NODE_WIDTH } from "@/lib/mulch/sizes";
 import type { Mulch, OpBatch } from "@/lib/mulch/types";
@@ -142,13 +143,19 @@ function toFlowNodes(mulch: Mulch, fresh: Record<string, number>, previous: Map<
   return [...groups, ...nodes];
 }
 
+const ZOOM = { min: 0.1, max: 2 };
+
 function Board() {
   const mulch = useMulch((s) => s.mulch);
   const fresh = useMulch((s) => s.fresh);
   const flow = useReactFlow();
   const initialized = useNodesInitialized();
   const fitted = useRef(false);
+  const root = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<FlowNode[]>([]);
+  // As in the app: a mouse wheel zooms at the pointer, a trackpad pans, pinch zooms; ⌘+ ⌘− ⌘0.
+  const fit = useCallback(() => void flow.fitView({ padding: 0.12, maxZoom: 1, duration: 250 }), [flow]);
+  useCanvasGestures(root, flow, ZOOM, fit);
 
   useEffect(() => {
     if (!mulch) return;
@@ -179,6 +186,7 @@ function Board() {
 
   return (
     <ReactFlow<FlowNode, MulchFlowEdge>
+      ref={root}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -192,8 +200,8 @@ function Board() {
       onNodeClick={() => undefined}
       deleteKeyCode={null}
       zoomOnDoubleClick={false}
-      minZoom={0.1}
-      maxZoom={2}
+      minZoom={ZOOM.min}
+      maxZoom={ZOOM.max}
       panOnScroll
       panOnDrag
       proOptions={{ hideAttribution: true }}

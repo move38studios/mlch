@@ -82,6 +82,7 @@ function JobRow({ job, now }: { job: Job; now: number }) {
           </span>
         </div>
         <p className={`mt-0.5 text-[12px] leading-snug line-clamp-2 ${job.state === "failed" ? "text-danger" : "text-ink-3"}`}>{detail}</p>
+        {job.message && <p className="mt-1.5 text-[12.5px] leading-snug text-ink-2 whitespace-pre-line line-clamp-6">{job.message.text}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         {isActive(job) && (

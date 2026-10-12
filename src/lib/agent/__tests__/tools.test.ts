@@ -69,6 +69,42 @@ describe("mulch tools", () => {
     expect((await allowed.store.getMulch(allowed.mulch.id)).nodes.mine).toBeUndefined();
   });
 
+  it("removes groups and made things too, clears everything when asked, and leaves no empty box", async () => {
+    const { store, mulch, runtime } = await setup(["remove_nodes"], { allowUserEdits: true });
+    await store.applyToMulch(
+      mulch.id,
+      [
+        { op: "addGroup", group: { id: "g-a", title: "A", x: 0, y: 0, w: 500, h: 300, origin: "user", createdAt: 4 } },
+        { op: "addGroup", group: { id: "g-b", title: "B", x: 0, y: 400, w: 500, h: 300, origin: "agent:j0", createdAt: 5 } },
+        { op: "updateNode", id: "mine", patch: { groupId: "g-a" } },
+        { op: "updateNode", id: "said", patch: { groupId: "g-b" } },
+        { op: "addNode", node: { id: "made", kind: "artifact", x: 0, y: 900, text: "Deck", artifactPath: "artifacts/deck.html", origin: "agent:j0", createdAt: 6 } },
+      ],
+      "user",
+    );
+    // A box alone: its items stay. The last item of a box: the box goes with it.
+    await runtime.execute("remove_nodes", { ids: ["g-a", "said", "made"] });
+    let after = await store.getMulch(mulch.id);
+    expect(Object.keys(after.groups)).toEqual([]);
+    expect(Object.keys(after.nodes).sort()).toEqual(["ai", "mine"]);
+    expect(after.nodes.mine.groupId).toBeUndefined();
+
+    const cleared = await runtime.execute("remove_nodes", { all: true });
+    expect(cleared.ok).toBe(true);
+    after = await store.getMulch(mulch.id);
+    expect(Object.keys(after.nodes)).toEqual([]);
+    expect((await runtime.execute("remove_nodes", {})).ok).toBe(false);
+  });
+
+  it("tell leaves a message only where a job can keep one", async () => {
+    const messages: string[] = [];
+    const kept = await setup(["tell"], { onMessage: (text: string) => messages.push(text) });
+    expect((await kept.runtime.execute("tell", { text: "The boxes are yours; say if they should go." })).ok).toBe(true);
+    expect(messages).toEqual(["The boxes are yours; say if they should go."]);
+    const lane = await setup(["tell"]);
+    expect((await lane.runtime.execute("tell", { text: "x" })).ok).toBe(false);
+  });
+
   it("arrange creates group boxes and write_doc saves a file", async () => {
     const { store, mulch, runtime } = await setup(["arrange", "write_doc"], { allowUserEdits: true });
     const arranged = await runtime.execute("arrange", { groups: [{ title: "A", ids: ["mine", "said"] }, { title: "B", ids: ["ai"] }] });

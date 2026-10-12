@@ -5,6 +5,15 @@ function directives(csp: string | null): Record<string, string> {
   return Object.fromEntries((csp ?? "").split(";").map((part) => part.trim().split(/\s+/)).map(([name, ...rest]) => [name, rest.join(" ")]));
 }
 
+describe("tab icon", () => {
+  it("goes into a shared page's head, unless it has its own", async () => {
+    const { withFavicon } = await import("../src/index");
+    expect(withFavicon("<html><head><title>T</title></head></html>")).toMatch(/^<html><head><link rel="icon" type="image\/png" href="data:image\/png;base64,/);
+    const own = '<head><link rel="icon" href="x.png"></head>';
+    expect(withFavicon(own)).toBe(own);
+  });
+});
+
 describe("shared artifacts", () => {
   it("serve the main file at the share's link, sandboxed with no network", async () => {
     const share = await create({ kind: "artifact", title: "Deck", entry: "deck.html" });
@@ -18,7 +27,9 @@ describe("shared artifacts", () => {
     const page = await call(share.url);
     expect(page.status).toBe(200);
     expect(page.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
-    expect(await page.text()).toContain("<h1>Deck</h1>");
+    const html = await page.text();
+    expect(html).toContain("<h1>Deck</h1>");
+    expect(html.startsWith('<link rel="icon" type="image/png" href="data:image/png;base64,')).toBe(true); // the sandbox allows only data: images
     const csp = directives(page.headers.get("Content-Security-Policy"));
     expect(csp.sandbox).toBe("allow-scripts"); // opaque origin: no cookies, storage or same-origin access
     expect(csp["default-src"]).toBe("'none'");

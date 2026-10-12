@@ -42,6 +42,8 @@ export interface JobStatus {
   unseen?: boolean;
   /** Set for the person's instructions and long work: these are kept in jobs.json and can be retried. */
   retry?: JobRetry;
+  /** A message from the AI to the person (`tell`), shown until they close it. */
+  message?: { text: string; at: number; dismissed?: boolean };
   /** Long work: the space held on the canvas for its result. */
   anchor?: { x: number; y: number; w: number; h: number };
 }

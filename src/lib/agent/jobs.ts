@@ -239,6 +239,15 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     onResearch: spec.onResearch,
     takeHeld: () => takeHeld(spec.mulchId, spec.job),
     onActivity: (text: string) => setActivity(spec.mulchId, spec.job, text),
+    // Only the person's own instructions and long work (kept jobs) can leave a message.
+    ...(spec.job.retry
+      ? {
+          onMessage: (text: string) => {
+            spec.job.message = { text, at: Date.now() };
+            void setJob(spec.mulchId, { ...spec.job }).catch(() => {});
+          },
+        }
+      : {}),
     origin: spec.origin,
     brief: spec.brief,
     reviewRound: spec.reviewRound,
@@ -620,14 +629,14 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
 }
 
 const COMMAND_TOOLS: ToolName[] = [
-  "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say",
+  "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say", "tell",
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
   "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "link_to", "save_note", "research", "read_page",
 ];
 
 const RESEARCH_TOOLS: ToolName[] = [
-  "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "get_mulch", "search_mulch",
+  "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "tell", "get_mulch", "search_mulch",
   "search_all_mulches", "read_source", "link_to",
 ];
 

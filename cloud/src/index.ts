@@ -8,7 +8,8 @@
  */
 
 import { LIMITS, type Env, type ShareKind } from "./env";
-import { fileHeaders, ownSources, sandboxCsp, validPath } from "./files";
+import { FAVICON_DATA_URL } from "./favicon";
+import { fileHeaders, mimeOf, ownSources, sandboxCsp, validPath } from "./files";
 import { r2Key, type Result } from "./room";
 import type { OpBatch } from "../../src/lib/mulch/types";
 
@@ -102,6 +103,14 @@ async function asset(env: Env, request: Request, path: string, extra: Record<str
 }
 
 /** A file from a share's R2 folder, sandboxed. */
+/** The mlch icon as the tab icon of a shared page that has none. */
+export function withFavicon(html: string): string {
+  if (/<link[^>]+rel=["']?(shortcut )?icon/i.test(html)) return html;
+  const link = `<link rel="icon" type="image/png" href="${FAVICON_DATA_URL}">`;
+  const head = /<head[^>]*>/i.exec(html);
+  return head ? html.slice(0, head.index + head[0].length) + link + html.slice(head.index + head[0].length) : link + html;
+}
+
 async function serveFile(env: Env, request: Request, id: string, path: string): Promise<Response> {
   if (!validPath(path)) return notFound();
   const object = await env.SHARES.get(r2Key.file(id, path), { onlyIf: request.headers });
@@ -109,6 +118,12 @@ async function serveFile(env: Env, request: Request, id: string, path: string): 
   const headers = fileHeaders(path, sandboxCsp(ownSources(env.SHARE_ORIGIN, id)));
   headers.set("ETag", object.httpEtag);
   if (!("body" in object)) return new Response(null, { status: 304, headers });
+  // A shared page's sandbox allows only data: images, so the tab icon goes in as one (unless the page has its own).
+  if (mimeOf(path).startsWith("text/html")) {
+    const html = withFavicon(await object.text());
+    headers.set("Content-Length", String(new TextEncoder().encode(html).length));
+    return new Response(request.method === "HEAD" ? null : html, { headers });
+  }
   headers.set("Content-Length", String(object.size));
   return new Response(request.method === "HEAD" ? null : object.body, { headers });
 }
@@ -299,7 +314,7 @@ export async function handle(request: Request, env: Env): Promise<Response> {
     return new Response(object.body, { headers: { "Content-Type": type, "Content-Length": String(object.size), "Cache-Control": parts[2].endsWith(".yml") ? "no-cache" : "public, max-age=31536000, immutable" } });
   }
   if (parts[0] === "viewer" || parts[0] === "brand") return env.ASSETS.fetch(request);
-  if (url.pathname === "/favicon.ico") return Response.redirect(`${url.origin}/brand/icon.svg`, 301);
+  if (url.pathname === "/favicon.ico") return Response.redirect(`${url.origin}/brand/icon-32.png`, 301);
   if (url.pathname === "/") {
     if (onShareHost && share.host !== apex.host) return Response.redirect(`${env.APEX_ORIGIN}/`, 301);
     return asset(env, request, "/", { "Cache-Control": "public, max-age=300" });

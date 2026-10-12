@@ -9,7 +9,7 @@ import { ScreenshotListener } from "@/components/desktop/Screenshot";
 const ui = Schibsted_Grotesk({ subsets: ["latin", "latin-ext"], variable: "--font-ui", display: "swap" });
 const scribble = Barriecito({ weight: "400", subsets: ["latin"], variable: "--font-scribble", display: "swap" });
 
-export const metadata: Metadata = { title: "mlch", icons: { icon: "/brand/icon.svg" } };
+export const metadata: Metadata = { title: "mlch", icons: { icon: [{ url: "/brand/icon.svg", type: "image/svg+xml" }, { url: "/brand/icon-32.png", type: "image/png", sizes: "32x32" }] } };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

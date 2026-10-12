@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { useMulch } from "@/lib/mulch/client";
 import { CallButton, MicButton, TranscriptStrip } from "./Mic";
+import { Message } from "./Message";
 
 async function post(path: string, body: unknown): Promise<void> {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -32,6 +33,9 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
       if (instruction) await post(`/api/mulches/${mulchId}/command`, { instruction: value });
       else await post(`/api/mulches/${mulchId}/input`, { text: value });
       setText("");
+      // The next thing typed answers the AI's message or moves on: it closes.
+      const { jobs, jobAction } = useMulch.getState();
+      for (const job of Object.values(jobs)) if (job.message && !job.message.dismissed) void jobAction("dismiss-message", { jobId: job.id });
     } catch (error) {
       useMulch.setState({ notice: { level: "error", message: (error as Error).message, at: Date.now() } });
     } finally {
@@ -41,6 +45,7 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
 
   return (
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 w-[min(700px,calc(100%-360px))] min-w-[380px]">
+      <Message />
       <TranscriptStrip />
       <div className="float flex items-center gap-2 rounded-2xl pl-2 pr-2 py-2">
         <MicButton mulchId={mulchId} />

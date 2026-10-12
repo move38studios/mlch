@@ -2,6 +2,8 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import { Handle, NodeResizeControl, Position, ResizeControlVariant, type NodeProps, type Node } from "@xyflow/react";
+
+const SIDES = [["t", Position.Top], ["r", Position.Right], ["b", Position.Bottom], ["l", Position.Left]] as const;
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink, FileText, Link2, Maximize2 } from "lucide-react";
@@ -224,7 +226,6 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
         else if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
       }}
     >
-      <Handle type="target" position={Position.Left} className="mlch-handle-target" isConnectableStart={false} />
       {editing ? (
         <div className="px-4 py-3">
           <Editor node={node} onDone={() => setEditing(undefined)} />
@@ -242,7 +243,10 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
           <Maximize2 size={13} strokeWidth={1.75} />
         </button>
       )}
-      <Handle type="source" position={Position.Right} className="mlch-handle" />
+      {/* Four connection points; the canvas connects in loose mode, so any of them starts or ends a connection. */}
+      {SIDES.map(([id, position]) => (
+        <Handle key={id} id={id} type="source" position={position} className="mlch-handle" />
+      ))}
       {selected && !editing && !readOnly && (
         <NodeResizeControl
           position="right"

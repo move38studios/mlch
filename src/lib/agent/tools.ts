@@ -40,6 +40,7 @@ export type ToolName =
   | "arrange"
   | "write_doc"
   | "say"
+  | "tell"
   | "hand_off"
   | "set_title"
   | "list_files"
@@ -87,6 +88,8 @@ export interface ToolContext {
   takeHeld?: () => { x: number; y: number } | undefined;
   /** What the job is doing now, for the person. */
   onActivity?: (text: string) => void;
+  /** A message for the person (`tell`), kept with the job until they close it. */
+  onMessage?: (text: string) => void;
   /** Ids of nodes this job added, in order. */
   added: string[];
   /** The person's request this job serves (for review turns after generations). */
@@ -213,9 +216,16 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   },
   remove_nodes: {
     name: "remove_nodes",
-    title: "Remove items",
-    description: "Remove items (and their connections). Items the user made or touched can only be removed when the user asked for it.",
-    inputShape: { ids: z.array(z.string()).min(1).max(100) },
+    title: "Remove",
+    description:
+      "Remove things from the canvas: items of any kind (cards, documents, made files, images, links) with their connections, and groups (the labelled boxes, ids g-…). " +
+      "Removing a group removes its box; its items stay unless listed too. Groups left empty by a removal go as well. " +
+      "`all: true` clears the whole canvas (every item, connection and group), only when the person asked to erase everything. " +
+      "Items and groups the person made or touched can only be removed when the person asked for it. Files stay in the canvas's folder.",
+    inputShape: {
+      ids: z.array(z.string()).max(200).optional().describe("Ids of items and groups to remove."),
+      all: z.boolean().optional().describe("Clear everything on the canvas."),
+    },
     readOnly: false,
   },
   arrange: {
@@ -248,6 +258,16 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     title: "Status",
     description: "Show the user one short status line (under 15 words). Not for content; content goes on the canvas.",
     inputShape: { text: z.string().max(200) },
+    readOnly: true,
+  },
+  tell: {
+    name: "tell",
+    title: "Message",
+    description:
+      "A message the person reads in a bubble until they close it: the answer when they asked a question, why something they asked for could not be done (and what would work), " +
+      "or one question back when the instruction is unclear. A few short paragraphs at most; markdown allowed. Never to report what you did (the canvas shows that; use say). " +
+      "Content worth keeping goes on the canvas instead. At most once per turn.",
+    inputShape: { text: z.string().min(1).max(3000) },
     readOnly: true,
   },
   hand_off: {
@@ -696,23 +716,35 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
     },
 
     async remove_nodes(args) {
-      const { ids } = args as { ids: string[] };
+      const { ids = [], all } = args as { ids?: string[]; all?: boolean };
+      if (!ids.length && !all) return fail("Give the ids of the items or groups to remove, or all: true to clear the canvas.");
       const mulch = await getMulch(ctx.mulchId);
+      const owned = (thing: { origin: string; userTouched?: boolean }) => isUserOwned(thing as MulchNode) && !ctx.allowUserEdits;
+      const wanted = all ? [...Object.keys(mulch.nodes), ...Object.keys(mulch.groups)] : ids;
       const refused: string[] = [];
       const missing: string[] = [];
-      const ops: MulchOp[] = [];
-      for (const id of ids) {
-        const node = mulch.nodes[id];
-        if (!node) missing.push(id);
-        else if (isUserOwned(node) && !ctx.allowUserEdits) refused.push(id);
-        else ops.push({ op: "removeNode", id });
+      const nodeIds = new Set<string>();
+      const groupIds = new Set<string>();
+      for (const id of wanted) {
+        const thing = mulch.nodes[id] ?? mulch.groups[id];
+        if (!thing) missing.push(id);
+        else if (owned(thing)) refused.push(id);
+        else if (mulch.nodes[id]) nodeIds.add(id);
+        else groupIds.add(id);
       }
+      // A box whose items all go is not left behind empty.
+      for (const group of Object.values(mulch.groups)) {
+        const members = Object.values(mulch.nodes).filter((node) => node.groupId === group.id);
+        if (members.length && members.every((node) => nodeIds.has(node.id))) groupIds.add(group.id);
+      }
+      const ops: MulchOp[] = [...[...nodeIds].map((id): MulchOp => ({ op: "removeNode", id })), ...[...groupIds].map((id): MulchOp => ({ op: "removeGroup", id }))];
       await commit(ops);
       const notes = [
-        refused.length ? `Kept ${refused.join(", ")}: made or edited by the user.` : "",
-        missing.length ? `Not found: ${missing.join(", ")}.` : "",
+        refused.length ? `Kept ${refused.join(", ")}: made or edited by the person; remove them only if they ask.` : "",
+        missing.length ? `Not found: ${missing.join(", ")}. Call get_mulch for current ids.` : "",
       ].filter(Boolean);
-      return ok(`Removed ${ops.length}. ${notes.join(" ")}`.trim(), `Removed ${ops.length}`, ops);
+      const done = `Removed ${nodeIds.size} item${nodeIds.size === 1 ? "" : "s"}${groupIds.size ? ` and ${groupIds.size} group${groupIds.size === 1 ? "" : "s"}` : ""}.`;
+      return ok(`${done} ${notes.join(" ")}`.trim(), `Removed ${nodeIds.size + groupIds.size}`, ops);
     },
 
     async arrange(args) {
@@ -773,6 +805,13 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       await emit(ctx.mulchId, { type: "say", text, jobId: ctx.jobId });
       ctx.onActivity?.(text);
       return ok("Shown.", "Status");
+    },
+
+    async tell(args) {
+      const text = (args as { text: string }).text.trim();
+      if (!ctx.onMessage) return fail("Messages are not available here; use say for one short line.");
+      ctx.onMessage(text);
+      return ok("Shown to the person until they close it.", "Message");
     },
 
     async hand_off(args) {

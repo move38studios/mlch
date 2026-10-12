@@ -371,6 +371,13 @@ export async function markJobsSeen(id: string, jobIds: string[]): Promise<void> 
   }
 }
 
+/** The person closed a job's message. */
+export async function dismissJobMessage(id: string, jobId: string): Promise<void> {
+  const entry = await openMulch(id);
+  const job = entry.jobs.get(jobId);
+  if (job?.message && !job.message.dismissed) await setJob(id, { ...job, message: { ...job.message, dismissed: true } });
+}
+
 export function onJobChanged(hook: (id: string, job: JobStatus) => void): void {
   const hooks = state().jobChanged;
   const key = hook.toString();
