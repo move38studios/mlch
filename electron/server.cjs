@@ -2,8 +2,14 @@
 // Adapted from node-banana (MIT, © William Falloon).
 const { createServer } = require('node:http');
 const { randomBytes } = require('node:crypto');
-const { existsSync } = require('node:fs');
+const { existsSync, readFileSync } = require('node:fs');
 const path = require('node:path');
+// mlch: the packaged app is Next's standalone build, whose config travels in
+// required-server-files.json (no next.config.ts); Next reads it on require.
+const standaloneConfig = path.join(process.cwd(), '.next', 'required-server-files.json');
+if (process.env.NODE_ENV === 'production' && existsSync(standaloneConfig) && !existsSync(path.join(process.cwd(), 'next.config.ts'))) {
+  process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(JSON.parse(readFileSync(standaloneConfig, 'utf8')).config);
+}
 const next = require('next');
 const { createRedactor } = require('./lib/diagnostics.cjs');
 const { browseDirectoryTitle, createBridgeClient } = require('./lib/bridge.cjs');

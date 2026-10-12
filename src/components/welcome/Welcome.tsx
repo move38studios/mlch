@@ -127,7 +127,7 @@ export function Welcome() {
     window.addEventListener("focus", load);
     return () => window.removeEventListener("focus", load);
   }, [load]);
-  const downloading = status?.searchModel === "downloading" || status?.local.model === "downloading";
+  const downloading = status?.searchModel === "downloading" || status?.local.model === "downloading" || !!harnesses?.some((h) => h.cli?.state === "downloading" || h.cli?.state === "checking");
   useEffect(() => {
     if (!downloading) return;
     const timer = setInterval(() => void load(), 1500);
@@ -185,6 +185,11 @@ export function Welcome() {
                   <div className="flex items-center gap-3 text-[14px]">
                     <span className="w-20 font-medium">{HARNESS_NAMES[h.id] ?? h.label}</span>
                     <span className={`flex-1 truncate ${h.problem ? "text-ink-3" : "text-ink-2"}`}>{h.problem ?? (h.auth === "apiKey" ? "API key" : (h.account?.email ?? ""))}</span>
+                    {h.cli?.state === "missing" && (
+                      <button onClick={() => void fetch("/api/agent/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: h.id }) }).then(load)} className={PRIMARY}>
+                        Download
+                      </button>
+                    )}
                     {h.installed && !h.signedIn && h.auth !== "apiKey" && (
                       <button onClick={() => void fetch("/api/agent/sign-in", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ harness: h.id }) })} className={PRIMARY}>
                         Sign in

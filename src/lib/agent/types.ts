@@ -60,6 +60,8 @@ export interface AgentHarnessStatus {
   version?: string;
   signedIn: boolean;
   billing: AgentBilling;
+  /** Packaged app: getting the CLI (missing until asked for, downloading, …). */
+  cli?: { state: "checking" | "missing" | "downloading" | "ready" | "failed"; progress?: number; error?: string };
   /** Paid by the person's subscription login, or by their API key (Settings). */
   auth?: "subscription" | "apiKey";
   account?: { email?: string; plan?: string };

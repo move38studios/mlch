@@ -34,6 +34,7 @@ import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
 import { search } from "@/lib/search";
 import { autoSources, syncSources } from "@/lib/sources/sources";
+import { cliFailed, prepareCli } from "./server/cli";
 // Registers live sharing: shared canvases follow every change.
 import "@/lib/share/shares";
 import { exaAvailable } from "@/lib/search/exa";
@@ -142,6 +143,8 @@ class JobError extends Error {}
 
 async function harnessReady(): Promise<void> {
   const settings = await readSettings();
+  // Packaged app with no usable install: the tested CLI downloads (the turn waits for it below).
+  await prepareCli(settings.harness, { download: true });
   const cached = state().status;
   if (cached && cached.value.id === settings.harness && Date.now() - cached.at < STATUS_TTL_MS && !cached.value.problem) return;
   const status = await getHarness(settings.harness).getStatus();
@@ -271,6 +274,8 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
       log.warn("agent", "turn error", { mulchId: spec.mulchId, jobId: spec.job.id, harness: settings.harness, code: event.code, message: event.message });
       // A refused or failed turn invalidates the cached status.
       state().status = undefined;
+      // The CLI itself broke (not a refusal): if it was the person's own install, use the tested version next time.
+      if (event.code === "harness_error" || event.code === "not_installed") cliFailed(settings.harness);
       throw new JobError(event.message);
     }
   }

@@ -1,6 +1,7 @@
-// electron-builder leaves out .next/node_modules: the links Turbopack makes
-// from hashed names to the server's external packages (claude-agent-sdk,
-// sharp, …). Recreate them inside the packaged app.
+// electron-builder manages node_modules itself (from package.json
+// dependencies, which the staged app has none of) and leaves out
+// .next/node_modules, the links Turbopack makes from hashed names to the
+// server's external packages. Copy both from build/app as staged.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -22,12 +23,20 @@ function macBundle(bundle) {
 `);
 }
 
+function copyTree(from, to) {
+  if (!fs.existsSync(from)) return;
+  fs.rmSync(to, { recursive: true, force: true });
+  fs.cpSync(from, to, { recursive: true, verbatimSymlinks: true });
+}
+
 exports.default = async function afterPack(context) {
   const resources = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources');
   macBundle(path.join(resources, 'FluidAudio_FluidAudio.bundle'));
-  const source = path.join(context.packager.projectDir, '.next', 'node_modules');
-  if (!fs.existsSync(source)) return;
+  const staged = path.join(context.packager.projectDir, 'build', 'app');
   const app = path.join(resources, 'app');
+  copyTree(path.join(staged, 'node_modules'), path.join(app, 'node_modules'));
+  const source = path.join(staged, '.next', 'node_modules');
+  if (!fs.existsSync(source)) return;
   const target = path.join(app, '.next', 'node_modules');
   const copy = (from, to) => {
     fs.mkdirSync(to, { recursive: true });

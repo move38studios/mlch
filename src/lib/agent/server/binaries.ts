@@ -14,6 +14,7 @@
  * bundler never sees (and never tries to trace) a 200+ MB binary.
  */
 
+import { managedCli } from "./cli";
 import {
   execFile,
   type ExecFileException,
@@ -23,7 +24,7 @@ import { accessSync, closeSync, constants, existsSync, openSync, readdirSync, re
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type BinarySource = "env" | "bundled" | "path";
+export type BinarySource = "env" | "bundled" | "path" | "installed" | "downloaded";
 
 /** The C library of a Linux host; null elsewhere or when it can't be told. */
 export type HostLibc = "glibc" | "musl" | null;
@@ -244,6 +245,10 @@ export function resolveClaudeBinary(deps: BinaryLookupDeps = defaultLookupDeps()
     if (bundled) return { path: bundled, source: "bundled" };
   }
 
+  // mlch: the packaged app ships no CLI; cli.ts picks the person's install or the tested copy.
+  const managed = managedCli("claude");
+  if (managed) return managed;
+
   const onPath = findOnPath("claude", deps);
   if (onPath) return { path: onPath, source: "path" };
   return {
@@ -284,6 +289,9 @@ export function resolveCodexBinary(deps: BinaryLookupDeps = defaultLookupDeps())
       findInNodeModules(`@openai/codex/${vendorPath}`, deps);
     if (bundled) return { path: bundled, source: "bundled" };
   }
+
+  const managed = managedCli("codex");
+  if (managed) return managed;
 
   const onPath = findOnPath("codex", deps);
   if (onPath) return { path: onPath, source: "path" };

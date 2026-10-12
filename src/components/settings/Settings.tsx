@@ -303,6 +303,11 @@ export function Settings() {
                     )}
                   </div>
                 </div>
+                {h.cli?.state === "missing" && (
+                  <button onClick={(e) => { e.preventDefault(); void fetch("/api/agent/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: h.id }) }).then(() => setTimeout(loadStatus, 1500)); }} className={PRIMARY}>
+                    Download
+                  </button>
+                )}
                 {h.installed && !h.signedIn && h.auth !== "apiKey" && (
                   <button onClick={(e) => { e.preventDefault(); void signIn(h.id); }} className={PRIMARY}>
                     Sign in

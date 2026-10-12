@@ -5,20 +5,15 @@ copyright: © 2026 move38 B.V.
 directories:
   output: dist
   buildResources: build
-# Next's server reads its own files and the agent CLIs run as separate processes: no asar.
+  # Assembled by scripts/package-app.mjs: Next's standalone server and the traced Electron side.
+  app: build/app
+npmRebuild: false
+# Next's server reads its own files and child processes need real paths: no asar. Few files now, so signing is quick.
 asar: false
 files:
-  - package.json
-  - server.js
-  - electron/**/*
-  - "!electron/tests/**"
-  - scripts/embed-worker.mjs
-  - public/**/*
-  - .next/**/*
-  - "!.next/cache/**"
-  - "!.next/dev/**"
-  - next.config.*
-  - node_modules/**/*
+  - "**/*"
+# build/app/node_modules (and Turbopack's links in .next/node_modules) are copied by build/after-pack.cjs:
+# electron-builder would otherwise rebuild node_modules from package.json dependencies, which the staged app has none of.
 extraResources:
   - from: native/mlch-audio/.build/release/mlch-audio
     to: mlch-audio
@@ -55,3 +50,6 @@ publish:
   provider: generic
   url: https://mlch.app/releases/mac
 afterPack: build/after-pack.cjs
+dmg:
+  # lzfse: smaller and faster to open than the default zlib.
+  format: ULFO

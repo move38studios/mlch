@@ -10,7 +10,7 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 - `npm run dev`: browser dev server on :3100. Set `MLCH_LIBRARY=<dir>` to keep test data out of `~/Documents/mlch`.
 - `scripts/scenarios/*.cjs`: app scenarios for `electron-run` (checks from PLAN-2).
 - `npm run electron:dev` / `npm run app`: desktop app (dev / production build).
-- `npm run dist` (signed; set `APPLE_KEYCHAIN_PROFILE` to notarize) / `npm run dist:unsigned`: the packaged app in dist/ (electron-builder.yml; no asar; `build/after-pack.cjs` restores Turbopack's links).
+- `npm run dist` (signed; set `APPLE_KEYCHAIN_PROFILE` to notarize) / `npm run dist:unsigned`: the packaged app in dist/. `scripts/package-app.mjs` stages build/app (Next standalone output plus the traced Electron side and search worker, `cli.json` with the tested CLI versions); electron-builder.yml packages it; `build/after-pack.cjs` copies node_modules and Turbopack's links. Test a staged app with `electron-run --app build/app`, but run a packaged app outside the repo (the repo's node_modules would supply the CLIs).
 - `node scripts/electron-run.cjs <test.cjs> [--library dir] [--shots dir] [--fake-mic file.wav] [--production]`: drive the real app with Playwright (throwaway profile). `scripts/electron-shot.cjs <out.png> [route]` for a screenshot. electron-run fails if a new Electron crash report appears in ~/Library/Logs/DiagnosticReports.
 
 ## Architecture
@@ -29,6 +29,7 @@ Voice-first thinking canvas. Mac app: Next.js 16 inside Electron, AI on the user
 - Calls: `/api/mulches/:id/call` turns on call capture (jobs.ts `setCallMode`): speech is gathered for `CALL_BATCH_MS`, the mic's echo of the others is dropped (`voice/echo.ts`), and the call prompt captures it as conversation ([me]/[them]; only [me] can instruct). Instructions and making get the conversation (`callTranscript`). The menu bar (main.cjs `createTray`) has New, New Call (⌃⌘L), recent mulches and Stop Listening.
 - `src/lib/voice/`: browser recorder (pause-cut WAV chunks) and server transcriber (Groq, or local per Settings). `local.ts`: local transcription and system audio capture through the native helper (chunks become speech from "them"; the mic is "me" while one runs).
 - `native/mlch-audio/`: Swift helper binary (Parakeet via FluidAudio on the Neural Engine; Core Audio process tap for the Mac's sound output), JSON lines over stdio, started by main (`electron/lib/audio-helper.cjs`, restarted once after a crash) and reached through the bridge's `audio` request. Build with `node scripts/build-native.mjs [--test]` (uses a swift.org toolchain from ~/Library/Developer/Toolchains when present). Model in ~/Library/Application Support/mlch/models.
+- The packaged app ships no Claude Code or Codex: `src/lib/agent/server/cli.ts` uses the person's install when at least the tested version (found in ~/.local/bin, Homebrew and similar; Finder gives apps no shell PATH), else downloads the tested version (npm tarball, lockfile hash, Anthropic / OpenAI Team ID) to ~/Library/Application Support/mlch/cli, only for the AI in use or when asked. A CLI failure on an install switches to the tested copy.
 - `electron/`: shell adapted from node-banana. Main injects a per-launch token; keys live in Keychain via safeStorage and reach the server process over parentPort, never through the page.
 
 ## Design
