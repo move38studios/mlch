@@ -302,7 +302,15 @@ function buildMenu() {
       { role: 'close' },
     ] },
     { role: 'editMenu' },
-    { role: 'viewMenu' },
+    // Zoom acts on the canvas, not the page; the keys reach the page (gestures.ts), clicks are sent to it.
+    { label: 'View', submenu: [
+      { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', registerAccelerator: false, click: () => window?.webContents.send('desktop:menu', 'zoom-in') },
+      { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', registerAccelerator: false, click: () => window?.webContents.send('desktop:menu', 'zoom-out') },
+      { label: 'Show All', accelerator: 'CmdOrCtrl+0', registerAccelerator: false, click: () => window?.webContents.send('desktop:menu', 'zoom-fit') },
+      { type: 'separator' },
+      ...(app.isPackaged ? [] : [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }]),
+      { role: 'togglefullscreen' },
+    ] },
     { role: 'windowMenu' },
     { label: 'Help', submenu: [
       { label: 'Open Logs', click: () => void openLogs() },

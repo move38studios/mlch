@@ -34,6 +34,10 @@ import { Scribble } from "@/components/brand/Scribble";
 import { Square } from "lucide-react";
 import type { JobStatus } from "@/lib/mulch/events";
 import { elapsed, useNow } from "./JobStatus";
+import { useCanvasGestures } from "./gestures";
+
+const ZOOM_LIMITS = { min: 0.1, max: 2 };
+const FIT_PADDING = { top: "60px", left: "40px", right: "40px", bottom: "150px" } as const;
 
 /**
  * Long work in progress, drawn where its result will land: what it is, what
@@ -450,11 +454,16 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     };
   }, [jobs, checkSeen]);
 
+  // Mouse wheel zooms, trackpad pans, zoom keys and the View menu.
+  const root = useRef<HTMLDivElement>(null);
+  const fitAll = useCallback(() => void flow.fitView({ padding: FIT_PADDING, maxZoom: 1, duration: 400 }), [flow]);
+  useCanvasGestures(root, flow, ZOOM_LIMITS, fitAll);
+
   // The agent moves the view.
   const view = useMulch((s) => s.view);
   useEffect(() => {
     if (!view) return;
-    if (view.action === "fit") void flow.fitView({ padding: { top: "60px", left: "40px", right: "40px", bottom: "150px" }, maxZoom: 1, duration: 600 });
+    if (view.action === "fit") void flow.fitView({ padding: FIT_PADDING, maxZoom: 1, duration: 600 });
     else if (view.action === "in") void flow.zoomIn({ duration: 400 });
     else void flow.zoomOut({ duration: 400 });
     // Only when a new move arrives.
@@ -515,6 +524,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
 
   return (
     <ReactFlow<FlowNode, Edge>
+      ref={root}
       nodes={shownNodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -542,10 +552,11 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
       deleteKeyCode={editingId || draft || readOnly ? null : ["Backspace", "Delete"]}
       nodesDraggable={!readOnly}
       nodesConnectable={!readOnly}
-      minZoom={0.1}
-      maxZoom={2}
+      minZoom={ZOOM_LIMITS.min}
+      maxZoom={ZOOM_LIMITS.max}
+      // Trackpad scroll pans (a mouse wheel zooms, see gestures.ts); pinch and ⌘-wheel zoom.
       panOnScroll
-      // Drag on empty canvas moves it; Shift-drag draws a selection box.
+      // Drag on empty canvas moves it, as does Space-drag; Shift-drag draws a selection box.
       panOnDrag
       selectionKeyCode="Shift"
       fitView

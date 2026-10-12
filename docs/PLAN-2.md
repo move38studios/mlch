@@ -15,25 +15,25 @@ Released when 1–4 work, apart from joining (collaboration), which follows the 
 
 ## Order
 
-| | Milestone | Why here | Size |
-|---|---|---|---|
-| M0 | Housekeeping and gestures | Daily irritations; commit work in progress | 1 day |
-| M1 | Knowledge layer: links and sources | Needs no native toolchain; fixes the reference format before sharing depends on it | 1–1.5 weeks |
-| M2 | Native helper and local transcription (Parakeet) | Base for call mode; needs Xcode (G1) | 3–4 days |
-| M3 | Call mode | The core of the goal | 1.5–2 weeks |
-| M4 | Menu bar and staying open | Step 1 of the goal; small once M3 exists | 2 days |
-| M5 | Sharing: deck links, canvas links, copy into your own mlch | Step 4 of the goal; first hosted code | 1.5 weeks |
-| M6 | Onboarding | Others can set it up | 3–4 days |
-| M7 | Packaged, signed, auto-updating release | Friends can install it | 2–3 days |
-| M8 | Collaboration | After the release | 2–3 weeks |
+| | Milestone | Why here |
+|---|---|---|
+| M0 | Housekeeping and gestures | Daily irritations; commit work in progress |
+| M1 | Knowledge layer: links and sources | Needs no native toolchain; fixes the reference format before sharing depends on it |
+| M2 | Native helper and local transcription (Parakeet) | Base for call mode; needs Xcode (G1) |
+| M3 | Call mode | The core of the goal |
+| M4 | Menu bar and staying open | Step 1 of the goal; small once M3 exists |
+| M5 | Sharing: deck links, canvas links, copy into your own mlch | Step 4 of the goal; first hosted code |
+| M6 | Onboarding | Others can set it up |
+| M7 | Packaged, signed, auto-updating release | Friends can install it |
+| M8 | Collaboration | After the release |
 
-Sizes are rough and assume nothing unexpected; each milestone ends with its checks passing, not when the time runs out.
+Each milestone ends with its checks passing.
 
 ## Needs George (blocking items marked)
 
-- **G1 (blocks M2).** Install Xcode, or reinstall the Command Line Tools. Today `swiftc` fails on this Mac: "this SDK is not supported by the compiler" (CLT 6.0.3 compiler and SDK builds differ). Everything native (Parakeet, call audio) needs a working Swift.
+- **G1 (resolved 2026-10-12).** The Command Line Tools' Swift can't build against its own SDK. Worked around without admin rights: the swift.org 6.1.2 toolchain installed for this user (`~/Library/Developer/Toolchains`), building against the CLT's macOS 15.2 SDK. Installing Xcode would still be the cleaner fix.
 - **G2 (blocks M7).** Notarization credentials for the move38 B.V. Developer ID (found in the keychain: `Developer ID Application: move38 B.V. (FP3X7G6BU7)`). One-time: `xcrun notarytool store-credentials mlch` with an app-specific password or an API key.
-- **G3 (blocks M5 deploy).** Cloudflare: mlch.app is already on Cloudflare nameservers. Confirm the account (move38?) and that I may deploy a Worker, R2 buckets and a Durable Object there. Whether shared HTML is served from a separate domain (safer; something like `mlch.page`, to buy) or `share.mlch.app` (sandboxed, see M5).
+- **G3 (blocks M5 deploy).** mlch.app is in the Cloudflare "move38 account". Deploying (Worker, R2, Durable Object, the placeholder landing) was approved by George but is blocked by Claude Code's auto-mode guard; George runs the deploy command or allows it. Whether shared HTML is served from a separate domain (safer; something like `mlch.page`, to buy) or `share.mlch.app` (sandboxed, see M5).
 - **G4 (before M7).** Distribution terms: whether a third-party app may drive a person's Claude Code / Codex subscription (open item in PLAN.md). Your call or Anthropic's, not mine.
 - **G5 (any time).** Wording. I use bare placeholders and collect every new string in "Wording" at the end of this file. Nothing customer-facing ships beyond placeholders until you have gone through that list.
 - **G6 (M3, M7).** Tests only you can do: a real call (Zoom or Meet, headphones and speakers), and installing the release on a second Mac.
@@ -172,7 +172,7 @@ Design now, build after M7. Extends M5's Durable Object from one writer to many.
 Placeholders I'll add, collected here for you to replace. Existing ones from ROADMAP item 4 are included.
 
 - Existing: "Queued", "Stop", "Stop all", "Show", "Retry", "Dismiss", "Starting", "making", "research", "Stopped when mlch quit.", "1 job is running." / "Quitting stops them. They can be retried later.", notifications, "Add Screenshot".
-- M0: (none expected)
+- M0: View menu "Zoom In", "Zoom Out", "Show All" (standard macOS menu words)
 - M1: "Open", "Bring here", "Linked from", "Removed", "Sources", "Add folder", "Use without asking", "Only when asked", "mlch can add notes here", "Links: off / some / more"
 - M2: "Transcription", "Local", "Groq", "Downloading model"
 - M3: "New call", "Listening", "Stop listening", "Me", "Them", consent line (yours)

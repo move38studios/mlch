@@ -130,6 +130,17 @@ export async function listMulches(): Promise<MulchSummary[]> {
       try {
         const mulch = open?.mulch ?? (JSON.parse(await fs.readFile(path.join(root, id, "mulch.json"), "utf8")) as Mulch);
         const jobs = open ? [...open.jobs.values()] : await readKeptJobs(path.join(root, id));
+        // Just left empty: about to be removed.
+        if (open && !open.listeners.size && isEmpty(open)) return undefined;
+        // Left behind empty (the app quit before it was cleaned up).
+        if (!open && Date.now() - mulch.createdAt > 60_000 && isEmpty({ mulch, transcript: [], jobs: new Map(jobs.map((job) => [job.id, job])) })) {
+          const dir = path.join(root, id);
+          const leftovers = (await fs.readdir(dir)).filter((name) => !["mulch.json", "events.jsonl", "jobs.json", "history"].includes(name));
+          if (!leftovers.length && !existsSync(path.join(dir, "transcript.jsonl"))) {
+            await fs.rm(dir, { recursive: true, force: true });
+            return undefined;
+          }
+        }
         return {
           id,
           title: mulch.title,
@@ -373,5 +384,30 @@ export async function subscribe(id: string, listener: Listener): Promise<() => v
     paused: entry.paused,
   });
   entry.listeners.add(listener);
-  return () => entry.listeners.delete(listener);
+  return () => {
+    entry.listeners.delete(listener);
+    // Pressing New and leaving without adding anything leaves nothing behind.
+    // The wait covers a reload reconnecting.
+    if (!entry.listeners.size) setTimeout(() => void removeIfEmpty(id), EMPTY_GRACE_MS).unref?.();
+  };
+}
+
+const EMPTY_GRACE_MS = 5000;
+
+function isEmpty(entry: Pick<OpenMulch, "mulch" | "transcript" | "jobs">): boolean {
+  const { mulch } = entry;
+  return mulch.title === "Untitled" && !Object.keys(mulch.nodes).length && !Object.keys(mulch.groups).length && !entry.transcript.length && !entry.jobs.size;
+}
+
+/** Deletes an untitled mulch that nobody is looking at and that has nothing in it. */
+export async function removeIfEmpty(id: string): Promise<boolean> {
+  const entry = state().open.get(id);
+  if (!entry || entry.listeners.size || !isEmpty(entry)) return false;
+  const assets = await fs.readdir(path.join(mulchDir(id), "assets")).catch(() => []);
+  if (assets.length) return false;
+  if (entry.saveTimer) clearTimeout(entry.saveTimer);
+  state().open.delete(id);
+  await fs.rm(mulchDir(id), { recursive: true, force: true });
+  log.info("mulch", "Removed an empty mulch", { mulchId: id });
+  return true;
 }

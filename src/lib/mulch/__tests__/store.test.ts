@@ -13,6 +13,34 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(library, { recursive: true, force: true }));
 
 describe("mulch store", () => {
+  it("removes an untitled mulch left empty, and keeps one with something in it", async () => {
+    const store = await import("../store");
+    const empty = await store.createMulch();
+    const used = await store.createMulch();
+    const named = await store.createMulch("Named");
+    for (const mulch of [empty, used, named]) (await store.subscribe(mulch.id, () => {}))();
+    await store.applyToMulch(used.id, [{ op: "addNode", node: { id: "a", kind: "idea", x: 0, y: 0, text: "hi", origin: "user", createdAt: 1 } }], "user");
+    expect(await store.removeIfEmpty(empty.id)).toBe(true);
+    expect(await store.removeIfEmpty(used.id)).toBe(false);
+    expect(await store.removeIfEmpty(named.id)).toBe(false);
+    expect(fs.existsSync(path.join(library, empty.id))).toBe(false);
+
+    // Still being looked at: kept.
+    const watched = await store.createMulch();
+    await store.subscribe(watched.id, () => {});
+    expect(await store.removeIfEmpty(watched.id)).toBe(false);
+  });
+
+  it("clears empty mulches left behind by an earlier run when listing", async () => {
+    const store = await import("../store");
+    const old = await store.createMulch();
+    const fresh = await store.createMulch();
+    const file = path.join(library, old.id, "mulch.json");
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), createdAt: Date.now() - 120_000 }));
+    expect((await store.listMulches()).map((s) => s.id)).toEqual([fresh.id]);
+    expect(fs.existsSync(path.join(library, old.id))).toBe(false);
+  });
+
   it("creates, applies, persists, lists and trashes", async () => {
     const store = await import("../store");
     const mulch = await store.createMulch("One");

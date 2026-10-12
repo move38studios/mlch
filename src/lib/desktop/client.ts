@@ -13,6 +13,8 @@ export interface MlchDesktop {
   microphoneAccess(): Promise<boolean>;
   /** Bring the window to the front (after a screenshot of another app). */
   showWindow?(): Promise<void>;
+  /** Menu commands meant for the page ("zoom-in", "zoom-out", "zoom-fit"). */
+  onMenu?(callback: (command: string) => void): () => void;
   credentials: {
     status(): Promise<Result<Record<string, boolean>>>;
     write(value: Record<string, string | null>): Promise<Result<Record<string, boolean>>>;
