@@ -37,6 +37,9 @@ mac:
       arch: [arm64]
   minimumSystemVersion: "14.4"
   hardenedRuntime: true
+  # The audio helper's data files (lexicons, model configs) are not code; the bundle is signed as a whole.
+  signIgnore:
+    - "FluidAudio_FluidAudio\\.bundle/Contents/Resources/"
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
