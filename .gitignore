@@ -9,3 +9,5 @@ coverage/
 *.tsbuildinfo
 next-env.d.ts
 .claude/*.lock
+cloud/dist/
+cloud/.wrangler/

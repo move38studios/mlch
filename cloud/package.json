@@ -1,0 +1,21 @@
+{
+  "name": "mlch-cloud",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "npm run build && wrangler dev --var APEX_ORIGIN:http://localhost:8787 --var SHARE_ORIGIN:http://localhost:8787",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p viewer",
+    "test": "npm run build && vitest run",
+    "check": "npm run typecheck && npm run test",
+    "deploy": "npm run check && wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.0",
+    "@vitest/runner": "4.1.11",
+    "@vitest/snapshot": "4.1.11",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.149.0"
+  }
+}
