@@ -175,12 +175,14 @@ One checklist screen, live, fixing what it can, then a new mulch with the mic re
 - Channels: `beta` (George) and `latest` (friends), two feeds in the same place.
 - Models (Parakeet, search) are not in the app; they download to their folders once and are not touched by updates.
 
-**App size.** The signed app is 1.7 GB, of which: Electron itself 288 MB; Codex's CLI 314 MB and Claude Code's 216 MB (bundled by their SDK packages); the whole of Next with its build tools 317 MB; onnxruntime-node 155 MB (unused: we run the WebAssembly build); onnxruntime-web 148 MB (we need one file of it); browser libraries already compiled into the page (model-viewer, lucide) about 80 MB. The models are not in it. Plan:
-1. Next's standalone output (only the files the server uses) instead of node_modules: about 1 GB less.
-2. Leave out onnxruntime-node and all of onnxruntime-web but the WebAssembly file mlch loads.
-3. The AI CLIs: use the person's installed Claude Code / Codex (a subscription needs them installed anyway); when one is missing (API-key use), download it on first use to Application Support, like the models.
-4. Pack the app into one archive (asar), unpacking only what must run as files: faster signing, smaller download.
-Target: about 350 MB installed, about 150 MB to download.
+**App size (measured 2026-10-12).** Today: 1.7 GB installed, 603 MB zipped. Electron itself 286 MB (about 105 MB compressed, unavoidable); Codex's CLI 314 MB (133 MB compressed) and Claude Code's 216 MB (98 MB compressed), both pulled in by their SDK packages; all of Next with its build tools 317 MB; onnxruntime-node 155 MB (unused); onnxruntime-web 148 MB (one 14 MB file used); browser libraries already compiled into the pages about 80 MB. The models are not in the app.
+
+Approach (proposed, George to confirm): the download holds Electron and mlch's own code only; anything big and separately versioned arrives on first run, into Application Support, like the models.
+1. Next's standalone output (only the files the server uses), static files copied beside it; packaged in one asar archive, with the native pieces (sharp, the audio helper) unpacked.
+2. onnxruntime: only the one WebAssembly file the search worker loads.
+3. The AI CLIs: mlch downloads the exact Claude Code / Codex version it was tested with (npm registry tarball, integrity hash from package-lock, Apple signature and Anthropic / OpenAI Team ID checked) to Application Support, only for the AI the person uses. Until it lands, an installed CLI found in the usual places (~/.local/bin, Homebrew, npm global) answers the sign-in check. Updates fetch a new CLI only when its pinned version changes.
+4. DMG compressed with lzfse; Apple Silicon only (Parakeet needs it anyway).
+Estimate: about 150 MB download, about 400 MB installed; first run then fetches the CLI (100–130 MB), Parakeet (600 MB) and the search model (120 MB) in the background. Alternative if first-run downloads should be smaller: bundle Claude Code (download about 250 MB), fetch Codex only when chosen.
 
 ## M8. Collaboration (after the release)
 
