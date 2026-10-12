@@ -77,6 +77,8 @@ console.log("brand assets written");
   const square = `<rect x="${inset}" y="${inset}" width="${size - inset * 2}" height="${size - inset * 2}" rx="20" fill="#fff"/>`;
   const letter = `<path transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(4)})" fill="#000" d="${m}"/>`;
   const icon = (dot) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"><defs><mask id="k">${square}${letter}${dot ? `<circle cx="${size - inset - 4}" cy="${inset + 4}" r="24" fill="#000"/>` : ""}</mask></defs><rect width="${size}" height="${size}" fill="#000" mask="url(#k)"/>${dot ? `<circle cx="${size - inset - 4}" cy="${inset + 4}" r="15" fill="#000"/>` : ""}</svg>`;
+  // Shown in onboarding, where the menu bar is introduced.
+  fs.writeFileSync(path.join(root, "public/brand/menubar.svg"), icon(false) + "\n");
   for (const [name, dot] of [["trayTemplate", false], ["trayListeningTemplate", true]]) {
     for (const scale2 of [1, 2]) {
       await sharp(Buffer.from(icon(dot)), { density: 300 }).resize(18 * scale2, 18 * scale2).png().toFile(path.join(root, "electron", `${name}${scale2 === 2 ? "@2x" : ""}.png`));

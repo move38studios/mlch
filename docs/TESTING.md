@@ -18,11 +18,16 @@ One pass through everything, on the packaged app as a new person would get it. A
 
 ## 1. First run
 
-- The first-run screen opens. **AI:** Claude and Codex with your accounts. For each: your subscription with the box to tick, or an API key. If both are usable, pick the default. Start stays off until one is usable.
-- **Transcription:** On this Mac by default. **Downloads:** speech and search progress.
-- **Keys:** Exa, fal, Firecrawl, each with Get a key (opens the browser). Skip or paste.
-- **Folders:** your Obsidian vault offered if Obsidian knows it; Add folder for any other.
-- Start: the list, with "Start here" in it (not opened).
+Onboarding goes one step at a time; Back works everywhere, and downloads show at the bottom.
+
+- **Welcome**, then **Your AI**: Claude and ChatGPT, each saying whether it is on this Mac and who is signed in. Pick one.
+- **Connect**: download Claude Code / Codex if it isn't on this Mac (progress shown); your subscription (Sign in if needed, then the box to tick) or an API key. Continue stays off until it works.
+- **Speech**: On this Mac (starts the 600 MB download) or Groq (key).
+- **Microphone and calls**: Try it asks for the microphone, then shows the words you say (once the speech model is in). Allow raises macOS's System Audio Recording prompt.
+- **Web and making**: Exa, Firecrawl, fal, each with Get a key. Skip.
+- **Your context**: your Obsidian vaults offered; Add folder as many times as you like.
+- **Calls and the menu bar**: Open at login.
+- **Ready**: Open mlch goes to the list, with "Start here" in it (not opened). Settings → App → Setup goes back through the steps.
 
 ## 2. Start here and moving around
 

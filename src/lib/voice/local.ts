@@ -179,6 +179,16 @@ export async function stopSystemAudio(mulchId: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Asks macOS for System Audio Recording (onboarding): a capture started and
+ * stopped at once raises the prompt the first time. Resolves when it is done.
+ */
+export async function askSystemAudio(): Promise<void> {
+  const session = newClientId("tap");
+  const value = await audio("tap-start", { target: "all", session });
+  await audio("tap-stop", { session: String(value.session ?? session) });
+}
+
 /** Which speaker a microphone segment in this mulch is: "me" while system audio runs. */
 export function micSpeaker(mulchId: string): TranscriptSegment["speaker"] {
   return systemAudioFor(mulchId) ? "me" : undefined;

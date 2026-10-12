@@ -1,9 +1,12 @@
 import { handle } from "@/lib/http";
 import { createMulch, listMulches } from "@/lib/mulch/store";
+import { syncSources } from "@/lib/sources/sources";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // Opening the app catches up linked folders on what changed while it was closed (then they are watched).
+  void syncSources().catch(() => undefined);
   return handle(async () => ({ mulches: await listMulches() }));
 }
 

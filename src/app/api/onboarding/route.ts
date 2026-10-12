@@ -8,7 +8,7 @@ import { listMulches } from "@/lib/mulch/store";
 import { createStartHere } from "@/lib/onboarding/startHere";
 import { embed } from "@/lib/search/embed";
 import { readSettings, writeSettings } from "@/lib/settings";
-import { downloadModel, localStatus } from "@/lib/voice/local";
+import { askSystemAudio, downloadModel, localStatus } from "@/lib/voice/local";
 
 export const dynamic = "force-dynamic";
 
@@ -67,19 +67,24 @@ export async function GET() {
   });
 }
 
-/** {action: "downloads"} starts both models' downloads; {action: "done"} finishes the first-run screen. */
+/**
+ * {action: "downloads"}: the search model (always needed). {action: "speech"}:
+ * the local speech model. {action: "system-audio"}: macOS's System Audio
+ * Recording prompt. {action: "done"}: onboarding finished.
+ */
 export async function POST(request: Request) {
   const denied = guardAgent(request);
   if (denied) return denied;
   const body = (await request.json().catch(() => ({}))) as { action?: unknown };
-  if (body.action === "downloads") {
+  if (body.action === "downloads") return handle(async () => (startSearchDownload(), { ok: true }));
+  if (body.action === "speech") {
     return handle(async () => {
-      startSearchDownload();
       const local = await localStatus().catch(() => undefined);
-      if (local?.installed && local.model === "missing") await downloadModel().catch((error) => log.warn("onboarding", "model download failed", { error }));
+      if (local?.installed && local.model === "missing") void downloadModel().catch((error) => log.warn("onboarding", "model download failed", { error }));
       return { ok: true };
     });
   }
+  if (body.action === "system-audio") return handle(async () => (await askSystemAudio(), { ok: true }));
   if (body.action === "done") return handle(async () => (await writeSettings({ onboarded: true }), { ok: true }));
-  return jsonError(400, 'action is "downloads" or "done".');
+  return jsonError(400, 'action is "downloads", "speech", "system-audio" or "done".');
 }
