@@ -35,6 +35,8 @@ export const settingsSchema = z.object({
   prompts: z
     .object(Object.fromEntries(PROMPT_KEYS.map((key) => [key, z.string().max(20_000).optional()])) as Record<PromptKey, z.ZodOptional<z.ZodString>>)
     .default({}),
+  /** Speech to text: Groq Whisper (key) or Parakeet on this Mac (native helper). */
+  transcription: z.enum(["groq", "local"]).default("groq"),
   /** Paid generation (fal) stops for the day at this many US dollars. */
   dailySpendCapUsd: z.number().min(0).max(1000).default(10),
 });

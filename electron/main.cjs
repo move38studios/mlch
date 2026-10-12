@@ -15,6 +15,8 @@ const { createBackend } = require('./lib/backend.cjs');
 const { atomicWrite } = require('./lib/files.cjs');
 const { visibleBounds } = require('./lib/window-state.cjs');
 const { createServerMessageHandler } = require('./lib/bridge-main.cjs');
+const { audioHelperPath, createAudioHelper } = require('./lib/audio-helper.cjs');
+const { spawn } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
 let backend, window, credentialStore, diagnostics;
@@ -175,6 +177,48 @@ function setupScreenshots() {
   if (!globalShortcut.register(SCREENSHOT_SHORTCUT, () => void screenshotToCanvas())) log(`Shortcut ${SCREENSHOT_SHORTCUT} is taken by another app.`);
 }
 
+// mlch: the native audio helper (local transcription, system audio capture).
+// Its events go to the server: model download progress and capture chunks.
+let audioHelper;
+function modelsDir() {
+  // Shared by every profile (test runs too): the model is 600 MB.
+  return process.env.MLCH_MODELS_DIR || path.join(app.getPath('appData'), 'mlch', 'models');
+}
+function forwardAudioEvent(event) {
+  try { backend?.post({ type: 'audio-event', event }); } catch (error) { log(error); }
+}
+function getAudioHelper() {
+  audioHelper ??= createAudioHelper({
+    spawn, binary: audioHelperPath({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, root }),
+    args: ['--models', modelsDir()], exists: fs.existsSync,
+    log: (line) => diagnostics?.write('audio', line), onEvent: forwardAudioEvent,
+  });
+  return audioHelper;
+}
+async function audioRequest({ action, path: file, target, session }) {
+  const helper = getAudioHelper();
+  switch (action) {
+    case 'status':
+      if (!helper.available()) return { installed: false };
+      return { installed: true, ...(await helper.request('status')) };
+    case 'download':
+      // Minutes long: answered at once; progress and the outcome arrive as events.
+      helper.request('download-model', {}, { timeout: 0 })
+        .then(() => forwardAudioEvent({ event: 'model-ready' }))
+        .catch((error) => forwardAudioEvent({ event: 'model-error', error: error.message }));
+      return { started: true };
+    case 'warm':
+      return helper.request('warm', {}, { timeout: 55_000 });
+    case 'transcribe':
+      return helper.request('transcribe', { path: file }, { timeout: 55_000 });
+    case 'tap-start':
+      return helper.request('tap-start', { target, ...(session ? { session } : {}) });
+    case 'tap-stop':
+      return helper.request('tap-stop', { session });
+  }
+  throw new Error('Unknown audio action.');
+}
+
 function setJobActivity(next) {
   jobActivity = next;
   if (process.platform === 'darwin') app.dock?.setBadge(next.unseen ? String(next.unseen) : '');
@@ -331,7 +375,7 @@ else {
     }
     quitting = true;
   });
-  app.on('will-quit', () => { globalShortcut.unregisterAll(); backend?.kill(); });
+  app.on('will-quit', () => { globalShortcut.unregisterAll(); void audioHelper?.stop(); backend?.kill(); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (!window && backend?.online()) createWindow().catch(fail); });
   process.on('uncaughtException', error => { void fail(error); });
@@ -347,7 +391,7 @@ else {
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
       redactor.add(values); backend?.post({ type: 'secrets', values });
     });
-    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, notify: notifyJob, activity: setJobActivity, thumbnail: fileThumbnail, log });
+    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, notify: notifyJob, activity: setJobActivity, thumbnail: fileThumbnail, audio: audioRequest, log });
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('MLCH_ELECTRON_PORT must be a port number between 1 and 65535.');
     backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
       entry: path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,

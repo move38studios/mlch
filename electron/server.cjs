@@ -37,6 +37,8 @@ process.on('uncaughtException', (error) => console.error('[server] uncaught exce
 
 process.parentPort.on('message', ({ data }) => {
   if (data?.type === 'secrets') { redactor.add(data.values); return; }
+  // mlch: events from the native audio helper (src/lib/voice/local.ts handles them).
+  if (data?.type === 'audio-event') { globalThis.__mlchAudioEvent?.(data.event); return; }
   if (data?.type === 'credentials') { globalThis.__mlchCredentials = data.values && typeof data.values === 'object' ? data.values : {}; return; }
   bridge.receive(data);
 });

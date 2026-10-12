@@ -9,6 +9,8 @@ export interface TranscriptSegment {
   text: string;
   /** "speech" (transcribed) or "typed". */
   source: "speech" | "typed";
+  /** In a call: the microphone ("me") or the Mac's sound output ("them"). */
+  speaker?: "me" | "them";
 }
 
 /** Capture, enrichment, quick instructions, reading drops, and long work (making, research). */
