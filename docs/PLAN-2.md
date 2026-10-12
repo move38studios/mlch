@@ -5,7 +5,7 @@ Written 2026-10-12, for George to review before work starts. V1 (built) is docs/
 ## Status (2026-10-12)
 
 Built and checked in the app: M0, M1, M2, M3 (system audio unverified), M4, M5 (against a local Worker), M6, M7 up to an unsigned package. Open:
-- **Deploy (G3):** the Worker, R2 bucket and landing are ready; Claude Code's auto mode refuses production deploys, so George runs `cd cloud && npm install --legacy-peer-deps && npx wrangler r2 bucket create mlch-shares && npm run deploy`.
+- **Deployed 2026-10-12:** mlch.app (placeholder), www → apex, share.mlch.app, the sharing API and R2 bucket `mlch-shares` (move38 account). Redeploy: `cd cloud && CLOUDFLARE_ACCOUNT_ID=a7b1e373a9581b6f04e2a48d3abc9aa3 npm run deploy`.
 - **System audio (G6):** grant "System Audio Recording" to mlch (dev: the terminal or Electron), then `node scripts/electron-run.cjs scripts/scenarios/local-audio.cjs` and a real call.
 - **Signing and notarizing (G2):** `npm run dist` signs with the move38 Developer ID (macOS may ask once for keychain access to the key); notarizing needs `xcrun notarytool store-credentials mlch` and `APPLE_KEYCHAIN_PROFILE=mlch`. Releases: `node scripts/release.mjs` after the deploy.
 - **Distribution terms (G4)** before anyone else installs it.
