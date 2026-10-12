@@ -188,6 +188,8 @@ function Board() {
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
+      // With nothing selectable or draggable, React Flow lets clicks pass through cards; a handler keeps their buttons and links working.
+      onNodeClick={() => undefined}
       deleteKeyCode={null}
       zoomOnDoubleClick={false}
       minZoom={0.1}
