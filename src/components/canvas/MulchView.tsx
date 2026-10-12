@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, FolderPlus, History, Link2, X } from "lucide-react";
+import { ArrowLeft, FolderPlus, History, Link2, Share, X } from "lucide-react";
+import type { ShareView } from "@/lib/share/shares";
+import { copyLink, requestShare } from "./share";
 import { useBacklinks } from "./backlinks";
 import type { Mulch } from "@/lib/mulch/types";
 import { HistoryBar } from "./History";
@@ -97,6 +99,80 @@ function LinkedFromMenu({ mulchId }: { mulchId: string }) {
   );
 }
 
+/** Share the canvas as a live, read-only link; copy it, stop it, or delete it. */
+function ShareMenu({ mulchId }: { mulchId: string }) {
+  const mulch = useMulch((s) => s.mulch);
+  const [open, setOpen] = useState(false);
+  const [shares, setShares] = useState<ShareView[]>();
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    void fetch(`/api/mulches/${mulchId}/shares`)
+      .then((r) => r.json())
+      .then((body: { shares?: ShareView[] }) => setShares(body.shares ?? []));
+  }, [open, mulchId]);
+  if (!desktop() || !mulch) return null;
+  const share = shares?.find((s) => s.kind === "mulch");
+  const files = new Set(Object.values(mulch.nodes).flatMap((n) => [n.assetId, n.docPath].filter(Boolean))).size;
+  const items = Object.keys(mulch.nodes).length;
+  async function start() {
+    setBusy(true);
+    const result = await requestShare(mulchId, { kind: "mulch" });
+    setBusy(false);
+    if (!result) return;
+    setShares(result.shares);
+    await copyLink(result.share.url);
+  }
+  async function change(method: "PATCH" | "DELETE") {
+    if (!share) return;
+    setBusy(true);
+    const response = await fetch(`/api/mulches/${mulchId}/shares/${share.id}`, { method, headers: { "Content-Type": "application/json" }, ...(method === "PATCH" ? { body: JSON.stringify({ live: false }) } : {}) });
+    const body = (await response.json().catch(() => ({}))) as { shares?: ShareView[]; error?: string };
+    setBusy(false);
+    if (body.shares) setShares(body.shares);
+    else notify(body.error ?? "Could not change the link.");
+  }
+  const ROW = "w-full text-left px-2.5 py-1.5 rounded-lg text-[14px] text-ink-2 hover:bg-paper-2 hover:text-ink disabled:text-ink-3";
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(!open)} className={`p-1.5 rounded-lg ${share?.live ? "bg-amber text-ink" : open ? "bg-paper-2 text-ink" : "text-ink-2 hover:bg-paper-2 hover:text-ink"}`} title="Share" aria-label="Share" aria-expanded={open}>
+        <Share size={16} strokeWidth={1.75} />
+      </button>
+      {open && shares && (
+        <div className="float absolute right-0 top-10 w-72 rounded-xl p-1.5 z-20">
+          <div className="px-2.5 pt-1 pb-2 text-[12.5px] text-ink-3">
+            {items} {items === 1 ? "item" : "items"}, {files} {files === 1 ? "file" : "files"}{share ? (share.live ? ", live" : ", not live") : ""}
+          </div>
+          {share ? (
+            <>
+              <div className="px-2.5 pb-1.5 text-[12.5px] text-ink-2 truncate">{share.url}</div>
+              <button onClick={() => void copyLink(share.url)} className={ROW}>
+                Copy link
+              </button>
+              {share.live ? (
+                <button disabled={busy} onClick={() => void change("PATCH")} className={ROW}>
+                  Stop sharing
+                </button>
+              ) : (
+                <button disabled={busy} onClick={() => void start()} className={ROW}>
+                  Share again
+                </button>
+              )}
+              <button disabled={busy} onClick={() => void change("DELETE")} className={ROW}>
+                Delete link
+              </button>
+            </>
+          ) : (
+            <button disabled={busy} onClick={() => void start()} className="w-full h-8 rounded-lg bg-ink text-white text-[13px] font-medium disabled:bg-paper-2 disabled:text-ink-3">
+              {busy ? "Sharing" : "Share"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Notice() {
   const notice = useMulch((s) => s.notice);
   const dismiss = useMulch((s) => s.dismissNotice);
@@ -174,6 +250,7 @@ export function MulchView({ id }: { id: string }) {
             <div className="no-drag pointer-events-auto float rounded-xl h-9 flex items-center px-1 gap-0.5">
               <JobStatus mulchId={id} />
               <LinkedFromMenu mulchId={id} />
+              <ShareMenu mulchId={id} />
               <AddFolder mulchId={id} />
               <button
                 onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}

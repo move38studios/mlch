@@ -52,6 +52,8 @@ export const settingsSchema = z.object({
     )
     .max(20)
     .default([]),
+  /** Random id for this install, sent when creating share links (they are counted per install). */
+  installId: z.string().max(64).optional(),
   /** Paid generation (fal) stops for the day at this many US dollars. */
   dailySpendCapUsd: z.number().min(0).max(1000).default(10),
 });

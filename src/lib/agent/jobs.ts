@@ -33,6 +33,8 @@ import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
 import { search } from "@/lib/search";
 import { autoSources, syncSources } from "@/lib/sources/sources";
+// Registers live sharing: shared canvases follow every change.
+import "@/lib/share/shares";
 import { exaAvailable } from "@/lib/search/exa";
 import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
 

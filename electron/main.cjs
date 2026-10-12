@@ -124,6 +124,26 @@ async function showMulch(mulchId, ids) {
   await window.loadURL(url.href);
 }
 
+// mlch: "Open in mlch" on a shared canvas (mlch://open?share=<manifest link>) copies it into a new mulch.
+let pendingShare;
+function openShareLink(link) {
+  let manifest;
+  try {
+    const parsed = new URL(link);
+    if (parsed.protocol !== 'mlch:') return;
+    manifest = parsed.searchParams.get('share');
+  } catch { return; }
+  if (!manifest || !/^https?:\/\//i.test(manifest)) return;
+  if (!window || !backend?.online()) { pendingShare = manifest; return; }
+  pendingShare = undefined;
+  const url = new URL('/open', origin);
+  url.searchParams.set('manifest', manifest);
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  window.loadURL(url.href).catch(log);
+}
+
 /** A finished job, unless the person is looking at that mulch. Clicking opens it at the results. */
 function notifyJob({ mulchId, ids, title, body }) {
   if (lookingAt(mulchId) || !Notification.isSupported()) return;
@@ -322,7 +342,12 @@ function buildMenu() {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   registerBridge();
-  app.on('second-instance', () => { if (window?.isMinimized()) window.restore(); window?.show(); window?.focus(); });
+  app.on('second-instance', (_event, argv) => {
+    if (window?.isMinimized()) window.restore(); window?.show(); window?.focus();
+    const link = argv.find((arg) => arg.startsWith('mlch://'));
+    if (link) openShareLink(link);
+  });
+  app.on('open-url', (event, link) => { event.preventDefault(); openShareLink(link); });
   app.on('before-quit', (event) => {
     // Running work stops on quit: ask first (scripted test runs skip this).
     if (!quitConfirmed && jobActivity.working > 0 && window && !window.isDestroyed() && !process.env.MLCH_NO_QUIT_PROMPT) {
@@ -381,5 +406,10 @@ else {
     Menu.setApplicationMenu(buildMenu());
     setupScreenshots();
     if (await startWithRetry()) await createWindow();
+    if (!process.env.MLCH_ELECTRON_USER_DATA) {
+      if (app.isPackaged) app.setAsDefaultProtocolClient('mlch');
+      else app.setAsDefaultProtocolClient('mlch', process.execPath, [path.resolve(process.argv[1] ?? root), '--dev']);
+    }
+    if (pendingShare) openShareLink(`mlch://open?share=${encodeURIComponent(pendingShare)}`);
   }).catch(fail);
 }

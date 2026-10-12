@@ -7,6 +7,8 @@ import remarkGfm from "remark-gfm";
 import { ExternalLink, FileText, Link2, Maximize2 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { useResolvedRef } from "./refs";
+import { shareArtifact } from "./share";
+import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import { jitter } from "@/lib/mulch/place";
 import type { MulchNode } from "@/lib/mulch/types";
@@ -119,9 +121,16 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
                 Open
               </button>
             )}
-            <button onClick={() => openFile(mulchId, node.docPath!, "reveal")} className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2">
-              Show in Finder
-            </button>
+            {desktop() && (
+              <button onClick={() => void shareArtifact(mulchId, node.id)} className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2">
+                Share
+              </button>
+            )}
+            {desktop() && (
+              <button onClick={() => openFile(mulchId, node.docPath!, "reveal")} className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2">
+                Show in Finder
+              </button>
+            )}
           </div>
         )}
       </div>
