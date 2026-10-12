@@ -48,7 +48,7 @@ const { fileList } = await nodeFileTrace(entries.map((entry) => path.join(root, 
   base: root,
   processCwd: root,
   // Electron is the runtime itself; the CLIs and onnxruntime's native build are left out on purpose.
-  ignore: (file) => /^node_modules\/(electron|onnxruntime-node|@openai\/codex|@anthropic-ai\/claude-agent-sdk-(darwin|linux|win32))/.test(file),
+  ignore: (file) => /^node_modules\/(electron\/|onnxruntime-node|@openai\/codex|@anthropic-ai\/claude-agent-sdk-(darwin|linux|win32))/.test(file),
 });
 const extra = [
   // Loaded by onnxruntime-web at run time, by name.
