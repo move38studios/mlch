@@ -40,8 +40,9 @@ const crashReports = () => new Set((fs.existsSync(reports) ? fs.readdirSync(repo
     await page.waitForLoadState('networkidle', { timeout: 180_000 });
     const base = new URL(page.url()).origin;
     if (fakeMic) {
+      // On every page the window loads (navigation resets the page's scripts), then on this one.
       const audio = fs.readFileSync(fakeMic).toString('base64');
-      await page.evaluate((b64) => {
+      const install = (b64) => {
         navigator.mediaDevices.getUserMedia = async () => {
           const ctx = new AudioContext();
           const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -53,7 +54,9 @@ const crashReports = () => new Set((fs.existsSync(reports) ? fs.readdirSync(repo
           source.start();
           return destination.stream;
         };
-      }, audio);
+      };
+      await page.addInitScript(install, audio);
+      await page.evaluate(install, audio);
     }
     const shot = async (name) => { const file = path.join(shots, `${name}.png`); await page.screenshot({ path: file }); console.log('shot', file); };
     await require(path.resolve(script))({ app, page, base, shot });

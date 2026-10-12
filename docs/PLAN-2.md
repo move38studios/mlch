@@ -111,6 +111,7 @@ The AI puts links on the canvas by itself, but a link is not a copy:
    - Check: during the replay, an instruction produces a deck artifact card in under 2 minutes while capture continues.
 5. **Listening indicator and controls.** Always visible while listening (window and menu bar), stop at any time, never starts by itself. Consent line: wording from you (G5).
    - George checks: a real call, headphones and speakers.
+   - Result 2026-10-12 (`scripts/scenarios/call.cjs`, a generated two-voice call through the mic, local Parakeet, real AI): first cards 51 s after the call started (30 s batches), a quick deck from "from what we just discussed, build a quick deck" 20 s after asking, while listening; decisions, to-dos and questions captured. System audio could not be checked here: macOS has not granted "System Audio Recording" (see local-audio.cjs). Areas and headings during a call: not built yet (arrange would move the person's spoken cards, which the AI may not do).
 
 ## M4. Menu bar and staying open
 

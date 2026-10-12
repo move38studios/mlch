@@ -43,6 +43,7 @@ const ENRICH: Array<{ id: string; label: string }> = [
 const PROMPTS: Array<{ id: string; label: string; sub?: boolean }> = [
   { id: "base", label: "General" },
   { id: "fast", label: "Capture" },
+  { id: "call", label: "Calls" },
   { id: "slow", label: "Enrich" },
   ...ENRICH.map((item) => ({ id: `enrich:${item.id}`, label: item.label, sub: true })),
   { id: "command", label: "Instructions" },

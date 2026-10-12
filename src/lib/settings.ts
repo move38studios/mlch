@@ -14,7 +14,7 @@ export type Enrichment = (typeof ENRICHMENTS)[number];
 
 /** Parts of the agent's prompts the person can rewrite; defaults in agent/prompts.ts. */
 export const PROMPT_KEYS = [
-  "base", "fast", "slow", ...ENRICHMENTS.map((e) => `enrich:${e}` as const), "command", "research", "maker", "ingest", "image", "folder",
+  "base", "fast", "call", "slow", ...ENRICHMENTS.map((e) => `enrich:${e}` as const), "command", "research", "maker", "ingest", "image", "folder",
 ] as const;
 export type PromptKey = (typeof PROMPT_KEYS)[number];
 

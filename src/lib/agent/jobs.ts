@@ -18,7 +18,7 @@ import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/age
 import type { JobLane, JobRetry, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
-import { applyToMulch, emit, getJobs, getMulch, listMulches, mulchDir, onAfterApply, onJobChanged, setJob } from "@/lib/mulch/store";
+import { applyToMulch, emit, getJobs, getMulch, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
 import { desktopRequest } from "@/lib/desktop/server";
 import { modelFor, readSettings, type Lane, type Settings } from "@/lib/settings";
 import fs from "node:fs/promises";
@@ -28,7 +28,8 @@ import { adoptArtifact } from "@/lib/artifacts/artifacts";
 import { privateDirs } from "./files";
 import { holdSpace, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, NODE_WIDTH } from "@/lib/mulch/sizes";
-import { commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
+import { dropEcho } from "@/lib/voice/echo";
+import { callPrompt, commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
 import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
 import { search } from "@/lib/search";
@@ -78,6 +79,8 @@ interface MulchJobs {
   /** Slow lane: new item ids not yet enriched. */
   pendingEnrich: string[];
   paused: boolean;
+  /** A call is being listened to: speech is captured in batches every CALL_BATCH_MS. */
+  call?: { segments: TranscriptSegment[]; timer?: ReturnType<typeof setTimeout> };
 }
 
 interface JobsState {
@@ -435,7 +438,86 @@ function shorten(text: string, max: number): string {
 /* ── lanes ─────────────────────────────────────────────────────── */
 
 function inputBlock(segments: TranscriptSegment[]): string {
-  return segments.map((segment) => segment.text.trim()).filter(Boolean).join("\n");
+  return segments
+    .map((segment) => (segment.speaker ? `[${segment.speaker}] ${segment.text.trim()}` : segment.text.trim()))
+    .filter((line) => line && !/^\[(me|them)\]\s*$/.test(line))
+    .join("\n");
+}
+
+/** The call's conversation for a prompt, or nothing when there was no call. */
+function conversationBlock(text: string): string {
+  return text ? `<conversation>\nThe call on this canvas, [me] = the person, [them] = the others (most recent last):\n${text}\n</conversation>\n\n` : "";
+}
+
+/** A call's speech is captured every this often (a conversation needs context; a braindump wants speed). */
+export const CALL_BATCH_MS = Number(process.env.MLCH_CALL_BATCH_MS) || 30_000;
+
+/** Start or stop call capture for a mulch (the system-audio capture starts and stops it). Stopping captures what is left. */
+export function setCallMode(mulchId: string, on: boolean): void {
+  const entry = jobsFor(mulchId);
+  if (on) {
+    entry.call ??= { segments: [] };
+    return;
+  }
+  if (!entry.call) return;
+  clearTimeout(entry.call.timer);
+  const rest = entry.call.segments.splice(0);
+  entry.call = undefined;
+  if (rest.length) captureCall(mulchId, rest);
+}
+
+export function inCall(mulchId: string): boolean {
+  return !!state().mulches.get(mulchId)?.call;
+}
+
+function flushCall(mulchId: string): void {
+  const call = jobsFor(mulchId).call;
+  if (!call) return;
+  call.timer = undefined;
+  const segments = call.segments.splice(0);
+  if (segments.length) captureCall(mulchId, segments);
+}
+
+function captureCall(mulchId: string, raw: TranscriptSegment[]): void {
+  const segments = dropEcho(raw);
+  const text = inputBlock(segments);
+  if (!text) return;
+  enqueue(mulchId, {
+    lane: "fast",
+    label: "Capturing",
+    async run(job, signal) {
+      const mulch = await getMulch(mulchId);
+      const added = await runTurn({
+        mulchId,
+        job,
+        signal,
+        lane: "fast",
+        systemPrompt: callPrompt,
+        prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<call_so_far>\n${await callTranscript(mulchId, { minutes: 6, before: segments[0]?.at })}\n</call_so_far>\n\n<new_conversation>\n${text}\n</new_conversation>`,
+        tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
+        origin: `speech:${job.id}`,
+        onHandOff: (instruction) => submitCommand(mulchId, instruction),
+      });
+      if (added.length) requestEnrichment(mulchId, added);
+    },
+  });
+}
+
+/**
+ * The recent conversation in a call, with who said what, for capture context
+ * and for instructions given during or after a call ("make a deck from what
+ * we just discussed"). Empty when the mulch has no call.
+ */
+export async function callTranscript(mulchId: string, options: { minutes?: number; before?: number; maxChars?: number } = {}): Promise<string> {
+  const transcript = (await openMulch(mulchId)).transcript;
+  const spoken = transcript.filter((segment) => segment.speaker);
+  if (!spoken.length) return "";
+  const until = options.before ?? Infinity;
+  const since = (spoken.filter((s) => s.at < until).at(-1)?.at ?? 0) - (options.minutes ?? 30) * 60_000;
+  const lines = spoken.filter((s) => s.at >= since && s.at < until).map((s) => `[${s.speaker}] ${s.text.trim()}`);
+  const text = lines.join("\n");
+  const max = options.maxChars ?? 24_000;
+  return text.length > max ? `…${text.slice(-max)}` : text;
 }
 
 const CAPTURE_TOOLS: ToolName[] = ["add_nodes", "connect", "hand_off", "focus", "view"];
@@ -454,12 +536,18 @@ function viewCommand(text: string): ViewAction | undefined {
 }
 
 export function submitInput(mulchId: string, segment: TranscriptSegment): void {
+  const entry = jobsFor(mulchId);
+  // In a call, speech is gathered and captured as conversation; typing still goes straight through.
+  if (entry.call && segment.source === "speech") {
+    entry.call.segments.push(segment);
+    entry.call.timer ??= setTimeout(() => flushCall(mulchId), CALL_BATCH_MS);
+    return;
+  }
   const action = viewCommand(segment.text);
   if (action) {
     void emit(mulchId, { type: "view", action });
     return;
   }
-  const entry = jobsFor(mulchId);
   entry.pendingSegments.push(segment);
   // One queued fast job drains everything pending when it starts.
   if (entry.queues.fast.length) return;
@@ -776,7 +864,9 @@ export function submitCommand(mulchId: string, instruction: string): JobStatus {
         signal,
         lane: "command",
         systemPrompt: commandPrompt,
-        prompt: `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\nReadable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>`,
+        prompt:
+          `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\n${conversationBlock(await callTranscript(mulchId))}` +
+          `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
         tools: withKeyTools(COMMAND_TOOLS),
         // The person asked: every linked folder, including ones kept for when they ask.
         sources: "all",
@@ -883,7 +973,7 @@ export function submitMake(mulchId: string, brief: string, options: LongOptions 
         prompt:
           `<mulch>\n${describeMulch(mulch, { textLimit: 2000 })}\n</mulch>\n\n` +
           `Working folder (scratch): ${workspace.cwd}\nSave finished files in: ${workspace.writable[0]}\n` +
-          `Canvas files (images, documents) are in: ${path.join(mulchDir(mulchId), "assets")}\n\n<brief>\n${brief}\n</brief>`,
+          `Canvas files (images, documents) are in: ${path.join(mulchDir(mulchId), "assets")}\n\n${conversationBlock(await callTranscript(mulchId, { maxChars: 40_000 }))}<brief>\n${brief}\n</brief>${await relatedElsewhere(mulchId, brief)}`,
         tools: ["get_mulch", "view_image", "present_file", "preview_artifact", "say", "search_all_mulches", "read_source"],
         workspace,
         webAccess: true,
