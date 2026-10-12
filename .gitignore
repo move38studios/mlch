@@ -10,3 +10,5 @@ coverage/
 next-env.d.ts
 .claude/*.lock
 .claude/worktrees/
+cloud/dist/
+cloud/.wrangler/

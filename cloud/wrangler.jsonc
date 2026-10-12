@@ -1,0 +1,29 @@
+// mlch.app: the placeholder landing, and sharing (share.mlch.app).
+// Deploy steps are in README.md. Local: `npm run dev`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mlch",
+  "account_id": "a7b1e373a9581b6f04e2a48d3abc9aa3",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "routes": [
+    { "pattern": "mlch.app", "custom_domain": true },
+    { "pattern": "www.mlch.app", "custom_domain": true },
+    { "pattern": "share.mlch.app", "custom_domain": true }
+  ],
+  "vars": {
+    "APEX_ORIGIN": "https://mlch.app",
+    "SHARE_ORIGIN": "https://share.mlch.app"
+  },
+  // Landing page, brand files and the shared-canvas viewer, built by scripts/build.mjs.
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": true },
+  "r2_buckets": [{ "binding": "SHARES", "bucket_name": "mlch-shares" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "ShareRoom" },
+      { "name": "LIMITER", "class_name": "CreateLimiter" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ShareRoom", "CreateLimiter"] }],
+  "observability": { "enabled": true }
+}

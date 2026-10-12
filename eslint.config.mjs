@@ -4,7 +4,7 @@ import nextTs from "eslint-config-next/typescript";
 const config = [
   ...nextVitals,
   ...nextTs,
-  { ignores: [".next/**", ".next-electron/**", "out/**", "node_modules/**", "coverage/**", "next-env.d.ts", ".claude/**"] },
+  { ignores: [".next/**", ".next-electron/**", "out/**", "node_modules/**", "coverage/**", "next-env.d.ts", ".claude/**", "cloud/**"] },
   {
     // CommonJS by design (Electron shell, server.js).
     files: ["**/*.cjs", "**/*.js"],

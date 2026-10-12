@@ -1,0 +1,13 @@
+@import "../../src/app/globals.css";
+@source "../../src/components";
+@source "./";
+
+:root {
+  --font-ui: "Schibsted Grotesk";
+}
+
+/* Files on a shared canvas can't be shown in Finder. */
+.react-flow__node .nodrag.flex.mt-2\.5 > button + button,
+[title="Show in Finder"] {
+  display: none;
+}
