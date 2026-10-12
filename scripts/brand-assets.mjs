@@ -62,20 +62,24 @@ const shadow = await sharp({ create: { width: 1024, height: 1024, channels: 4, b
 await sharp(shadow).composite([{ input: body, left: 100, top: 92 }]).png().toFile(path.join(root, "electron/icon.png"));
 console.log("brand assets written");
 
-// Menu bar icons (macOS template images: black on transparent, @1x and @2x): the lettering, and with a dot while listening.
+// Menu bar icons (macOS template images: black on transparent, 18pt square, @1x and @2x):
+// the app icon's rounded square with the lettering's "m" cut out; while listening, a dot cut into its corner.
 {
   const word = fs.readFileSync(path.join(root, "public/brand/wordmark.svg"), "utf8");
-  const [, , vw, vh] = word.match(/viewBox="([^"]+)"/)[1].split(" ").map(Number);
-  const inner = word.replace(/^<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
-  const [vx, vy] = word.match(/viewBox="([^"]+)"/)[1].split(" ").map(Number);
-  const dot = vh * 0.32;
-  const listening = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw + dot * 2.2} ${vh}">${inner}<circle cx="${vx + vw + dot * 1.3}" cy="${vy + vh / 2}" r="${dot / 2 + dot * 0.15}" fill="#000"/></svg>`;
-  for (const [name, source] of [["trayTemplate", word], ["trayListeningTemplate", listening]]) {
-    for (const scale of [1, 2]) {
-      await sharp(Buffer.from(source), { density: 600 })
-        .resize({ height: 14 * scale })
-        .png()
-        .toFile(path.join(root, "electron", `${name}${scale === 2 ? "@2x" : ""}.png`));
+  const m = word.match(/ d="([^"]+)"/)[1].match(/[Mm][^Mm]*/g)[0];
+  const [mx, my, mw, mh] = box(m);
+  const size = 100;
+  const inset = 11;
+  const glyph = 56;
+  const scale = glyph / Math.max(mw, mh);
+  const tx = (size - mw * scale) / 2 - mx * scale;
+  const ty = (size - mh * scale) / 2 - my * scale + 3;
+  const square = `<rect x="${inset}" y="${inset}" width="${size - inset * 2}" height="${size - inset * 2}" rx="20" fill="#fff"/>`;
+  const letter = `<path transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(4)})" fill="#000" d="${m}"/>`;
+  const icon = (dot) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"><defs><mask id="k">${square}${letter}${dot ? `<circle cx="${size - inset - 4}" cy="${inset + 4}" r="24" fill="#000"/>` : ""}</mask></defs><rect width="${size}" height="${size}" fill="#000" mask="url(#k)"/>${dot ? `<circle cx="${size - inset - 4}" cy="${inset + 4}" r="15" fill="#000"/>` : ""}</svg>`;
+  for (const [name, dot] of [["trayTemplate", false], ["trayListeningTemplate", true]]) {
+    for (const scale2 of [1, 2]) {
+      await sharp(Buffer.from(icon(dot)), { density: 300 }).resize(18 * scale2, 18 * scale2).png().toFile(path.join(root, "electron", `${name}${scale2 === 2 ? "@2x" : ""}.png`));
     }
   }
 }
