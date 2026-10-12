@@ -81,7 +81,14 @@ interface MulchJobs {
   pendingEnrich: string[];
   paused: boolean;
   /** A call is being listened to: speech is captured in batches every CALL_BATCH_MS. */
-  call?: { segments: TranscriptSegment[]; timer?: ReturnType<typeof setTimeout> };
+  call?: {
+    segments: TranscriptSegment[];
+    timer?: ReturnType<typeof setTimeout>;
+    startedAt: number;
+    /** The transcript card, filled in as the call goes. */
+    transcriptId?: string;
+    cardTimer?: ReturnType<typeof setTimeout>;
+  };
 }
 
 interface JobsState {
@@ -466,18 +473,143 @@ function conversationBlock(text: string): string {
 /** A call's speech is captured every this often (a conversation needs context; a braindump wants speed). */
 export const CALL_BATCH_MS = Number(process.env.MLCH_CALL_BATCH_MS) || 30_000;
 
-/** Start or stop call capture for a mulch (the system-audio capture starts and stops it). Stopping captures what is left. */
+/**
+ * Start or stop call capture for a mulch (the system-audio capture starts and stops it).
+ * A call gets a transcript card, filled in as it goes; stopping captures what is left,
+ * finishes the transcript and writes the notes.
+ */
 export function setCallMode(mulchId: string, on: boolean): void {
   const entry = jobsFor(mulchId);
   if (on) {
-    entry.call ??= { segments: [] };
+    if (entry.call) return;
+    entry.call = { segments: [], startedAt: Date.now() };
+    void startCallCard(mulchId, entry.call).catch((error) => log.warn("jobs", "call transcript card failed", { mulchId, error }));
     return;
   }
-  if (!entry.call) return;
-  clearTimeout(entry.call.timer);
-  const rest = entry.call.segments.splice(0);
+  const call = entry.call;
+  if (!call) return;
+  clearTimeout(call.timer);
+  clearTimeout(call.cardTimer);
+  const rest = call.segments.splice(0);
   entry.call = undefined;
   if (rest.length) captureCall(mulchId, rest);
+  void endCall(mulchId, call, Date.now()).catch((error) => log.warn("jobs", "finishing a call failed", { mulchId, error }));
+}
+
+/* ── the call's transcript and notes ───────────────────────────── */
+
+const CALL_CARD_MS = 15_000;
+
+function clockTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function callHeading(startedAt: number, endedAt?: number): string {
+  const day = new Date(startedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  if (endedAt === undefined) return `Call, ${day}, ${clockTime(startedAt)}`;
+  const minutes = Math.max(1, Math.round((endedAt - startedAt) / 60_000));
+  return `Call, ${day}, ${clockTime(startedAt)} to ${clockTime(endedAt)} (${minutes} min)`;
+}
+
+/** The call so far as markdown: who spoke when, consecutive lines of one speaker together. */
+export function callMarkdown(segments: TranscriptSegment[], startedAt: number, endedAt?: number): string {
+  const lines: string[] = [`# ${callHeading(startedAt, endedAt)}`, ""];
+  let last: { speaker?: string; text: string[]; at: number } | undefined;
+  const flush = () => {
+    if (last) lines.push(`${last.speaker ? `**${last.speaker === "me" ? "Me" : "Them"}** ` : ""}(${clockTime(last.at)}) ${last.text.join(" ")}`, "");
+  };
+  for (const segment of segments) {
+    if (last && last.speaker === segment.speaker) last.text.push(segment.text.trim());
+    else {
+      flush();
+      last = { speaker: segment.speaker, text: [segment.text.trim()], at: segment.at };
+    }
+  }
+  flush();
+  if (!segments.length) lines.push(endedAt === undefined ? "Listening." : "Nothing was heard.");
+  return lines.join("\n").trim();
+}
+
+async function callSegments(mulchId: string, startedAt: number, endedAt = Infinity): Promise<TranscriptSegment[]> {
+  const transcript = (await openMulch(mulchId)).transcript;
+  // Speech only; without the Mac's sound (no permission) the microphone's has no speaker.
+  return dropEcho(transcript.filter((segment) => segment.source === "speech" && segment.at >= startedAt - 1000 && segment.at <= endedAt));
+}
+
+async function startCallCard(mulchId: string, call: NonNullable<MulchJobs["call"]>): Promise<void> {
+  const mulch = await getMulch(mulchId);
+  const id = newClientId("n");
+  const stamp = new Date(call.startedAt);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const docPath = `docs/call-${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.md`;
+  const at = placeNear(mulch, { w: NODE_WIDTH.writeup, h: 260 }, { seed: id });
+  const text = callMarkdown([], call.startedAt);
+  // The person's own words: the AI may not change it.
+  await applyToMulch(mulchId, [{ op: "addNode", node: { id, kind: "writeup", x: at.x, y: at.y, title: callHeading(call.startedAt), text, docPath, origin: "speech:call", createdAt: Date.now() } }], "speech:call");
+  call.transcriptId = id;
+}
+
+/** Refresh the transcript card soon (every CALL_CARD_MS at most while speech comes in). */
+function touchCallCard(mulchId: string): void {
+  const call = jobsFor(mulchId).call;
+  if (!call || call.cardTimer) return;
+  call.cardTimer = setTimeout(() => {
+    call.cardTimer = undefined;
+    void writeCallCard(mulchId, call).catch((error) => log.warn("jobs", "updating the call transcript failed", { mulchId, error }));
+  }, CALL_CARD_MS);
+}
+
+async function writeCallCard(mulchId: string, call: NonNullable<MulchJobs["call"]>, endedAt?: number): Promise<TranscriptSegment[]> {
+  const segments = await callSegments(mulchId, call.startedAt, endedAt);
+  const id = call.transcriptId;
+  const node = id ? (await getMulch(mulchId)).nodes[id] : undefined;
+  // The person may have removed the card; then the transcript stays in the mulch's history only.
+  if (id && node) {
+    const text = callMarkdown(segments, call.startedAt, endedAt);
+    if (text !== node.text) await applyToMulch(mulchId, [{ op: "updateNode", id, patch: { text, title: callHeading(call.startedAt, endedAt), updatedAt: Date.now() } }], "speech:call");
+  }
+  return segments;
+}
+
+async function endCall(mulchId: string, call: NonNullable<MulchJobs["call"]>, endedAt: number): Promise<void> {
+  // The last chunks are still being transcribed for a moment after stopping.
+  await new Promise((resolve) => setTimeout(resolve, Number(process.env.MLCH_CALL_SETTLE_MS) || 4000));
+  const segments = await writeCallCard(mulchId, call, endedAt);
+  if (!segments.length) return;
+  submitCallNotes(mulchId, { startedAt: call.startedAt, endedAt, transcriptId: call.transcriptId });
+}
+
+/** The notes of a finished call: summary, decisions, to-dos, open questions, next to its transcript. */
+export function submitCallNotes(mulchId: string, call: { startedAt: number; endedAt: number; transcriptId?: string }): JobStatus {
+  return enqueue(mulchId, {
+    lane: "command",
+    label: "Call notes",
+    retry: { kind: "callNotes", input: JSON.stringify(call) },
+    async run(job, signal) {
+      const segments = await callSegments(mulchId, call.startedAt, call.endedAt);
+      const transcript = segments.map((s) => `${s.speaker ? `[${s.speaker}] ` : ""}(${clockTime(s.at)}) ${s.text.trim()}`).join("\n");
+      const clipped = transcript.length > 150_000 ? `${transcript.slice(0, 75_000)}\n…\n${transcript.slice(-75_000)}` : transcript;
+      const made = Object.values((await getMulch(mulchId)).nodes)
+        .filter((node) => node.createdAt >= call.startedAt && node.createdAt <= call.endedAt + 120_000 && node.id !== call.transcriptId)
+        .map((node) => `${node.id}: ${node.title ? `${node.title}: ` : ""}${shorten(node.text, 120)}`);
+      await runTurn({
+        mulchId,
+        job,
+        signal,
+        lane: "command",
+        systemPrompt: commandPrompt,
+        prompt:
+          `<call>\n${callHeading(call.startedAt, call.endedAt)}\n[me] is the person using mlch, [them] the others.\n\n${clipped}\n</call>\n\n` +
+          (made.length ? `<made_during_the_call>\n${made.join("\n")}\n</made_during_the_call>\n\n` : "") +
+          `<instruction>\nThe call has ended. Write its notes with write_doc, titled "Notes: ${callHeading(call.startedAt, call.endedAt)}", near ${call.transcriptId ?? "the newest items"}. ` +
+          "Sections: a short summary (3-6 lines); Decisions; To-dos (who, what, by when if said); Open questions. Leave out a section with nothing in it. " +
+          "Only what was said. Say who where it matters: \"Me\" for [me], the person's name when it was said, else \"them\"; never the bracket tags. Write in the language of the call. " +
+          `${call.transcriptId ? `Connect the notes to the transcript ${call.transcriptId} (label "notes of"). ` : ""}Do not add other items. Finish with say.\n</instruction>`,
+        tools: ["write_doc", "connect", "say"],
+        brief: "Call notes",
+      });
+    },
+  });
 }
 
 export function inCall(mulchId: string): boolean {
@@ -557,6 +689,7 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
   if (entry.call && segment.source === "speech") {
     entry.call.segments.push(segment);
     entry.call.timer ??= setTimeout(() => flushCall(mulchId), CALL_BATCH_MS);
+    touchCallCard(mulchId);
     return;
   }
   const action = viewCommand(segment.text);
@@ -1100,5 +1233,6 @@ export async function retryJob(mulchId: string, jobId: string): Promise<JobStatu
   if (kind === "make") return submitMake(mulchId, input, { near, title });
   if (kind === "research") return submitResearch(mulchId, input, { near, title });
   if (kind === "folder") return submitFolder(mulchId, input);
+  if (kind === "callNotes") return submitCallNotes(mulchId, JSON.parse(input) as { startedAt: number; endedAt: number; transcriptId?: string });
   return submitCommand(mulchId, input);
 }
