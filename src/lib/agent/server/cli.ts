@@ -187,6 +187,8 @@ async function download(id: CliId, pin: PinnedCli): Promise<CliChoice> {
  */
 export function prepareCli(id: CliId, options: { download?: boolean } = {}): Promise<CliChoice | undefined> {
   const s = state();
+  const chosen = s.choices.get(id);
+  if (chosen && existsSync(chosen.path)) return Promise.resolve(chosen);
   const existing = s.preparing.get(id);
   if (existing && (!options.download || s.status.get(id)?.state !== "checking")) return existing;
   const pin = pinned();
