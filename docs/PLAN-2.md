@@ -163,6 +163,25 @@ One checklist screen, live, fixing what it can, then a new mulch with the mic re
    - Check: `electron-run --production` on the packaged app; `spctl --assess` passes; install on a clean user account, update from version n to n+1 works.
    - George checks: install on a second Mac (G6). Distribution terms resolved (G4) before sending to anyone.
 
+## Testing, releases and updates (agreed 2026-10-12)
+
+**Testing.** Day to day George runs `npm run app` (or `npm run electron:dev`); I fix what comes up. Once per round, a signed build (`npm run dist`) to catch what only packaging breaks (permission prompts, menu bar, `mlch://` links, the audio helper). Notarizing only for builds that go to other Macs.
+
+**Releases.** Version in package.json; `npm run release` (to build): refuses with uncommitted changes or a failing check, builds, signs, notarizes, smoke-tests the packaged app, uploads the zip, its blockmap and `latest-mac.yml` (last) to R2 `releases/mac/`, served at mlch.app/releases/mac/. First install: a DMG.
+
+**Updates.** electron-updater in the packaged app checks `latest-mac.yml` at launch and every 6 hours, downloads in the background, checks the signature (same Developer ID), installs on quit. No dialog. Only signed and notarized builds update.
+- A bad release is undone by a newer one, never by deleting: hence the smoke test before upload.
+- Old versions stay in use: the mulch format only changes with a migration that opens old files.
+- Channels: `beta` (George) and `latest` (friends), two feeds in the same place.
+- Models (Parakeet, search) are not in the app; they download to their folders once and are not touched by updates.
+
+**App size.** The signed app is 1.7 GB, of which: Electron itself 288 MB; Codex's CLI 314 MB and Claude Code's 216 MB (bundled by their SDK packages); the whole of Next with its build tools 317 MB; onnxruntime-node 155 MB (unused: we run the WebAssembly build); onnxruntime-web 148 MB (we need one file of it); browser libraries already compiled into the page (model-viewer, lucide) about 80 MB. The models are not in it. Plan:
+1. Next's standalone output (only the files the server uses) instead of node_modules: about 1 GB less.
+2. Leave out onnxruntime-node and all of onnxruntime-web but the WebAssembly file mlch loads.
+3. The AI CLIs: use the person's installed Claude Code / Codex (a subscription needs them installed anyway); when one is missing (API-key use), download it on first use to Application Support, like the models.
+4. Pack the app into one archive (asar), unpacking only what must run as files: faster signing, smaller download.
+Target: about 350 MB installed, about 150 MB to download.
+
 ## M8. Collaboration (after the release)
 
 Design now, build after M7. Extends M5's Durable Object from one writer to many.
