@@ -61,3 +61,21 @@ const shadow = await sharp({ create: { width: 1024, height: 1024, channels: 4, b
   .blur(14).png().toBuffer();
 await sharp(shadow).composite([{ input: body, left: 100, top: 92 }]).png().toFile(path.join(root, "electron/icon.png"));
 console.log("brand assets written");
+
+// Menu bar icons (macOS template images: black on transparent, @1x and @2x): the lettering, and with a dot while listening.
+{
+  const word = fs.readFileSync(path.join(root, "public/brand/wordmark.svg"), "utf8");
+  const [, , vw, vh] = word.match(/viewBox="([^"]+)"/)[1].split(" ").map(Number);
+  const inner = word.replace(/^<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
+  const [vx, vy] = word.match(/viewBox="([^"]+)"/)[1].split(" ").map(Number);
+  const dot = vh * 0.32;
+  const listening = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw + dot * 2.2} ${vh}">${inner}<circle cx="${vx + vw + dot * 1.3}" cy="${vy + vh / 2}" r="${dot / 2 + dot * 0.15}" fill="#000"/></svg>`;
+  for (const [name, source] of [["trayTemplate", word], ["trayListeningTemplate", listening]]) {
+    for (const scale of [1, 2]) {
+      await sharp(Buffer.from(source), { density: 600 })
+        .resize({ height: 14 * scale })
+        .png()
+        .toFile(path.join(root, "electron", `${name}${scale === 2 ? "@2x" : ""}.png`));
+    }
+  }
+}

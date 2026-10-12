@@ -13,7 +13,11 @@ export interface MlchDesktop {
   microphoneAccess(): Promise<boolean>;
   /** Bring the window to the front (after a screenshot of another app). */
   showWindow?(): Promise<void>;
-  /** Menu commands meant for the page ("zoom-in", "zoom-out", "zoom-fit"). */
+  /** The call being listened to, for the menu bar. */
+  setCallState?(state: { mulchId: string } | null): Promise<void>;
+  /** Open at login: read it, or set it. */
+  openAtLogin?(value?: boolean): Promise<boolean>;
+  /** Menu commands meant for the page ("zoom-in", "zoom-out", "zoom-fit", "stop-call"). */
   onMenu?(callback: (command: string) => void): () => void;
   credentials: {
     status(): Promise<Result<Record<string, boolean>>>;

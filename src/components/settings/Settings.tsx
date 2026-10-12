@@ -100,6 +100,23 @@ function UsageTable({ usage }: { usage: SettingsView["usageToday"] }) {
   );
 }
 
+/** The desktop app starting with the Mac (for the menu bar). */
+function OpenAtLogin() {
+  const [on, setOn] = useState<boolean>();
+  useEffect(() => {
+    void desktop()?.openAtLogin?.().then(setOn);
+  }, []);
+  if (on === undefined) return null;
+  return (
+    <Section title="App">
+      <label className="flex items-center gap-2 text-[14px]">
+        <input type="checkbox" checked={on} onChange={(e) => void desktop()?.openAtLogin?.(e.target.checked).then(setOn)} />
+        Open at login
+      </label>
+    </Section>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="py-7 border-t border-line first:border-t-0">
@@ -378,6 +395,7 @@ export function Settings() {
             <UsageTable usage={view.usageToday} />
           </Section>
         )}
+        <OpenAtLogin />
         <Section title="Diagnostics">
           <div className="flex items-center gap-2">
             <button

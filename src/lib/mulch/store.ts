@@ -131,7 +131,7 @@ export async function listMulches(): Promise<MulchSummary[]> {
         const mulch = open?.mulch ?? (JSON.parse(await fs.readFile(path.join(root, id, "mulch.json"), "utf8")) as Mulch);
         const jobs = open ? [...open.jobs.values()] : await readKeptJobs(path.join(root, id));
         // Just left empty: about to be removed.
-        if (open && !open.listeners.size && isEmpty(open)) return undefined;
+        if (open && !open.listeners.size && isEmpty(open) && !kept(id)) return undefined;
         // Left behind empty (the app quit before it was cleaned up).
         if (!open && Date.now() - mulch.createdAt > 60_000 && isEmpty({ mulch, transcript: [], jobs: new Map(jobs.map((job) => [job.id, job])) })) {
           const dir = path.join(root, id);
@@ -406,6 +406,17 @@ export async function subscribe(id: string, listener: Listener): Promise<() => v
 
 const EMPTY_GRACE_MS = 5000;
 
+/** Other parts can keep an empty mulch (a call listening into it). */
+export function keepWhile(test: (id: string) => boolean): void {
+  const keepers = ((globalThis as { __mlchKeepers?: Map<string, (id: string) => boolean> }).__mlchKeepers ??= new Map());
+  keepers.set(test.toString(), test);
+}
+
+function kept(id: string): boolean {
+  const keepers = (globalThis as { __mlchKeepers?: Map<string, (id: string) => boolean> }).__mlchKeepers;
+  return !!keepers && [...keepers.values()].some((test) => test(id));
+}
+
 function isEmpty(entry: Pick<OpenMulch, "mulch" | "transcript" | "jobs">): boolean {
   const { mulch } = entry;
   return mulch.title === "Untitled" && !Object.keys(mulch.nodes).length && !Object.keys(mulch.groups).length && !entry.transcript.length && !entry.jobs.size;
@@ -414,7 +425,7 @@ function isEmpty(entry: Pick<OpenMulch, "mulch" | "transcript" | "jobs">): boole
 /** Deletes an untitled mulch that nobody is looking at and that has nothing in it. */
 export async function removeIfEmpty(id: string): Promise<boolean> {
   const entry = state().open.get(id);
-  if (!entry || entry.listeners.size || !isEmpty(entry)) return false;
+  if (!entry || entry.listeners.size || !isEmpty(entry) || kept(id)) return false;
   const assets = await fs.readdir(path.join(mulchDir(id), "assets")).catch(() => []);
   if (assets.length) return false;
   if (entry.saveTimer) clearTimeout(entry.saveTimer);

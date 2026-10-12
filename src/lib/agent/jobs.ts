@@ -18,7 +18,7 @@ import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/age
 import type { JobLane, JobRetry, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
-import { applyToMulch, emit, getJobs, getMulch, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
+import { applyToMulch, emit, getJobs, getMulch, keepWhile, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
 import { desktopRequest } from "@/lib/desktop/server";
 import { modelFor, readSettings, type Lane, type Settings } from "@/lib/settings";
 import fs from "node:fs/promises";
@@ -469,6 +469,8 @@ export function setCallMode(mulchId: string, on: boolean): void {
 export function inCall(mulchId: string): boolean {
   return !!state().mulches.get(mulchId)?.call;
 }
+
+keepWhile((mulchId) => inCall(mulchId));
 
 function flushCall(mulchId: string): void {
   const call = jobsFor(mulchId).call;

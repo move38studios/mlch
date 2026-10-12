@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('mlchDesktop', {
   openLogs: () => ipcRenderer.invoke('desktop:open-logs'),
   microphoneAccess: () => ipcRenderer.invoke('desktop:microphone-access'),
   showWindow: () => ipcRenderer.invoke('desktop:show-window'),
+  /** The call being listened to ({ mulchId }) or null, for the menu bar. */
+  setCallState: (state) => ipcRenderer.invoke('desktop:call-state', state),
+  /** Open at login: read it, or set it with a boolean. */
+  openAtLogin: (value) => ipcRenderer.invoke('desktop:login-item', value),
   onMenu: (callback) => {
     const listener = (_event, command) => callback(command);
     ipcRenderer.on('desktop:menu', listener);

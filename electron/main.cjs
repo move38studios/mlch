@@ -4,7 +4,7 @@
 // on it, and answers the few native requests the server and page make
 // (folder picker, reveal in Finder, stored keys). Every request to the local
 // server carries a per-launch token; the server refuses anything without it.
-const { app, BrowserWindow, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, session, shell, systemPreferences, utilityProcess, safeStorage, screen } = require('electron');
+const { app, BrowserWindow, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, session, shell, systemPreferences, utilityProcess, safeStorage, screen, Tray } = require('electron');
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -195,6 +195,61 @@ function setupScreenshots() {
       .catch(error => { log(error); callback(null); });
   }, { useSystemPicker: !testing });
   if (!globalShortcut.register(SCREENSHOT_SHORTCUT, () => void screenshotToCanvas())) log(`Shortcut ${SCREENSHOT_SHORTCUT} is taken by another app.`);
+  if (!globalShortcut.register(CALL_SHORTCUT, () => void openPage('/new?call=1'))) log(`Shortcut ${CALL_SHORTCUT} is taken by another app.`);
+}
+
+// mlch: the menu bar. New, New Call, the last few mulches, and the call being listened to.
+const CALL_SHORTCUT = 'Control+Command+L';
+let tray;
+/** The call the window is listening to ({ mulchId }), reported by the page. */
+let callState;
+
+async function openPage(pathname) {
+  if (!window) await createWindow();
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  await window.loadURL(new URL(pathname, origin).href);
+}
+
+async function recentMulches() {
+  try {
+    const response = await fetch(`${origin}/api/mulches`, { headers: { 'X-Mlch-Desktop': token } });
+    const body = await response.json();
+    return Array.isArray(body.mulches) ? body.mulches.slice(0, 5) : [];
+  } catch { return []; }
+}
+
+async function refreshTray() {
+  if (!tray || tray.isDestroyed()) return;
+  const recent = backend?.online() ? await recentMulches() : [];
+  tray.setImage(nativeImage.createFromPath(path.join(__dirname, callState ? 'trayListeningTemplate.png' : 'trayTemplate.png')));
+  tray.setToolTip(callState ? 'mlch, listening' : 'mlch');
+  const menu = Menu.buildFromTemplate([
+    ...(callState ? [
+      { label: 'Show Call', click: () => void openPage(`/n/${callState.mulchId}`) },
+      { label: 'Stop Listening', click: () => window?.webContents.send('desktop:menu', 'stop-call') },
+      { type: 'separator' },
+    ] : []),
+    { label: 'New', click: () => void openPage('/new') },
+    { label: 'New Call', accelerator: CALL_SHORTCUT, registerAccelerator: false, click: () => void openPage('/new?call=1') },
+    ...(recent.length ? [{ type: 'separator' }, ...recent.map((mulch) => ({ label: String(mulch.title).slice(0, 60), click: () => void openPage(`/n/${mulch.id}`) }))] : []),
+    { type: 'separator' },
+    { label: 'Open mlch', click: () => { if (!window) void createWindow(); else { window.show(); window.focus(); } } },
+    { role: 'quit' },
+  ]);
+  tray.setContextMenu(menu);
+  // Scripted runs (scripts/scenarios/menubar.cjs) read and click the menu.
+  if (process.env.MLCH_ELECTRON_USER_DATA) globalThis.__mlchTrayMenu = menu;
+}
+
+if (process.env.MLCH_ELECTRON_USER_DATA) globalThis.__mlchRefreshTray = () => refreshTray();
+
+function createTray() {
+  if (tray || process.platform !== 'darwin') return;
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'trayTemplate.png')));
+  void refreshTray();
+  setInterval(() => void refreshTray(), 20_000).unref();
 }
 
 // mlch: the native audio helper (local transcription, system audio capture).
@@ -348,6 +403,14 @@ function registerBridge() {
   ipcMain.handle('desktop:backend-state', guarded(() => backend.online()));
   ipcMain.handle('desktop:restart-backend', guarded(() => startWithRetry()));
   ipcMain.handle('desktop:open-logs', guarded(() => openLogs()));
+  ipcMain.handle('desktop:call-state', guarded((state) => {
+    callState = state && typeof state.mulchId === 'string' ? { mulchId: state.mulchId } : undefined;
+    void refreshTray();
+  }));
+  ipcMain.handle('desktop:login-item', guarded((value) => {
+    if (typeof value === 'boolean') app.setLoginItemSettings({ openAtLogin: value });
+    return app.getLoginItemSettings().openAtLogin;
+  }));
   ipcMain.handle('desktop:show-window', guarded(() => { if (window?.isMinimized()) window.restore(); window?.show(); window?.focus(); }));
   ipcMain.handle('desktop:microphone-access', guarded(async () => {
     // Automated runs feed a fake microphone and must not raise the system prompt.
@@ -450,6 +513,7 @@ else {
     Menu.setApplicationMenu(buildMenu());
     setupScreenshots();
     if (await startWithRetry()) await createWindow();
+    createTray();
     if (!process.env.MLCH_ELECTRON_USER_DATA) {
       if (app.isPackaged) app.setAsDefaultProtocolClient('mlch');
       else app.setAsDefaultProtocolClient('mlch', process.execPath, [path.resolve(process.argv[1] ?? root), '--dev']);

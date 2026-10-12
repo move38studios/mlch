@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, FolderPlus, History, Link2, Share, X } from "lucide-react";
 import type { ShareView } from "@/lib/share/shares";
 import { copyLink, requestShare } from "./share";
+import { startCall } from "./Mic";
 import { useBacklinks } from "./backlinks";
 import type { Mulch } from "@/lib/mulch/types";
 import { HistoryBar } from "./History";
@@ -215,8 +216,15 @@ export function MulchView({ id }: { id: string }) {
   // Arriving from a search result in another mulch: show that item once loaded.
   const params = useSearchParams();
   const focusParam = params.get("focus");
+  // New Call (menu bar, shortcut): start listening as soon as the mulch is here.
+  const callParam = params.get("call") === "1";
   const pageParam = params.get("page");
   const loaded = !!mulch;
+  useEffect(() => {
+    if (!loaded || !callParam) return;
+    void startCall(id);
+    window.history.replaceState(null, "", `/n/${id}`);
+  }, [loaded, callParam, id]);
   useEffect(() => {
     if (!loaded || !focusParam) return;
     const timer = setTimeout(() => useMulch.getState().setFocus({ ids: focusParam.split(","), ...(pageParam ? { page: Number(pageParam) } : {}) }), 600);

@@ -76,13 +76,27 @@ export function stopMic() {
 }
 
 let levelTimer: ReturnType<typeof setInterval> | undefined;
+let menuListening = false;
+
+/** "Stop Listening" in the menu bar. */
+function listenForMenu() {
+  if (menuListening) return;
+  menuListening = !!desktop()?.onMenu?.((command) => {
+    if (command === "stop-call") void stopCall();
+  });
+}
 
 /** Listen to a call: the microphone and the Mac's sound, captured as conversation. */
 export async function startCall(mulchId: string): Promise<void> {
+  const current = useVoice.getState().call;
+  if (current?.mulchId === mulchId) return;
+  if (current) await stopCall();
+  listenForMenu();
   const response = await fetch(`/api/mulches/${mulchId}/call`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start" }) });
   const body = (await response.json().catch(() => ({}))) as { call?: boolean; capture?: unknown; audioError?: string; error?: string };
   if (!response.ok || !body.call) return notify(body.error ?? "The call could not start.");
   useVoice.setState({ call: { mulchId, system: !!body.capture } });
+  void desktop()?.setCallState?.({ mulchId });
   if (body.audioError) notify(`Only the microphone: ${body.audioError}`);
   if (!(await startMic(mulchId))) return void stopCall();
   clearInterval(levelTimer);
@@ -98,6 +112,7 @@ export async function stopCall(tellServer = true): Promise<void> {
   clearInterval(levelTimer);
   stopMic();
   useVoice.setState({ call: undefined, systemLevel: 0 });
+  void desktop()?.setCallState?.(null);
   if (call && tellServer) await fetch(`/api/mulches/${call.mulchId}/call`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "stop" }) }).catch(() => {});
 }
 
