@@ -22,7 +22,8 @@ import { log } from "@/lib/log";
 import { resolveRef } from "@/lib/links/links";
 import { desktopRequest } from "@/lib/desktop/server";
 import { hasThumbnail } from "@/lib/artifacts/thumbnails";
-import { atomicWriteFile, createMulch, applyToMulch, getMulch, mulchDir, onAfterApply, peekMulch } from "@/lib/mulch/store";
+import { archiveMulch, atomicWriteFile, createMulch, applyToMulch, getMulch, isMulchId, mulchDir, onAfterApply, peekMulch } from "@/lib/mulch/store";
+import { libraryDir } from "@/lib/desktop/server";
 import { newClientId } from "@/lib/mulch/ids";
 import { applyOps } from "@/lib/mulch/ops";
 import type { Mulch, MulchNode, MulchOp, OpBatch } from "@/lib/mulch/types";
@@ -175,12 +176,37 @@ export const linkedContent: LinkedOf = async (card) => {
     delete content.w;
     delete content.h;
     const dir = mulchDir(ref.mulchId);
-    return { node: { ...content, ...place } as MulchNode, files: filesOf(target).map((file) => ({ from: path.join(dir, file), path: file })) };
+    return { node: { ...content, ...place, ...keepSize(card, target.kind) } as MulchNode, files: filesOf(target).map((file) => ({ from: path.join(dir, file), path: file })) };
   }
   const resolved = await resolveRef(ref, true).catch(() => undefined);
   if (!resolved?.exists || !resolved.text) return undefined;
-  return { node: { ...place, kind: "writeup", title: resolved.title ?? card.title, text: resolved.text, origin: card.origin, createdAt: card.createdAt }, files: [] };
+  return { node: { ...place, ...keepSize(card, "writeup"), kind: "writeup", title: resolved.title ?? card.title, text: plainNote(resolved.text), origin: card.origin, createdAt: card.createdAt }, files: [] };
 };
+
+/**
+ * The canvas was laid out around the link card, so what it links to keeps the
+ * card's size (its text clips; it opens in full). Pictures, players and files keep their own shape.
+ */
+function keepSize(card: MulchNode, kind: MulchNode["kind"]): Partial<MulchNode> {
+  if (!card.h || kind === "image" || kind === "media" || kind === "artifact") return {};
+  return { h: card.h, fixedH: true };
+}
+
+/** A note's text without HTML tags (notes from other tools carry some); the words stay. */
+export function plainNote(text: string): string {
+  return text
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n");
+}
 
 /**
  * The canvas as it is shared: link cards replaced by what they link to.
@@ -425,7 +451,47 @@ async function pendingBatches(shareUrl: string): Promise<OpBatch[]> {
   });
 }
 
-/** "Open in mlch": a shared canvas (or file) becomes a new mulch of the person's own. */
+/** The same share: same server and share id (the link may differ in trailing details). */
+function sameShare(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    const [x, y] = [new URL(a), new URL(b)];
+    return x.host === y.host && x.pathname.replace(/\/$/, "") === y.pathname.replace(/\/$/, "");
+  } catch {
+    return false;
+  }
+}
+
+/** One of this library's own shares: the mulch it was made from (and, for a file, its card). */
+export async function findOwnShare(manifestUrl: string): Promise<{ mulchId: string; nodeId?: string } | undefined> {
+  const root = libraryDir();
+  const ids = await fs.readdir(root).catch(() => [] as string[]);
+  for (const mulchId of ids) {
+    if (!isMulchId(mulchId)) continue;
+    const record = (await readShares(mulchId)).find((r) => sameShare(r.manifestUrl, manifestUrl));
+    if (!record) continue;
+    const mulch = record.docPath ? await peekMulch(mulchId).catch(() => undefined) : undefined;
+    const node = mulch && Object.values(mulch.nodes).find((n) => n.docPath === record.docPath);
+    return { mulchId, ...(node ? { nodeId: node.id } : {}) };
+  }
+  return undefined;
+}
+
+/**
+ * "Open in mlch": one's own share opens the mulch it came from (brought back
+ * from the archive); someone else's becomes a new mulch of the person's own.
+ */
+export async function openShare(manifestUrl: string): Promise<{ mulchId: string; nodeId?: string }> {
+  const own = await findOwnShare(manifestUrl);
+  if (own) {
+    await archiveMulch(own.mulchId, false);
+    log.info("share", "Opened one's own share", { mulchId: own.mulchId });
+    return own;
+  }
+  return { mulchId: await importShare(manifestUrl) };
+}
+
+/** A shared canvas (or file) becomes a new mulch of the person's own. */
 export async function importShare(manifestUrl: string): Promise<string> {
   const settings = await readSettings();
   if (!allowedManifest(manifestUrl, settings.sharing === "own" ? settings.shareServer : undefined)) throw new ShareError(400, "Not an mlch share link.");

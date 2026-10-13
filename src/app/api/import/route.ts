@@ -1,10 +1,10 @@
 import { guardAgent, handle, jsonError } from "@/lib/http";
 import { ShareError } from "@/lib/share/client";
-import { importShare } from "@/lib/share/shares";
+import { openShare } from "@/lib/share/shares";
 
 export const dynamic = "force-dynamic";
 
-/** POST {manifest}: "Open in mlch" — a shared canvas or file becomes a new mulch. */
+/** POST {manifest}: "Open in mlch": one's own share opens its mulch; someone else's becomes a new one. */
 export async function POST(request: Request) {
   const denied = guardAgent(request);
   if (denied) return denied;
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const manifest = body.manifest;
   return handle(async () => {
     try {
-      return { mulchId: await importShare(manifest) };
+      return await openShare(manifest);
     } catch (error) {
       if (error instanceof ShareError) return jsonError(error.status === 400 ? 400 : 502, error.message);
       throw error;

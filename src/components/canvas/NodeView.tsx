@@ -254,7 +254,7 @@ function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
         </div>
       )}
       {node.title && <div className="font-semibold mb-1 leading-[1.3]">{node.title}</div>}
-      <div className="mlch-text overflow-hidden" style={{ maxHeight: `${style.clamp * 1.45}em` }}>
+      <div className="mlch-text overflow-hidden" style={node.fixedH ? undefined : { maxHeight: `${style.clamp * 1.45}em` }}>
         {style.markdown ? (
           <div className="mlch-md">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{node.text}</ReactMarkdown>
@@ -278,11 +278,12 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const setViewer = useCanvasUi((s) => s.setViewer);
   const apply = useMulch((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
+  const sizedByShape = node.kind === "image" || node.kind === "media" || node.kind === "artifact";
   const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || node.kind === "image" || (node.kind === "link" && !!node.assetId);
 
   return (
     <div
-      className={`mlch-node group relative text-ink ${style.card} ${style.tilt ? "rounded-[3px]" : "rounded-[10px]"} ${outline(node, style.tinted)} ${selected ? "outline-[2.5px] outline-amber outline-offset-2" : ""} ${fresh ? "node-enter" : ""}`}
+      className={`mlch-node group relative text-ink ${style.card} ${style.tilt ? "rounded-[3px]" : "rounded-[10px]"} ${outline(node, style.tinted)} ${selected ? "outline-[2.5px] outline-amber outline-offset-2" : ""} ${fresh ? "node-enter" : ""} ${node.fixedH ? "h-full" : ""}`}
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
@@ -295,16 +296,23 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
           else if (!readOnly) openFile(mulchId, node.docPath, "open");
         } else if (node.kind === "image") setOpen(node.id);
         else if (node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
+        // Read-only (a shared canvas): long or clipped cards open in full.
+        else if (readOnly && (long || node.fixedH)) setOpen(node.id);
       }}
     >
       {editing ? (
         <div className="px-4 py-3">
           <Editor node={node} onDone={() => setEditing(undefined)} />
         </div>
+      ) : node.fixedH ? (
+        // A height the person chose: the text clips, fading out at the bottom.
+        <div className="h-full overflow-hidden mlch-fade-bottom">
+          <Body node={node} mulchId={mulchId} />
+        </div>
       ) : (
         <Body node={node} mulchId={mulchId} />
       )}
-      {long && !editing && (
+      {(long || node.fixedH) && !editing && (
         <button
           className="nodrag absolute top-2 right-2 p-1 rounded-md text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-paper-2 hover:text-ink"
           onClick={() => setOpen(node.id)}
@@ -320,19 +328,27 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
       ))}
       {selected && !editing && !readOnly && (
         <>
-          {/* Width only (height follows the content): the right edge, and a visible corner handle. */}
-          {(["right", "bottom-right"] as const).map((position) => (
+          {/* The right edge sets the width; the bottom edge and the corner the height too (pictures, files and players keep their shape). */}
+          {(sizedByShape ? (["right", "bottom-right"] as const) : (["right", "bottom", "bottom-right"] as const)).map((position) => (
             <NodeResizeControl
               key={position}
               position={position}
-              variant={position === "right" ? ResizeControlVariant.Line : ResizeControlVariant.Handle}
-              resizeDirection="horizontal"
+              variant={position === "bottom-right" ? ResizeControlVariant.Handle : ResizeControlVariant.Line}
+              resizeDirection={position === "right" || sizedByShape ? "horizontal" : position === "bottom" ? "vertical" : undefined}
               minWidth={140}
               maxWidth={1400}
-              className={position === "right" ? "mlch-resize" : "mlch-resize-corner"}
-              onResizeEnd={(_event, params) =>
-                apply([{ op: "updateNode", id: node.id, patch: { w: Math.round(params.width), x: Math.round(params.x), userTouched: true } }])
-              }
+              minHeight={48}
+              className={position === "bottom-right" ? "mlch-resize-corner" : "mlch-resize"}
+              onResizeEnd={(_event, params) => {
+                const height = position !== "right" && !sizedByShape;
+                apply([
+                  {
+                    op: "updateNode",
+                    id: node.id,
+                    patch: { w: Math.round(params.width), x: Math.round(params.x), ...(height ? { h: Math.round(params.height), y: Math.round(params.y), fixedH: true } : {}), userTouched: true },
+                  },
+                ]);
+              }}
             />
           ))}
         </>

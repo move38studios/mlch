@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
-import { allowedManifest, filesOf, sharedMulch } from "../shares";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { allowedManifest, filesOf, findOwnShare, plainNote, sharedMulch } from "../shares";
 
 afterEach(() => {
   delete process.env.MLCH_SHARE_URL;
@@ -50,5 +53,27 @@ describe("sharing", () => {
     // A link that can't be read keeps only its title.
     expect(shared.mulch.nodes.d).toMatchObject({ kind: "ref", title: "Gone", ref: { mulchId: "shared", itemId: "" } });
     expect(filesOf(mulch.nodes.c as never)).toEqual(["assets/ab12.pdf", "assets/ab12.md"]);
+  });
+
+  it("knows its own shares, by server and share id", async () => {
+    const library = await fs.mkdtemp(path.join(os.tmpdir(), "mlch-own-"));
+    process.env.MLCH_LIBRARY = library;
+    try {
+      await fs.mkdir(path.join(library, "20261013-1200-aaaaaa"));
+      const manifestUrl = "https://share.mlch.app/api/shares/abc123/manifest";
+      await fs.writeFile(path.join(library, "20261013-1200-aaaaaa", "shares.json"), JSON.stringify([{ id: "abc123", ownerToken: "t", url: "https://share.mlch.app/s/abc123/", manifestUrl, kind: "mulch", createdAt: 1 }]));
+      expect(await findOwnShare(manifestUrl)).toEqual({ mulchId: "20261013-1200-aaaaaa" });
+      expect(await findOwnShare("https://share.mlch.app/api/shares/abc123/manifest/")).toEqual({ mulchId: "20261013-1200-aaaaaa" });
+      expect(await findOwnShare("https://share.mlch.app/api/shares/zzz999/manifest")).toBeUndefined();
+      expect(await findOwnShare("https://mine.example/api/shares/abc123/manifest")).toBeUndefined();
+    } finally {
+      delete process.env.MLCH_LIBRARY;
+      await fs.rm(library, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps notes' words, not their HTML", () => {
+    expect(plainNote('<p style="text-align: right;">One</p><p>Two&nbsp;&amp; three<br>four</p>')).toBe("One\nTwo & three\nfour\n");
+    expect(plainNote("No *tags* here")).toBe("No *tags* here");
   });
 });

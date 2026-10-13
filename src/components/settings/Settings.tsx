@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
 import type { AgentHarnessId, AgentHarnessStatus } from "@/lib/agent/types";
@@ -182,6 +183,28 @@ export function Settings() {
   const [view, setView] = useState<SettingsView>();
   const [harnesses, setHarnesses] = useState<AgentHarnessStatus[]>();
   const [saved, setSaved] = useState(false);
+  const router = useRouter();
+  const [scrolled, setScrolled] = useState(false);
+  // The desktop bridge exists only in the browser: decided after the first render so it matches the server's.
+  const [inApp, setInApp] = useState(false);
+  useEffect(() => setInApp(!!desktop()), []);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    // Back: Esc (when not typing) and ⌘[.
+    const onKey = (event: KeyboardEvent) => {
+      const typing = event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable]");
+      if ((event.key === "Escape" && !typing) || (event.metaKey && event.key === "[")) {
+        event.preventDefault();
+        router.push("/");
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [router]);
   const [report, setReport] = useState<string>();
 
   const loadSettings = useCallback(async () => {
@@ -219,10 +242,10 @@ export function Settings() {
 
   return (
     <main className="min-h-full">
-      <header className="drag h-12" />
-      <div className="max-w-2xl mx-auto px-6 pb-16">
-        <div className="flex items-center gap-2 pb-2">
-          <Link href="/" className="-ml-2 p-1.5 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink" aria-label="Home" title="Home">
+      {/* The bar stays at the top (and is the window's drag area); a hairline once the page has scrolled. */}
+      <header className={`drag sticky top-0 z-20 bg-paper ${scrolled ? "border-b border-line" : "border-b border-transparent"}`}>
+        <div className="max-w-2xl mx-auto px-6 pt-12 pb-2 flex items-center gap-2">
+          <Link href="/" className="no-drag -ml-2 p-1.5 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink" aria-label="Home" title="Home">
             <ArrowLeft size={18} strokeWidth={1.75} />
           </Link>
           <h1 className="text-[26px] font-semibold tracking-[-0.02em]">Settings</h1>
@@ -232,6 +255,8 @@ export function Settings() {
             </span>
           )}
         </div>
+      </header>
+      <div className="max-w-2xl mx-auto px-6 pb-16">
         <Section title="AI">
           {!harnesses && (
             <p className="text-[14px] text-ink-3 inline-flex items-center gap-2">
@@ -244,7 +269,7 @@ export function Settings() {
                 key={h.id}
                 className={`flex items-start gap-3 rounded-xl bg-chrome px-4 py-3 cursor-pointer ${settings?.harness === h.id ? "border-[1.5px] border-ink" : "border border-line hover:border-line-2"}`}
               >
-                <input type="radio" name="harness" checked={settings?.harness === h.id} onChange={() => update({ harness: h.id })} className="mt-1 accent-black" />
+                <input type="radio" name="harness" checked={settings?.harness === h.id} onChange={() => update({ harness: h.id })} className="mt-1" />
                 <div className="flex-1 min-w-0">
                   <div className="text-[14.5px] font-medium">
                     {h.label} {h.version && <span className="text-ink-3 font-normal">{h.version}</span>}
@@ -415,7 +440,7 @@ export function Settings() {
             >
               Save diagnostic report
             </button>
-            {desktop() && (
+            {inApp && (
               <button onClick={() => void desktop()?.openLogs()} className={SECONDARY}>
                 Open logs folder
               </button>

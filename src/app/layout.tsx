@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Barriecito, Schibsted_Grotesk } from "next/font/google";
 import "./globals.css";
 import { ScreenshotListener } from "@/components/desktop/Screenshot";
+import { SearchKey } from "@/components/desktop/SearchKey";
 
 /* Interface: a sturdy, slightly condensed grotesque that sits quietly next
    to the hand-drawn logo. Barriecito (the logo's lettering) is reserved for
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <ScreenshotListener />
+        <SearchKey />
       </body>
     </html>
   );

@@ -67,6 +67,8 @@ export interface MulchNode {
   y: number;
   w?: number;
   h?: number;
+  /** The person set the height (resized it): `h` is kept, the text clips. Otherwise `h` is the measured height. */
+  fixedH?: boolean;
   /** Short heading. Optional for ideas and notes, whose text is the content. */
   title?: string;
   /** Body text (markdown allowed for writeups and docs). */

@@ -103,13 +103,17 @@ function toFlowNodes(mulch: Mulch, previous: FlowNode[], fresh: Record<string, n
   });
   const nodes: FlowNode[] = Object.values(mulch.nodes).map((node) => {
     const old = prev.get(node.id);
+    // While the person resizes a card, its live size and position win over the stored ones.
+    const resizing = old?.resizing;
     return {
       id: node.id,
       type: "mulch",
-      position: old?.dragging ? old.position : { x: node.x, y: node.y },
-      width: node.w ?? NODE_WIDTH[node.kind],
+      position: old?.dragging || resizing ? old.position : { x: node.x, y: node.y },
+      width: resizing ? old.width : node.w ?? NODE_WIDTH[node.kind],
+      ...(resizing ? { height: old.height } : node.fixedH && node.h ? { height: node.h } : {}),
       selected: old?.selected,
       dragging: old?.dragging,
+      resizing,
       measured: old?.measured,
       data: { node, mulchId: mulch.id, fresh: !!fresh[node.id] && now - fresh[node.id] < FRESH_MS },
     };
@@ -152,6 +156,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
   const [selectedEdges, setSelectedEdges] = useState<Set<string>>(new Set());
   const [draft, setDraft] = useState<{ x: number; y: number; text: string }>();
   const dragStart = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const resizingIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setNodes((previous) => toFlowNodes(mulch, previous, fresh));
@@ -174,10 +179,16 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
       const sizes: MulchOp[] = [];
       const touchedGroups = new Set<string>();
       for (const change of changes) {
-        if (change.type !== "dimensions" || !change.dimensions || change.resizing) continue;
+        if (change.type !== "dimensions") continue;
+        // A resize in progress: nothing is written until it ends (onResizeEnd writes the size).
+        if (change.resizing !== undefined) {
+          if (change.resizing) resizingIds.current.add(change.id);
+          else resizingIds.current.delete(change.id);
+        }
+        if (!change.dimensions || change.resizing || resizingIds.current.has(change.id)) continue;
         if (change.id.startsWith(GROUP_PREFIX)) continue;
         const node = mulch.nodes[change.id];
-        if (!node) continue;
+        if (!node || node.fixedH) continue;
         if (node.groupId) touchedGroups.add(node.groupId);
         const h = Math.round(change.dimensions.height);
         if (h > 0 && Math.abs((node.h ?? 0) - h) > 2) sizes.push({ op: "updateNode", id: node.id, patch: { h } });

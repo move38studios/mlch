@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FOCUS_SEARCH } from "@/components/desktop/SearchKey";
 import { Archive, ArchiveRestore, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { Scribble, Wordmark } from "@/components/brand/Scribble";
 import Link from "next/link";
@@ -56,6 +57,16 @@ export function Home() {
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
   const { results } = useSearch(query);
+  const searchField = useRef<HTMLInputElement>(null);
+  const loaded = mulches !== undefined;
+
+  // ⌘K (SearchKey): the field takes focus, also when home was opened for it.
+  useEffect(() => {
+    const focus = () => searchField.current?.focus();
+    window.addEventListener(FOCUS_SEARCH, focus);
+    if (new URLSearchParams(window.location.search).has("search")) focus();
+    return () => window.removeEventListener(FOCUS_SEARCH, focus);
+  }, [loaded]);
 
   // First run in the desktop app: the checklist.
   useEffect(() => {
@@ -178,6 +189,7 @@ export function Home() {
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none"
               />
               <input
+                ref={searchField}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search"

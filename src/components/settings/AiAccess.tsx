@@ -41,7 +41,7 @@ export function AiAccess({
       </div>
       {mode === "subscription" ? (
         <label className="flex items-start gap-2 text-[13px] text-ink-2 max-w-[520px]">
-          <input type="checkbox" checked={consented} onChange={(e) => onChange({ consent: e.target.checked })} className="mt-0.5 accent-black" />
+          <input type="checkbox" checked={consented} onChange={(e) => onChange({ consent: e.target.checked })} className="mt-0.5" />
           <span>
             I use my own {names.app}, installed, paid for and signed in on this Mac. mlch runs it here, on my machine, and what it does counts against my {names.plan} plan. I am responsible for that use.
           </span>

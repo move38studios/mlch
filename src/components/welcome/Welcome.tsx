@@ -6,7 +6,7 @@ import { ArrowLeft, Check, Loader2, X } from "lucide-react";
 import type { AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
 import { Recorder } from "@/lib/voice/recorder";
-import { SharingChoice } from "@/components/settings/Sharing";
+import { SharingChoice, useSharing } from "@/components/settings/Sharing";
 import { Sources } from "@/components/settings/Sources";
 import { AiAccess, type AuthMode } from "@/components/settings/AiAccess";
 import { KeyField } from "@/components/settings/KeyField";
@@ -224,10 +224,9 @@ function SystemAudio({ available }: { available: boolean }) {
   return (
     <Card>
       <div className="flex items-center gap-3">
-        <span className="text-[15px] font-semibold flex-1">The other side of calls</span>
-        {state === "done" ? (
-          <Done>Asked</Done>
-        ) : (
+        <span className="text-[15px] font-semibold flex-1">Call audio</span>
+        {/* macOS has no public way to read this permission (a denied tap is silent), so no status is shown. */}
+        {state !== "done" && (
           <button onClick={() => void ask()} disabled={!available || state === "asking"} className="h-8 px-3.5 rounded-lg bg-amber text-ink text-[13px] font-semibold disabled:bg-paper-2 disabled:text-ink-3">
             {state === "asking" ? "Asking" : "Allow"}
           </button>
@@ -236,10 +235,11 @@ function SystemAudio({ available }: { available: boolean }) {
       <p className="mt-1 text-[13.5px] text-ink-2">
         {!available
           ? "Not available on this Mac."
-          : state === "done"
-            ? "If you chose Don't Allow, turn mlch on in System Settings > Privacy & Security > Screen & System Audio Recording."
-            : "During a call, mlch records the Mac's sound so it hears the other people too. macOS asks for System Audio Recording."}
+          : "To hear the other people on a call, mlch records your Mac's sound during calls. macOS asks you to allow this."}
       </p>
+      {available && state === "done" && (
+        <p className="mt-1 text-[13.5px] text-ink-2">If it is off: System Settings &gt; Privacy &amp; Security &gt; Screen &amp; System Audio Recording.</p>
+      )}
       {state === "failed" && <p className="mt-2 text-[13px] text-danger">{error ?? "Could not ask."}</p>}
     </Card>
   );
@@ -258,6 +258,7 @@ export function Welcome() {
   const [harnesses, setHarnesses] = useState<AgentHarnessStatus[]>();
   const [step, setStep] = useState<Step>();
   const [openAtLogin, setOpenAtLogin] = useState(false);
+  const sharing = useSharing((s) => s.view);
 
   const load = useCallback(async () => {
     const [onboarding, agents] = await Promise.all([
@@ -320,7 +321,9 @@ export function Welcome() {
   const go = (offset: number) => setStep(STEPS[Math.min(STEPS.length - 1, Math.max(0, index + offset))]);
   const speechReady = status.local.model === "present";
   const speechDone = status.transcription === "local" ? status.local.installed : status.keys.groq;
-  const canContinue = step === "ai" ? !!harness : step === "access" ? !!harness && usable(harness) : step === "speech" ? speechDone : true;
+  // mlch.app sharing is chosen only with a subscription; No sharing and an own server go on.
+  const sharingDone = !sharing || sharing.mode !== "mlch" || !!sharing.account?.canShare;
+  const canContinue = step === "ai" ? !!harness : step === "access" ? !!harness && usable(harness) : step === "speech" ? speechDone : step === "sharing" ? sharingDone : true;
   const optional = step === "web" && !KEYS.some((k) => status.keys[k.id]);
 
   /* What is downloading, for the footer. */
@@ -588,7 +591,7 @@ export function Welcome() {
             </div>
           </div>
           <label className="mt-5 flex items-center gap-2.5 text-[14px]">
-            <input type="checkbox" checked={openAtLogin} onChange={(e) => void desktop()?.openAtLogin?.(e.target.checked).then(setOpenAtLogin)} className="h-4 w-4 accent-black" />
+            <input type="checkbox" checked={openAtLogin} onChange={(e) => void desktop()?.openAtLogin?.(e.target.checked).then(setOpenAtLogin)} className="h-4 w-4" />
             Open mlch at login
           </label>
         </>

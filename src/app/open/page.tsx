@@ -14,9 +14,9 @@ function Open() {
     let cancelled = false;
     void fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ manifest }) })
       .then(async (response) => {
-        const body = (await response.json().catch(() => ({}))) as { mulchId?: string; error?: string };
+        const body = (await response.json().catch(() => ({}))) as { mulchId?: string; nodeId?: string; error?: string };
         if (cancelled) return;
-        if (body.mulchId) router.replace(`/n/${body.mulchId}`);
+        if (body.mulchId) router.replace(`/n/${body.mulchId}${body.nodeId ? `?focus=${body.nodeId}` : ""}`);
         else setError(body.error ?? "Could not open it.");
       })
       .catch(() => !cancelled && setError("Could not open it."));
