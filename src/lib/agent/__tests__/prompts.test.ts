@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { settingsSchema } from "@/lib/settings";
-import { fastPrompt, makerPrompt, PROMPT_DEFAULTS, slowPrompt } from "../prompts";
+import { commandPrompt, DEFAULT_HOUSE_STYLE, fastPrompt, makerPrompt, PROMPT_DEFAULTS, slowPrompt } from "../prompts";
 
 describe("prompts", () => {
   it("uses the defaults when nothing is edited", () => {
@@ -23,7 +23,16 @@ describe("prompts", () => {
   });
 
   it("keeps the hand-over instructions for the maker whatever the edit", () => {
-    const settings = settingsSchema.parse({ harness: "codex", prompts: { maker: "Make it nice." } });
+    const settings = settingsSchema.parse({ harness: "codex", prompts: { maker: "Make it nice." }, style: "" });
     expect(makerPrompt(settings)).toMatch(/^Make it nice\.\n\nSave finished files/);
+  });
+
+  it("starts with mlch's house style; a cleared one is none, the maker gets file places", () => {
+    expect(commandPrompt(settingsSchema.parse({}))).toContain(DEFAULT_HOUSE_STYLE);
+    expect(commandPrompt(settingsSchema.parse({ style: "", styleCleared: true }))).not.toContain("<house_style>");
+    expect(commandPrompt(settingsSchema.parse({ style: "Green and gold." }))).toContain("Green and gold.");
+    const maker = makerPrompt(settingsSchema.parse({}));
+    expect(maker).not.toContain("{{file:mlch:");
+    expect(maker).toMatch(/public\/fonts\/SchibstedGrotesk\.woff2/);
   });
 });

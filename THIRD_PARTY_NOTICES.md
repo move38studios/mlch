@@ -25,3 +25,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Schibsted Grotesk
+
+`public/fonts/SchibstedGrotesk*.woff2` (embedded in files the AI makes, when the house style asks for it): Schibsted Grotesk, Copyright 2023 The Schibsted Grotesk Project Authors (https://github.com/schibsted/schibsted-grotesk), licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org).

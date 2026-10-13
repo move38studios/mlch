@@ -618,7 +618,9 @@ export async function embedFiles(content: string, readRoot: string | undefined):
   const uris = new Map<string, string>();
   for (const name of found) {
     const type = EMBED_TYPES[path.extname(name).toLowerCase()];
-    const file = readRoot ? resolveReadable(readRoot, name) : undefined;
+    // mlch's own fonts and marks ship with the app: {{file:mlch:fonts/SchibstedGrotesk.woff2}}.
+    const own = /^mlch:((?:fonts|brand)\/[A-Za-z0-9._-]+)$/.exec(name);
+    const file = own ? path.join(process.cwd(), "public", own[1]) : readRoot ? resolveReadable(readRoot, name) : undefined;
     if (!type) problems.push(`${name}: only images and fonts can be embedded.`);
     else if (!file) problems.push(`${name}: outside what you may read.`);
     else {

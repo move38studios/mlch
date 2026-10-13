@@ -8,6 +8,7 @@
  * - ingest: builds items from a dropped document or an explored folder.
  */
 
+import path from "node:path";
 import type { Enrichment, PromptKey, Settings } from "@/lib/settings";
 
 const BASE = `You work in mlch, on one of the person's canvases (a "mulch"): an endless 2D canvas where a person thinks out loud. Ideas emerge from mess and cross-pollination and happen at the intersections, so you capture and enrich; you do not funnel towards one answer unless asked.
@@ -144,10 +145,31 @@ function lane(settings: Settings, key: PromptKey): string {
   return `${part(settings, "base")}\n\n${part(settings, key)}`;
 }
 
-/** The person's house style, for the lanes that make things. */
-function styleBlock(settings: Settings): string {
-  const style = settings.style.trim();
+/**
+ * The house style a new install starts with: mlch's own look. It is the
+ * person's to rewrite or delete (Settings, Style; "Reset to default" brings it back).
+ */
+export const DEFAULT_HOUSE_STYLE = `Minimal and quiet, like black marker on a clean page.
+- Background: off-white paper #FCFCFA; white #FFFFFF for cards and panels.
+- Text: black #000000, in three strengths (100%, 64%, 40% opacity); thin hairlines rgba(0,0,0,0.1) to separate.
+- One accent: amber #FFC000, only as a fill (a highlight behind a word, a marker, one key number), never as text colour, at most once per slide or section.
+- Type: Schibsted Grotesk for everything. Embed it: @font-face { font-family: "Schibsted Grotesk"; src: url("{{file:mlch:fonts/SchibstedGrotesk.woff2}}") format("woff2"); font-weight: 400 900; } (italic: {{file:mlch:fonts/SchibstedGrotesk-Italic.woff2}}). Large, tight headlines (weight 600-700, slightly negative letter-spacing), calm body text (400), sentence case, no all-caps labels.
+- Space: generous margins, left-aligned, few words, lots of white. No gradients, no drop shadows, no stock icons, no emoji.
+- Slides: one idea each; big statement slides; numbers large; a thin rule or a small amber mark rather than decoration.
+- Charts and tables: black and greys, amber for the one thing to look at.
+- PowerPoint and Word: Schibsted Grotesk if it is installed, otherwise Helvetica Neue; the same colours and space.
+- At the end (the last slide, or the foot of a page or document), small and light (40% black): "made with mlch".`;
+
+/** The person's house style, for the lanes that make things. Unset: mlch's default; cleared: none. */
+export function houseStyle(settings: Settings): string {
+  return (settings.style ?? DEFAULT_HOUSE_STYLE).trim();
+}
+
+function styleBlock(settings: Settings, maker = false): string {
+  let style = houseStyle(settings);
   if (!style) return "";
+  // The maker works with files: mlch's own fonts and marks by their place on this Mac.
+  if (maker) style = style.replace(/\{\{file:mlch:((?:fonts|brand)\/[A-Za-z0-9._-]+)\}\}/g, (_all, file: string) => path.join(process.cwd(), "public", file));
   return `\n\nHouse style: the person's own rules for everything you make (decks, documents, pages, diagrams, images). Follow them unless an instruction says otherwise. Files they name (a logo, fonts) are on this Mac; read them to use them.\n<house_style>\n${style}\n</house_style>`;
 }
 
@@ -166,7 +188,7 @@ export function slowPrompt(settings: Settings, web: boolean): string {
 
 /** How to hand files over depends on the harness, so it is not editable. */
 export function makerPrompt(settings: Settings): string {
-  return `${part(settings, "maker")}${styleBlock(settings)}
+  return `${part(settings, "maker")}${styleBlock(settings, true)}
 
 Save finished files directly in the artifacts folder (not in a subfolder), with short lowercase names. Never overwrite a file that is already there; pick a new name.${
     settings.harness === "claude"

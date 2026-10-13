@@ -46,9 +46,12 @@ export const settingsSchema = z.object({
     .default({}),
   /**
    * The person's house style for what the AI makes (decks, documents, pages, images): brand,
-   * colours, fonts, tone, a logo's path on this Mac. Empty: each thing is designed to suit its content.
+   * colours, fonts, tone, a logo's path on this Mac. Absent: mlch's default look (prompts.ts
+   * DEFAULT_HOUSE_STYLE); empty: none, each thing is designed to suit its content.
    */
-  style: z.string().max(20_000).default(""),
+  style: z.string().max(20_000).optional(),
+  /** The person emptied the style on purpose (an empty style from before the default existed means unset). */
+  styleCleared: z.boolean().optional(),
   /**
    * Folders linked once and searched from every mulch (read-only). `auto`:
    * the AI uses them on its own; `asked`: only when the person asks.
@@ -104,15 +107,24 @@ function file(): string {
 
 export async function readSettings(): Promise<Settings> {
   try {
-    return settingsSchema.parse(JSON.parse(await fs.readFile(file(), "utf8")));
+    return normalize(settingsSchema.parse(JSON.parse(await fs.readFile(file(), "utf8"))));
   } catch {
     return settingsSchema.parse({});
   }
 }
 
+/** An empty style is "none" only when the person cleared it; otherwise mlch's default applies. */
+function normalize(settings: Settings): Settings {
+  if (settings.style !== undefined && !settings.style.trim() && !settings.styleCleared) return { ...settings, style: undefined };
+  return settings;
+}
+
 export async function writeSettings(patch: unknown): Promise<Settings> {
   const current = await readSettings();
-  const next = settingsSchema.parse({ ...current, ...(patch as object) });
+  const merged: Record<string, unknown> = { ...current, ...(patch as object) };
+  // null resets a setting to its default (the style).
+  for (const [key, value] of Object.entries(merged)) if (value === null) delete merged[key];
+  const next = normalize(settingsSchema.parse(merged));
   await atomicWriteFile(file(), JSON.stringify(next, null, 2));
   return next;
 }

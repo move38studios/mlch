@@ -18,7 +18,7 @@ interface SettingsData {
   models: Record<AgentHarnessId, Partial<Record<Lane, string>>>;
   enrich: string[];
   prompts: Record<string, string | undefined>;
-  style: string;
+  style?: string;
   dailySpendCapUsd: number;
   transcription: "groq" | "local";
   agentAuth: Record<AgentHarnessId, AuthMode>;
@@ -32,6 +32,7 @@ interface SettingsView {
   desktop: boolean;
   defaults: Record<AgentHarnessId, Partial<Record<Lane, string>>>;
   promptDefaults: Record<string, string>;
+  styleDefault: string;
 }
 
 const LANES: Array<{ id: Lane; label: string }> = [
@@ -225,7 +226,8 @@ export function Settings() {
     if (loaded && window.location.hash) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
   }, [loaded]);
 
-  async function update(patch: Partial<SettingsData>) {
+  /** null resets a setting to its default. */
+  async function update(patch: { [K in keyof SettingsData]?: SettingsData[K] | null } & { styleCleared?: boolean }) {
     const response = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     setView((await response.json()) as SettingsView);
     setSaved(true);
@@ -379,13 +381,25 @@ export function Settings() {
           <Section title="Style">
             <p className="text-[13px] text-ink-3 mb-2.5">How decks, documents, pages and images should look: colours, fonts, tone, your logo&rsquo;s place on this Mac. Used for everything the AI makes.</p>
             <textarea
-              defaultValue={settings.style}
-              onBlur={(e) => e.target.value !== settings.style && void update({ style: e.target.value })}
-              rows={5}
+              key={settings.style === undefined ? "default" : "own"}
+              defaultValue={settings.style ?? view.styleDefault}
+              onBlur={(e) => {
+                const text = e.target.value;
+                // Emptied: no style at all. Back to the default text: the default (it follows new releases).
+                if (!text.trim()) settings.style !== "" && void update({ style: "", styleCleared: true });
+                else if (text.trim() === view.styleDefault.trim()) settings.style !== undefined && void update({ style: null, styleCleared: false });
+                else if (text !== settings.style) void update({ style: text, styleCleared: false });
+              }}
+              rows={8}
               placeholder={"Colours: #0B3D2E and #F2E8D5. Headings in Fraunces, text in Inter.\nLogo: ~/Brand/logo.svg, top left on title slides.\nFew words per slide."}
               aria-label="Style"
               className="w-full rounded-lg border border-line bg-chrome px-3 py-2 text-[13.5px] leading-relaxed outline-none focus:border-ink resize-y placeholder:text-ink-3"
             />
+            {settings.style !== undefined && (
+              <button onClick={() => void update({ style: null, styleCleared: false })} className={`mt-1 -ml-2.5 ${SECONDARY}`}>
+                Reset to default
+              </button>
+            )}
           </Section>
         )}
         {view && settings && (

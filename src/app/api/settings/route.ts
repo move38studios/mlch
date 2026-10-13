@@ -3,7 +3,7 @@ import { DEFAULT_MODELS, readSettings, writeSettings } from "@/lib/settings";
 import { getCredential, isDesktop } from "@/lib/desktop/server";
 import { usageToday } from "@/lib/agent/usage";
 import { spentToday } from "@/lib/media/spend";
-import { PROMPT_DEFAULTS } from "@/lib/agent/prompts";
+import { DEFAULT_HOUSE_STYLE, PROMPT_DEFAULTS } from "@/lib/agent/prompts";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,7 @@ async function view() {
     desktop: isDesktop(),
     defaults: DEFAULT_MODELS,
     promptDefaults: PROMPT_DEFAULTS,
+    styleDefault: DEFAULT_HOUSE_STYLE,
   };
 }
 

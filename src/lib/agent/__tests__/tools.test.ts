@@ -157,4 +157,13 @@ describe("mulch tools", () => {
     expect((await runtime.execute("remove_nodes", { ids: ["ai"] })).ok).toBe(false);
     expect((await runtime.execute("connect", { edges: [] })).ok).toBe(false);
   });
+
+  it("embeds mlch's own fonts, and nothing else from the app", async () => {
+    const { embedFiles } = await import("../tools");
+    const ok = await embedFiles('src: url("{{file:mlch:fonts/SchibstedGrotesk.woff2}}")', undefined);
+    expect(ok.problems).toEqual([]);
+    expect(ok.content).toMatch(/^src: url\("data:font\/woff2;base64,/);
+    const outside = await embedFiles("{{file:mlch:../package.json}}", undefined);
+    expect(outside.problems.length).toBe(1);
+  });
 });
