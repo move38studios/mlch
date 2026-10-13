@@ -17,6 +17,7 @@ import { r2Key, type Result } from "./room";
 import { accountRoutes, accountsOn, mayCreate, recordShare } from "./accounts";
 import { adminRoutes } from "./admin";
 import type { OpBatch } from "../../src/lib/mulch/types";
+import { artifactKindOf } from "../../src/lib/artifacts/kind";
 
 export { ShareRoom, CreateLimiter } from "./room";
 
@@ -313,7 +314,10 @@ async function shareHost(request: Request, env: Env, url: URL, parts: string[]):
       // Pages and drawings open in a frame page with Full screen; other files as themselves.
       if (/\.(html?|svg)$/i.test(info.entry!)) {
         const nonce = randomId(16);
-        const page = withPreviewMeta(framePage(info.title, info.entry!, nonce), await previewMeta(env, id, info.title, "artifact"));
+        // A deck or a page, as the file declares (or looks, for files made before kinds).
+        const file = /\.html?$/i.test(info.entry!) ? await env.SHARES.get(r2Key.file(id, info.entry!)) : null;
+        const kind = file ? artifactKindOf(await file.text()) : "page";
+        const page = withPreviewMeta(framePage(info.title, info.entry!, nonce, kind),await previewMeta(env, id, info.title, "artifact"));
         return new Response(request.method === "HEAD" ? null : page, {
           headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": frameCsp(nonce), "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache" },
         });

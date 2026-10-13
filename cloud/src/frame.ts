@@ -1,13 +1,17 @@
 /**
- * The page a shared made file (an HTML page or deck, an SVG) opens in: the file
- * in a sandboxed frame on a 16:9 stage, as in the app, with Full screen and a
- * switch to fill the window. The file itself stays at /s/<id>/<entry>.
+ * The page a shared made file (an HTML deck or page, an SVG) opens in: the file
+ * in a sandboxed frame filling the window, as in the app. A deck letterboxes its
+ * own slides (src/lib/artifacts/deck.ts) and gets Full screen where the browser
+ * can do it (not on an iPhone); a page scrolls, edge to edge. The file itself
+ * stays at /s/<id>/<entry>.
  */
+
+import type { ArtifactKind } from "../../src/lib/artifacts/kind";
 
 const escape = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** Wording is placeholder (George). */
-export function framePage(title: string, entry: string, nonce: string): string {
+export function framePage(title: string, entry: string, nonce: string, kind: ArtifactKind = "page"): string {
   const name = escape(title || entry);
   return `<!doctype html>
 <html lang="en">
@@ -21,31 +25,37 @@ export function framePage(title: string, entry: string, nonce: string): string {
 <link rel="apple-touch-icon" href="/brand/icon-180.png">
 <style>
   html, body { margin: 0; height: 100%; background: #161616; font: 13px/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
-  /* The page above, the buttons in their own strip below, so a large page never covers them. */
-  #stage { position: fixed; inset: 0 0 48px 0; display: grid; place-items: center; container-type: size; padding: 12px 12px 0; box-sizing: border-box; }
-  #stage:fullscreen { inset: 0; padding: 0; background: #000; }
-  iframe { border: 0; background: #fff; border-radius: 10px; width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9; }
-  #stage:fullscreen iframe { border-radius: 0; }
-  body.fill iframe { width: 100%; height: 100%; aspect-ratio: auto; }
-  #bar { position: fixed; left: 0; right: 0; bottom: 0; height: 48px; padding: 0 12px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  #stage { position: fixed; inset: 0; display: flex; box-sizing: border-box; }
+  iframe { flex: 1; min-width: 0; height: 100%; border: 0; background: #fff; }
+  /* A deck: the frame above, Full screen in its own strip below, so the slides never cover it. */
+  body.deck #stage { padding: 12px 12px 0; }
+  body.deck.full #stage { bottom: 48px; }
+  body.deck iframe { background: #000; border-radius: 10px; }
+  body.deck #stage:fullscreen { inset: 0; padding: 0; background: #000; }
+  body.deck #stage:fullscreen iframe { border-radius: 0; }
+  @media (max-width: 640px) { body.deck #stage { padding: 0; } body.deck iframe { border-radius: 0; } }
+  #bar { display: none; position: fixed; left: 0; right: 0; bottom: 0; height: 48px; padding: 0 12px; box-sizing: border-box; align-items: center; justify-content: flex-end; gap: 6px; }
+  body.deck.full #bar { display: flex; }
   button { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: rgba(255,255,255,.14); color: #fff; font: inherit; cursor: pointer; }
   button:hover { background: rgba(255,255,255,.24); }
-  :fullscreen ~ #bar { display: none; }
+  :fullscreen ~ #bar { display: none !important; }
 </style>
 </head>
-<body>
+<body class="${kind}">
 <div id="stage"><iframe src="${escape(encodeURI(entry))}" sandbox="allow-scripts" title="${name}"></iframe></div>
 <div id="bar">
-  <button id="fill" type="button">Fill the window</button>
   <button id="full" type="button">Full screen</button>
 </div>
 <script nonce="${nonce}">
   const stage = document.getElementById("stage");
   const frame = stage.querySelector("iframe");
-  const fill = document.getElementById("fill");
   frame.addEventListener("load", () => frame.focus());
-  document.getElementById("full").addEventListener("click", () => (stage.requestFullscreen ? stage.requestFullscreen() : frame.webkitRequestFullscreen && frame.webkitRequestFullscreen()).catch?.(() => {}));
-  fill.addEventListener("click", () => { fill.textContent = document.body.classList.toggle("fill") ? "16:9" : "Fill the window"; frame.focus(); });
+  // Only where full screen does something: an iPhone has neither.
+  if (document.fullscreenEnabled || document.webkitFullscreenEnabled) document.body.classList.add("full");
+  document.getElementById("full").addEventListener("click", () => {
+    const go = stage.requestFullscreen ? stage.requestFullscreen() : stage.webkitRequestFullscreen && stage.webkitRequestFullscreen();
+    if (go && go.catch) go.catch(() => {});
+  });
   document.addEventListener("fullscreenchange", () => frame.focus());
 </script>
 </body>

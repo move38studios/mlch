@@ -221,3 +221,26 @@ test('thumbnail, notify and activity requests reach main with their fields', asy
     { type: 'thumbnail', payload: { path: '/a.pptx', size: 800 } },
   ]);
 });
+
+test('render requests carry the file kind and steps to main, which checks them again', async () => {
+  const { bridge, posted } = client();
+  void bridge.request('render', { url: '/api/mulches/m/artifacts/a.html', steps: 3, kind: 'deck' });
+  void bridge.request('render', { url: '/api/mulches/m/artifacts/b.html', kind: 'poster' });
+  assert.deepEqual(posted.map(m => m.request), [
+    { type: 'render', payload: { url: '/api/mulches/m/artifacts/a.html', steps: 3, kind: 'deck' } },
+    { type: 'render', payload: { url: '/api/mulches/m/artifacts/b.html' } },
+  ]);
+  const rendered = [];
+  const handle = createServerMessageHandler({ shell: {}, dialog: {}, fs, getWindow: () => undefined, render: async (url, options) => { rendered.push([url, options]); return { images: [] }; } });
+  const reply = await handle({ type: 'bridge', id: 1, request: { type: 'render', payload: { url: '/x', steps: 2, kind: 'page' } } });
+  assert.deepEqual(reply.result, { ok: true, value: { images: [] } });
+  assert.deepEqual(rendered, [['/x', { steps: 2, kind: 'page' }]]);
+});
+
+test('render options: steps kept in range, only known kinds', () => {
+  const { renderOptions } = require('../lib/artifact-checks.cjs');
+  assert.deepEqual(renderOptions(3), { steps: 3, kind: undefined });
+  assert.deepEqual(renderOptions({ steps: 40, kind: 'deck' }), { steps: 8, kind: 'deck' });
+  assert.deepEqual(renderOptions({ kind: 'poster' }), { steps: 1, kind: undefined });
+  assert.deepEqual(renderOptions(undefined), { steps: 1, kind: undefined });
+});

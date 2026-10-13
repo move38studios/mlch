@@ -24,13 +24,13 @@ describe("shared artifacts", () => {
     expect(bare.status).toBe(301);
     expect(bare.headers.get("Location")).toBe(`${SHARE}/s/${share.id}/`);
 
-    // The link opens a frame page (Full screen, 16:9) around the file.
+    // The link opens a frame page around the file: a page (no kind declared, no slides) fills it and scrolls.
     const frame = await call(share.url);
     expect(frame.status).toBe(200);
     const framed = await frame.text();
     expect(framed).toContain('<iframe src="deck.html" sandbox="allow-scripts" title="Deck">');
     expect(framed).toContain("<title>Deck</title>");
-    expect(framed).toContain("Full screen");
+    expect(framed).toContain('<body class="page">');
     // Link previews: the title, and the mlch picture until the app uploads one.
     expect(framed).toContain('<meta property="og:title" content="Deck">');
     expect(framed).toContain(`<meta property="og:image" content="${SHARE}/brand/og.png">`);
@@ -58,6 +58,16 @@ describe("shared artifacts", () => {
 
     const image = await call(`${share.url}img/a.png`);
     expect(await image.text()).toBe("PNG");
+  });
+
+  it("open a deck in a frame with Full screen, as its file declares", async () => {
+    const { buildDeck } = await import("../../src/lib/artifacts/deck");
+    const share = await create({ kind: "artifact", title: "Squirrels", entry: "squirrels.html" });
+    await putFile(share.id, share.ownerToken, "squirrels.html", buildDeck({ title: "Squirrels", slides: ["<h1>One</h1>", "<h1>Two</h1>"] }));
+    const framed = await (await call(share.url)).text();
+    expect(framed).toContain('<body class="deck">');
+    expect(framed).toContain("Full screen");
+    expect(framed).toContain("document.fullscreenEnabled || document.webkitFullscreenEnabled");
   });
 
   it("download office files and show PDFs in the browser's own viewer", async () => {

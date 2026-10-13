@@ -80,6 +80,8 @@ export interface MulchNode {
   fileName?: string;
   /** File the item stands for, relative to the mulch folder (docs/<slug>.md, artifacts/<slug>.html). */
   docPath?: string;
+  /** HTML artifacts: a deck (slides, one at a time) or a page (scrolls). Missing on older ones: see artifactKindOf. */
+  artifactKind?: "deck" | "page";
   groupId?: string;
   /** MIME type of the file in assetId (media items). */
   mime?: string;

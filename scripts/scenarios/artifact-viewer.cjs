@@ -1,4 +1,4 @@
-// A made page: double-click opens it on a 16:9 stage; Esc closes it even while the page has the keyboard.
+// A made page: double-click opens it filling the stage; Esc closes it even while the page has the keyboard.
 const assert = require('node:assert/strict');
 
 module.exports = async ({ app, page, base, shot }) => {
@@ -22,7 +22,8 @@ module.exports = async ({ app, page, base, shot }) => {
   await page.waitForTimeout(800);
   const box = await frame.boundingBox();
   console.log('stage', Math.round(box.width), Math.round(box.height), (box.width / box.height).toFixed(3));
-  assert.ok(Math.abs(box.width / box.height - 16 / 9) < 0.02, '16:9');
+  const area = await page.locator('[data-kind]').boundingBox();
+  assert.ok(box.width > area.width - 30 && box.height > area.height - 20, 'a page fills the stage');
   await shot('viewer');
   await frame.click();
   // A real key event through the window (Playwright's own skips Electron's input hook).
