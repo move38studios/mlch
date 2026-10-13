@@ -234,7 +234,16 @@ export class ShareRoom extends DurableObject<Env> {
   async destroy(token: string | undefined): Promise<Result<object>> {
     const owner = await this.owner(token);
     if (!owner.ok) return owner;
-    const id = this.get("id")!;
+    await this.wipe(this.get("id")!);
+    return { ok: true };
+  }
+
+  /** Deletes the share without its owner token: an account deleted from /admin (admin.ts). */
+  async purge(id: string): Promise<void> {
+    await this.wipe(this.get("id") ?? id);
+  }
+
+  private async wipe(id: string): Promise<void> {
     let cursor: string | undefined;
     do {
       const page = await this.env.SHARES.list({ prefix: r2Key.prefix(id), cursor });
@@ -246,7 +255,6 @@ export class ShareRoom extends DurableObject<Env> {
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.schema(); // this instance may still be asked about the share: it no longer exists
-    return { ok: true };
   }
 
   async alarm(): Promise<void> {

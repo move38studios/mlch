@@ -19,5 +19,12 @@ if (built.status !== 0) process.exit(built.status ?? 1);
 fs.copyFileSync(path.join(cloud, "landing", "index.html"), path.join(dist, "index.html"));
 fs.mkdirSync(path.join(dist, "server"));
 fs.copyFileSync(path.join(cloud, "landing", "server.html"), path.join(dist, "server", "index.html"));
+// Legal pages (/privacy, /terms, /refunds, /company), the admin page (/admin), and their stylesheet.
+fs.copyFileSync(path.join(cloud, "landing", "site.css"), path.join(dist, "site.css"));
+for (const name of ["privacy", "terms", "refunds", "company"]) {
+  fs.mkdirSync(path.join(dist, name));
+  fs.copyFileSync(path.join(cloud, "landing", "legal", `${name}.html`), path.join(dist, name, "index.html"));
+}
+fs.cpSync(path.join(cloud, "landing", "admin"), path.join(dist, "admin"), { recursive: true });
 fs.cpSync(path.join(root, "public", "brand"), path.join(dist, "brand"), { recursive: true });
 console.log("Built", path.relative(root, dist));

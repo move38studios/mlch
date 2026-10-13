@@ -15,6 +15,7 @@ import { frameCsp, framePage } from "./frame";
 import { fileHeaders, mimeOf, ownSources, sandboxCsp, validPath } from "./files";
 import { r2Key, type Result } from "./room";
 import { accountRoutes, accountsOn, mayCreate, recordShare } from "./accounts";
+import { adminRoutes } from "./admin";
 import type { OpBatch } from "../../src/lib/mulch/types";
 
 export { ShareRoom, CreateLimiter } from "./room";
@@ -348,6 +349,25 @@ async function shareHost(request: Request, env: Env, url: URL, parts: string[]):
 
 // ---------------------------------------------------------------- router
 
+const LEGAL = new Set(["privacy", "terms", "refunds", "company"]);
+
+const ADMIN_HEADERS = {
+  "Content-Security-Policy": [
+    "default-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "img-src 'self'",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join("; "),
+  "Cache-Control": "no-store",
+  "Referrer-Policy": "no-referrer",
+  "X-Content-Type-Options": "nosniff",
+};
+
 /** GET /api/server: what the app needs to know about a server before using it. */
 function serverInfo(env: Env) {
   return { mlch: 1, auth: env.SERVER_KEY ? "key" : accountsOn(env) ? "account" : "none" };
@@ -372,6 +392,10 @@ export async function handle(request: Request, givenEnv: Env): Promise<Response>
   if (parts[0] === "api" && parts[1] === "server" && parts.length === 2) return json(200, serverInfo(env));
   const account = await accountRoutes(request, env, url, parts);
   if (account) return account;
+  if (!onShareHost || share.host === apex.host) {
+    const admin = await adminRoutes(request, env, parts, (path) => asset(env, request, path, ADMIN_HEADERS));
+    if (admin) return admin;
+  }
 
   const shared = parts[0] === "s" || (parts[0] === "api" && parts[1] === "mulches" && parts.length > 2);
   if (shared) {
@@ -389,6 +413,9 @@ export async function handle(request: Request, givenEnv: Env): Promise<Response>
   if (parts[0] === "viewer" || parts[0] === "brand") return env.ASSETS.fetch(request);
   // How to run your own server (linked from the app's Settings, Sharing).
   if (url.pathname === "/server" || url.pathname === "/server/") return asset(env, request, "/server/", { "Cache-Control": "public, max-age=300" });
+  // Legal pages (landing/legal/) and their stylesheet.
+  if (parts.length === 1 && LEGAL.has(parts[0]) && !onShareHost) return asset(env, request, `/${parts[0]}/`, { "Cache-Control": "public, max-age=300" });
+  if (url.pathname === "/site.css") return asset(env, request, "/site.css", { "Cache-Control": "public, max-age=300" });
   if (url.pathname === "/favicon.ico") return Response.redirect(`${url.origin}/brand/icon-32.png`, 301);
   if (url.pathname === "/") {
     if (onShareHost && share.host !== apex.host) return Response.redirect(`${env.APEX_ORIGIN}/`, 301);
