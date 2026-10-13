@@ -37,6 +37,13 @@ function useNeighbours(mulchId?: string, itemId?: string): MulchNode[] {
 }
 
 /** A link card opened: the target in full, where it lives, and what it connects to there. */
+/**
+ * Beside the canvas on a wide screen; on a phone a full-screen sheet over it
+ * (a side column would leave neither the card nor the canvas readable).
+ */
+const PANEL =
+  "float shrink-0 flex flex-col overflow-hidden mlch-sheet sm:w-[min(560px,45%)] sm:mt-[52px] sm:mb-3 sm:ml-3 sm:rounded-2xl max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full max-sm:rounded-none max-sm:border-0 max-sm:pt-[env(safe-area-inset-top)]";
+
 function RefPanel({ node, mulchId, onClose }: { node: MulchNode; mulchId: string; onClose: () => void }) {
   const router = useRouter();
   const readOnly = useCanvasUi((s) => s.readOnly);
@@ -53,7 +60,7 @@ function RefPanel({ node, mulchId, onClose }: { node: MulchNode; mulchId: string
     if (response.ok) onClose();
   };
   return (
-    <aside className="float w-[min(560px,45%)] shrink-0 mt-[52px] mb-3 ml-3 rounded-2xl flex flex-col overflow-hidden">
+    <aside className={PANEL}>
       <div className="h-12 shrink-0 flex items-center gap-2 pl-6 pr-3 text-[12.5px] text-ink-3 min-w-0">
         <Link2 size={13} strokeWidth={1.75} className="shrink-0" />
         <span className="truncate">{target?.place}</span>
@@ -69,7 +76,7 @@ function RefPanel({ node, mulchId, onClose }: { node: MulchNode; mulchId: string
             Bring here
           </button>
         )}
-        <button onClick={onClose} title="Close" aria-label="Close" className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink">
+        <button onClick={onClose} title="Close" aria-label="Close" className="p-1.5 max-sm:p-2.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink">
           <X size={16} strokeWidth={1.75} />
         </button>
       </div>
@@ -195,7 +202,7 @@ export function SidePanel() {
     setDraft(undefined);
   };
   return (
-    <aside className="float w-[min(560px,45%)] shrink-0 mt-[52px] mb-3 ml-3 rounded-2xl flex flex-col overflow-hidden">
+    <aside className={PANEL}>
       <div className="h-12 shrink-0 flex items-center gap-2 pl-6 pr-3 text-[12.5px] text-ink-3">
         {label && <span>{label}</span>}
         {node.fileName && <span className="truncate">{node.fileName}</span>}
@@ -220,7 +227,7 @@ export function SidePanel() {
             <FolderOpen size={15} strokeWidth={1.75} />
           </button>
         )}
-        <button onClick={() => setOpen(undefined)} title="Close" aria-label="Close" className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink">
+        <button onClick={() => setOpen(undefined)} title="Close" aria-label="Close" className="p-1.5 max-sm:p-2.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink">
           <X size={16} strokeWidth={1.75} />
         </button>
       </div>
@@ -228,7 +235,7 @@ export function SidePanel() {
       <div ref={contentRef} className="flex-1 overflow-auto px-6 pt-1 pb-8">
         {node.kind === "image" && node.assetId && mulchId && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={`/api/mulches/${mulchId}/assets/${node.assetId}`} alt={node.text || node.fileName || ""} className="-mx-6 mb-4 block w-[calc(100%+3rem)] max-w-none bg-paper-2" draggable={false} />
+          <img src={`/api/mulches/${mulchId}/assets/${node.assetId}`} alt={node.text || node.fileName || ""} className={node.transparent ? "mx-auto mb-4 block max-w-[min(100%,360px)]" : "-mx-6 mb-4 block w-[calc(100%+3rem)] max-w-none bg-paper-2"} draggable={false} />
         )}
         {node.kind === "media" && mulchId && (
           <div className="-mx-6 mb-4 bg-paper-2">

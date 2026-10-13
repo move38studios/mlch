@@ -316,3 +316,21 @@ select:focus-visible {
   border: 1px solid var(--line);
   padding: 0.3em 0.55em;
 }
+
+/* The side panel as a sheet on a phone: it rises into place. */
+@media (max-width: 639px) {
+  .mlch-sheet {
+    animation: mlch-sheet-up 200ms ease-out;
+  }
+}
+@keyframes mlch-sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mlch-sheet {
+    animation: none;
+  }
+}
