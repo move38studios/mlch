@@ -62,7 +62,7 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
       case 'render': {
         // mlch: screenshots of an artifact page for the agent (see main.cjs renderArtifact).
         if (!render) return fail('Rendering is not available.');
-        return { ok: true, value: await render(payload.url, payload.steps) };
+        return { ok: true, value: await render(payload.url, { steps: payload.steps, kind: payload.kind }) };
       }
       case 'trash': {
         const file = target(payload);

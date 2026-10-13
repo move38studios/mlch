@@ -405,38 +405,83 @@ async function createWindow() {
 }
 
 // mlch: the agent's eyes on an HTML artifact. Loads it in a hidden window (the
-// server sends the same sandboxing CSP), captures the first slides, pressing
-// ArrowRight between them, and reports script errors.
+// server sends the same sandboxing CSP) and reports script errors with screenshots.
+// A deck with the player (src/lib/artifacts/deck.ts) is stepped through slide by
+// slide and measured (overflow, slides visible at once); a page is shot at desktop
+// and phone width and measured (sideways scroll, clipped height, small text). Other
+// files: the first screens, pressing ArrowRight between them. The app phrases the
+// measurements as problems (src/lib/artifacts/checks.ts).
 const ARTIFACT_URL = /^\/api\/mulches\/[a-z0-9-]+\/(artifacts\/[a-z0-9][a-z0-9._-]*\.(html|svg)|model-view\/[a-f0-9]{64}\.(glb|gltf))$/;
-async function renderArtifact(url, steps = 1) {
+const { VISIBLE_SLIDES, PAGE_MEASURE, renderOptions } = require('./lib/artifact-checks.cjs');
+const MAX_DECK_SLIDES = 80;
+const MAX_SHOTS = 12;
+async function renderArtifact(url, options) {
+  const { steps, kind } = renderOptions(options);
   let parsed;
   try { parsed = new URL(url, origin); } catch { throw new Error('Invalid page.'); }
   if (parsed.origin !== origin || !ARTIFACT_URL.test(parsed.pathname)) throw new Error('Only mulch artifacts and models can be rendered.');
-  const view = new BrowserWindow({ show: false, width: 1280, height: 720, webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  const size = kind === 'page' ? { width: 1280, height: 800 } : { width: 1280, height: 720 };
+  const view = new BrowserWindow({ show: false, ...size, useContentSize: true, webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false } });
   const errors = [];
   view.webContents.on('console-message', (event) => { if (event.level === 'error' || event.level === 'warning') errors.push(String(event.message).slice(0, 300)); });
   view.webContents.on('render-process-gone', () => errors.push('The page crashed.'));
   view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   view.webContents.on('will-navigate', (event) => event.preventDefault());
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const run = (code, fallback) => view.webContents.executeJavaScript(code, true).catch(() => fallback);
+  const shot = async (width = 960) => (await view.webContents.capturePage()).resize({ width }).toPNG().toString('base64');
+  const images = [];
+  const result = (extra = {}) => ({ images, errors: [...new Set(errors)].slice(0, 20), ...extra });
   try {
     await Promise.race([view.loadURL(parsed.href), wait(15_000)]);
     // 3D viewers load their model and libraries after the page itself.
     await wait(parsed.pathname.includes('/model-view/') ? 4000 : 900);
-    const images = [];
-    const count = Math.max(1, Math.min(8, steps));
-    for (let i = 0; i < count; i++) {
-      if (i > 0) {
-        view.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
-        view.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' });
-        await wait(700);
+    if (kind === 'deck') {
+      const info = await run('window.__mlchDeck ? { count: window.__mlchDeck.count, expected: window.__mlchDeck.expected } : null', null);
+      const visibleAtLoad = await run(VISIBLE_SLIDES, 0);
+      if (info) {
+        const slides = [];
+        const count = Math.min(MAX_DECK_SLIDES, info.count);
+        for (let i = 0; i < count; i++) {
+          await run(`window.__mlchDeck.go(${i})`);
+          await wait(i === 0 ? 300 : 150);
+          slides.push({ slide: i + 1, visible: await run(VISIBLE_SLIDES, 0), overflow: await run('window.__mlchDeck.overflow()', null) });
+          if (images.length < MAX_SHOTS) images.push(await shot(count > 6 ? 640 : 960));
+        }
+        return result({ deck: { count: info.count, expected: info.expected, visibleAtLoad, slides } });
       }
-      const image = await view.webContents.capturePage();
-      images.push(image.resize({ width: 960 }).toPNG().toString('base64'));
+      // A deck made by hand, without the player: its first screens.
+      await stepThrough(view, steps, shot, wait, images);
+      return result({ deck: { visibleAtLoad, slides: [] } });
     }
-    return { images, errors: [...new Set(errors)].slice(0, 20) };
+    if (kind === 'page') {
+      const shots = [];
+      for (const [width, height] of [[1280, 800], [390, 844]]) {
+        if (shots.length) { view.setContentSize(width, height); await wait(500); }
+        shots.push(await run(PAGE_MEASURE, { width, height, scrollWidth: width, scrollHeight: height, clipped: false, smallText: [] }));
+        images.push(await shot(Math.min(960, width)));
+      }
+      return result({ page: { shots } });
+    }
+    await stepThrough(view, steps, shot, wait, images);
+    return result();
   } finally {
     view.destroy();
+  }
+}
+
+// App scenarios check made files the way preview_artifact does (scripts/scenarios/decks-pages.cjs).
+if (process.env.MLCH_ELECTRON_USER_DATA) globalThis.__mlchRender = (url, options) => renderArtifact(url, options);
+
+async function stepThrough(view, steps, shot, wait, images) {
+  const count = Math.max(1, Math.min(8, steps));
+  for (let i = 0; i < count; i++) {
+    if (i > 0) {
+      view.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
+      view.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' });
+      await wait(700);
+    }
+    images.push(await shot());
   }
 }
 

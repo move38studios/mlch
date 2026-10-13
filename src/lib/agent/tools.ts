@@ -32,6 +32,9 @@ import { copyItem, resolveRef } from "@/lib/links/links";
 import { addNote, autoSources, getSource, readSourceText, syncSources } from "@/lib/sources/sources";
 import { exaSearch } from "@/lib/search/exa";
 import { buildPptx, slideSchema, type Slide } from "@/lib/artifacts/pptx";
+import { MAX_SLIDES, writtenArtifact } from "@/lib/artifacts/deck";
+import { artifactKindOf, type ArtifactKind } from "@/lib/artifacts/kind";
+import { deckProblems, pageProblems, type DeckMeasure, type PageMeasure } from "@/lib/artifacts/checks";
 import { hiddenEntry, imageForModel, resolveReadable } from "./files";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime } from "./types";
 
@@ -297,14 +300,20 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     name: "write_artifact",
     title: "Make file",
     description:
-      "Save a file you wrote (an HTML page or slide deck, SVG, markdown, CSV, JSON, text) in the canvas's artifacts folder and put a card for it on the canvas. " +
-      "HTML opens full-window inside mlch and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
+      "Save a file you wrote (an HTML deck or page, SVG, markdown, CSV, JSON, text) in the canvas's artifacts folder and put a card for it on the canvas. " +
+      "HTML is one of two kinds. kind \"deck\": give `slides` (each slide's HTML, laid out in px for a fixed 1920x1080 slide) and optional `css` for their look; " +
+      "mlch adds the player (scaling to any screen, one slide at a time, keys, click, swipe, counter), so write no navigation script and never show, hide or position .slide yourself. " +
+      "kind \"page\" (the default): give `content`, a complete page that scrolls and fits any width from a phone (390px) up. " +
+      "HTML opens inside mlch and in shared links and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
       "images only as data: URIs. It cannot fetch anything at runtime and cannot open other pages. " +
       "To use an image or font file from this Mac (the person's logo, their fonts), write {{file:~/path/to/logo.svg}} where its URL goes (an img src, a CSS url()); it is replaced with the file's contents as a data: URI.",
     inputShape: {
       title: z.string().max(120),
       extension: z.enum(["html", "svg", "md", "csv", "json", "txt"]),
-      content: z.string().max(600_000),
+      kind: z.enum(["deck", "page"]).optional().describe("HTML only: deck (give slides) or page (give content). Default page."),
+      content: z.string().max(600_000).optional().describe("The whole file. Not for decks."),
+      slides: z.array(z.string().max(60_000)).min(1).max(MAX_SLIDES).optional().describe("Decks: one HTML string per slide, in px for 1920x1080. It goes inside <section class=\"slide\">."),
+      css: z.string().max(200_000).optional().describe("Decks: CSS for the slides' look (type, colours, layouts); any @import of Google Fonts first."),
       description: z.string().max(400).describe("One or two sentences for the card."),
       near: z.array(z.string()).max(6).optional(),
       replace: z.string().max(200).optional().describe("Path of an artifact you made earlier (e.g. artifacts/deck.html) to overwrite with this content instead of making a new one."),
@@ -315,8 +324,9 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     name: "preview_artifact",
     title: "Look at page",
     description:
-      "Render an HTML or SVG artifact as the person will see it (1280x720) and get screenshots back, plus any script errors. " +
-      "`slides` > 1 presses the right arrow between screenshots. Use it after writing HTML, fix what is wrong with write_artifact `replace`, and look again.",
+      "Render an HTML or SVG artifact as the person will see it and get screenshots back, script errors and layout problems. " +
+      "A deck: every slide, checked for content beyond 1920x1080 and for more than one slide showing. A page: at 1280x800 and at phone size (390x844), checked for sideways scroll, a page that cannot scroll, and text under 12px. " +
+      "Use it after writing HTML, fix what it reports with write_artifact `replace`, and look again until it reports no problems. `slides` only matters for HTML without a kind (presses the right arrow between screenshots).",
     inputShape: { path: z.string().max(200), slides: z.number().int().min(1).max(8).optional() },
     readOnly: true,
   },
@@ -679,12 +689,12 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
     return placeNear(mulch, size, { anchorIds: (near ?? []).filter((key) => mulch.nodes[key]), seed });
   }
 
-  async function addArtifactCard(title: string, description: string, docPath: string, near?: string[]): Promise<string> {
+  async function addArtifactCard(title: string, description: string, docPath: string, near?: string[], artifactKind?: ArtifactKind): Promise<string> {
     const mulch = await getMulch(ctx.mulchId);
     const id = newClientId("n");
     const position = placeResult(mulch, { w: NODE_WIDTH.artifact, h: artifactHeight(docPath) }, near, id);
     await commit([
-      { op: "addNode", node: { id, kind: "artifact", x: position.x, y: position.y, title, text: description, docPath, fileName: path.basename(docPath), origin, createdAt: Date.now() } },
+      { op: "addNode", node: { id, kind: "artifact", x: position.x, y: position.y, title, text: description, docPath, fileName: path.basename(docPath), ...(artifactKind ? { artifactKind } : {}), origin, createdAt: Date.now() } },
     ]);
     ctx.added.push(id);
     return id;
@@ -924,25 +934,28 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
     },
 
     async write_artifact(args) {
-      const { title, extension, description, near, replace } = args as {
-        title: string; extension: string; content: string; description: string; near?: string[]; replace?: string;
-      };
+      const { title, extension, description, near, replace } = args as { title: string; extension: string; description: string; near?: string[]; replace?: string };
+      // A deck is built around its slides, a page declares its kind (src/lib/artifacts/deck.ts, kind.ts).
+      const written = writtenArtifact(title, extension, args);
+      if ("problem" in written) return fail(written.problem);
       // Named files from anywhere the person may share (house style: their logo, fonts), private places refused.
-      const embedded = await embedFiles((args as { content: string }).content, ctx.readRoot ?? os.homedir());
+      const embedded = await embedFiles(written.content, ctx.readRoot ?? os.homedir());
       if (embedded.problems.length) return fail(`${embedded.problems.join(" ")} Nothing was saved; fix the {{file:…}} paths or leave them out.`);
       const content = embedded.content;
+      const artifactKind = written.kind;
+      const made = artifactKind === "deck" ? ` (a deck of ${written.slides} slides)` : artifactKind === "page" ? " (a page)" : "";
       if (replace) {
         const mulch = await getMulch(ctx.mulchId);
         const node = Object.values(mulch.nodes).find((n) => n.kind === "artifact" && n.docPath === replace);
         if (!node || !ARTIFACT_PATH.test(replace) || !replace.endsWith(`.${extension}`)) return fail(`No artifact ${replace} with extension ${extension} on the canvas.`);
         if (isUserOwned(node) && !ctx.allowUserEdits) return fail(`${replace} belongs to the person.`);
         await atomicWriteFile(artifactFile(ctx.mulchId, replace), content);
-        await commit([{ op: "updateNode", id: node.id, patch: { title, text: description, updatedAt: Date.now() } }]);
-        return ok(`Replaced ${replace}.`, `Revised ${title}`);
+        await commit([{ op: "updateNode", id: node.id, patch: { title, text: description, ...(artifactKind ? { artifactKind } : {}), updatedAt: Date.now() } }]);
+        return ok(`Replaced ${replace}${made}.${artifactKind ? " Check it with preview_artifact." : ""}`, `Revised ${title}`);
       }
       const docPath = await saveArtifact(ctx.mulchId, title, extension, Buffer.from(content));
-      const id = await addArtifactCard(title, description, docPath, near);
-      return ok(`Saved ${docPath} and added card ${id}.`, `Made ${title}`, []);
+      const id = await addArtifactCard(title, description, docPath, near, artifactKind);
+      return ok(`Saved ${docPath}${made} and added card ${id}.${artifactKind ? " Check it with preview_artifact." : ""}`, `Made ${title}`, []);
     },
 
     async make_pptx(args) {
@@ -962,12 +975,21 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const { path: file, slides = 1 } = args as { path: string; slides?: number };
       const docPath = file.startsWith("artifacts/") ? file : `artifacts/${file}`;
       if (!ARTIFACT_PATH.test(docPath) || !/\.(html|svg)$/.test(docPath)) return fail("Only HTML and SVG artifacts can be previewed.");
-      const result = await desktopRequest("render", { url: `/api/mulches/${ctx.mulchId}/${docPath}`, steps: slides });
+      const html = docPath.endsWith(".html") ? await fs.readFile(artifactFile(ctx.mulchId, docPath), "utf8").catch(() => undefined) : undefined;
+      if (docPath.endsWith(".html") && html === undefined) return fail(`No file ${docPath}. Preview a file you made with write_artifact, by its path (e.g. artifacts/deck.html).`);
+      const kind = html === undefined ? undefined : artifactKindOf(html);
+      const result = await desktopRequest("render", { url: `/api/mulches/${ctx.mulchId}/${docPath}`, steps: slides, ...(kind ? { kind } : {}) });
       if (!result.ok) return fail(`Could not render it: ${result.error}`);
-      const value = result.value as { images: string[]; errors: string[] };
+      const value = result.value as { images: string[]; errors: string[]; deck?: DeckMeasure; page?: PageMeasure };
       const errors = value.errors.length ? `Script errors and warnings:\n${value.errors.join("\n")}` : "No script errors.";
+      const problems = value.deck ? deckProblems(value.deck) : value.page && html !== undefined ? pageProblems(value.page, html) : [];
+      const what =
+        value.deck?.count !== undefined ? `A deck of ${value.deck.count} slides; ${value.images.length} screenshot(s) of its first slides, in order.`
+        : value.page ? `A page, at ${value.page.shots.map((shot) => `${shot.width}x${shot.height}`).join(" and ")}.`
+        : `${value.images.length} screenshot(s) of ${docPath}, in order.`;
+      const checked = value.deck || value.page ? (problems.length ? `\nProblems to fix:\n${problems.map((problem) => `- ${problem}`).join("\n")}` : "\nNo layout problems found.") : "";
       return {
-        ...ok(`${value.images.length} screenshot(s) of ${docPath}, in order. ${errors}`, `Looked at ${path.basename(docPath)}`),
+        ...ok(`${what} ${errors}${checked}`, `Looked at ${path.basename(docPath)}`),
         images: value.images.map((data) => ({ data, mimeType: "image/png" })),
       };
     },

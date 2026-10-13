@@ -20,6 +20,7 @@ import { hasThumbnail } from "@/lib/artifacts/thumbnails";
 import { KIND_STYLES } from "./kinds";
 import { MediaBody } from "./MediaBody";
 import { useCanvasUi } from "./ui";
+import { useArtifactKind } from "./artifactKind";
 
 export type MulchFlowNode = Node<{ node: MulchNode; mulchId: string; fresh: boolean }, "mulch">;
 
@@ -130,6 +131,8 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   const ext = node.docPath?.split(".").pop() ?? "";
   const viewable = ext === "html" || ext === "svg";
   const src = node.docPath ? `/api/mulches/${mulchId}/${node.docPath}` : undefined;
+  const kind = useArtifactKind(node, viewable ? src : undefined);
+  const frameWidth = kind === "deck" ? 1920 : 1280;
   // Decks and documents: a Quick Look preview of the first page (desktop app only).
   const [thumbFailed, setThumbFailed] = useState(false);
   const thumb = node.docPath && hasThumbnail(node.docPath) && !thumbFailed ? `/api/mulches/${mulchId}/thumbnail?doc=${encodeURIComponent(node.docPath)}&v=${node.updatedAt ?? node.createdAt}` : undefined;
@@ -138,15 +141,17 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
     <div>
       {viewable && src && (
         <div className="relative aspect-video overflow-hidden rounded-t-[inherit] border-b border-line bg-paper-2">
-          {/* A live, non-interactive thumbnail: the page at 1280px wide, scaled down. */}
-          <iframe
-            src={src}
-            sandbox="allow-scripts"
-            tabIndex={-1}
-            title={node.title ?? "Preview"}
-            className="pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-white"
-            style={{ width: 1280, height: 720, transform: `scale(${(node.w ?? 320) / 1280})` }}
-          />
+          {/* A live, non-interactive thumbnail: a deck's first slide (1920x1080, no counter), a page's top at 1280px wide; scaled down. */}
+          {kind && (
+            <iframe
+              src={kind === "deck" ? `${src}?still#1` : src}
+              sandbox="allow-scripts"
+              tabIndex={-1}
+              title={node.title ?? "Preview"}
+              className={`pointer-events-none absolute left-0 top-0 origin-top-left border-0 ${kind === "deck" ? "bg-black" : "bg-white"}`}
+              style={{ width: frameWidth, height: (frameWidth * 9) / 16, transform: `scale(${(node.w ?? 320) / frameWidth})` }}
+            />
+          )}
         </div>
       )}
       {thumb && (

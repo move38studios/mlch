@@ -28,6 +28,8 @@ function bridgePayload(payload) {
     ...(typeof payload?.title === 'string' ? { title: payload.title } : {}),
     ...(typeof payload?.url === 'string' ? { url: payload.url } : {}),
     ...(Number.isInteger(payload?.steps) ? { steps: payload.steps } : {}),
+    // mlch: what a made file is, so the preview checks it as a deck or a page.
+    ...(payload?.kind === 'deck' || payload?.kind === 'page' ? { kind: payload.kind } : {}),
     // mlch: thumbnails, job notifications and the activity count (main checks each again).
     ...(Number.isInteger(payload?.size) ? { size: payload.size } : {}),
     ...(typeof payload?.mulchId === 'string' ? { mulchId: payload.mulchId } : {}),
