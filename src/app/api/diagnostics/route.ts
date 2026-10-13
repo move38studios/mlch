@@ -57,7 +57,7 @@ export async function POST() {
     );
     const mulches = await listMulches();
     const sections: Array<[string, string]> = [
-      ["App", `mulch ${packageJson.version} · Electron ${process.versions.electron ?? "-"} · Node ${process.versions.node} · macOS ${os.release()} ${os.arch()} · ${new Date().toISOString()}`],
+      ["App", `mlch ${packageJson.version} · Electron ${process.versions.electron ?? "-"} · Node ${process.versions.node} · macOS ${os.release()} ${os.arch()} · ${new Date().toISOString()}`],
       ["AI", harnesses.join("\n")],
       ["Settings", JSON.stringify({ ...settings }, null, 2)],
       ["Keys set", ["groq", "firecrawl", "fal", "exa"].map((k) => `${k}=${getCredential(k as "groq") ? "yes" : "no"}`).join(" ")],
@@ -69,7 +69,7 @@ export async function POST() {
     ];
     const text = redact(sections.map(([title, body]) => `## ${title}\n\n${body}\n`).join("\n"));
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const file = path.join(os.homedir(), "Downloads", `mulch-diagnostics-${stamp}.txt`);
+    const file = path.join(os.homedir(), "Downloads", `mlch-diagnostics-${stamp}.txt`);
     await fs.writeFile(file, text);
     log.info("diagnostics", "report saved", { file });
     await desktopRequest("reveal", { path: file });

@@ -202,9 +202,11 @@ function setupScreenshots() {
 function startUpdates() {
   if (!app.isPackaged || process.env.MLCH_NO_UPDATES) return;
   const { autoUpdater } = require('electron-updater');
-  autoUpdater.logger = { info: log, warn: log, error: log, debug: () => {} };
+  // One line per problem: the updater's own errors carry whole HTTP responses.
+  const firstLine = (value) => String(value?.message ?? value).split('\n')[0];
+  autoUpdater.logger = { info: log, warn: (value) => log(firstLine(value)), error: (value) => log(firstLine(value)), debug: () => {} };
   autoUpdater.autoInstallOnAppQuit = true;
-  const check = () => autoUpdater.checkForUpdates().catch((error) => log(`Update check failed: ${error.message}`));
+  const check = () => autoUpdater.checkForUpdates().catch((error) => log(`Update check failed: ${firstLine(error)}`));
   void check();
   setInterval(check, 6 * 60 * 60 * 1000).unref();
 }
