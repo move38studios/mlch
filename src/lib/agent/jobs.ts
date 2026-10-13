@@ -509,13 +509,14 @@ function clockTime(ms: number): string {
 function callHeading(startedAt: number, endedAt?: number): string {
   const day = new Date(startedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   if (endedAt === undefined) return `Call, ${day}, ${clockTime(startedAt)}`;
-  const minutes = Math.max(1, Math.round((endedAt - startedAt) / 60_000));
+  const minutes = Math.round((endedAt - startedAt) / 60_000);
+  if (minutes < 1) return `Call, ${day}, ${clockTime(startedAt)} (under a minute)`;
   return `Call, ${day}, ${clockTime(startedAt)} to ${clockTime(endedAt)} (${minutes} min)`;
 }
 
-/** The call so far as markdown: who spoke when, consecutive lines of one speaker together. */
+/** The call so far as markdown: who spoke when, consecutive lines of one speaker together. The heading is the card's title. */
 export function callMarkdown(segments: TranscriptSegment[], startedAt: number, endedAt?: number): string {
-  const lines: string[] = [`# ${callHeading(startedAt, endedAt)}`, ""];
+  const lines: string[] = [];
   let last: { speaker?: string; text: string[]; at: number } | undefined;
   const flush = () => {
     if (last) lines.push(`${last.speaker ? `**${last.speaker === "me" ? "Me" : "Them"}** ` : ""}(${clockTime(last.at)}) ${last.text.join(" ")}`, "");
@@ -577,7 +578,11 @@ async function endCall(mulchId: string, call: NonNullable<MulchJobs["call"]>, en
   // The last chunks are still being transcribed for a moment after stopping.
   await new Promise((resolve) => setTimeout(resolve, Number(process.env.MLCH_CALL_SETTLE_MS) || 4000));
   const segments = await writeCallCard(mulchId, call, endedAt);
-  if (!segments.length) return;
+  if (!segments.length) {
+    // Nothing was said: no card left behind.
+    if (call.transcriptId) await applyToMulch(mulchId, [{ op: "removeNode", id: call.transcriptId }], "speech:call");
+    return;
+  }
   submitCallNotes(mulchId, { startedAt: call.startedAt, endedAt, transcriptId: call.transcriptId });
 }
 

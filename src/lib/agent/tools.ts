@@ -594,6 +594,13 @@ export async function embedFiles(content: string, readRoot: string | undefined):
   return { content: content.replace(/\{\{file:([^}]+)\}\}/g, (all, name: string) => uris.get(name.trim()) ?? all), problems };
 }
 
+/** Markdown without a first-line heading that only repeats the title. */
+export function withoutTitleHeading(markdown: string, title: string): string {
+  const match = /^\s*#{1,2}\s+(.+?)\s*(\n|$)/.exec(markdown);
+  const same = (a: string) => a.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return match && same(match[1]) === same(title) ? markdown.slice(match[0].length).replace(/^\s+/, "") : markdown;
+}
+
 function slugify(title: string): string {
   return (
     title
@@ -821,7 +828,8 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const w = NODE_WIDTH.writeup;
       const position = placeResult(mulch, { w, h: 260 }, near, id);
       const ops: MulchOp[] = [
-        { op: "addNode", node: { id, kind: "writeup", x: position.x, y: position.y, title, text: markdown, docPath, origin, createdAt: Date.now() } },
+        // The card shows the title itself: a leading heading that repeats it is left out of the card's text.
+        { op: "addNode", node: { id, kind: "writeup", x: position.x, y: position.y, title, text: withoutTitleHeading(markdown, title), docPath, origin, createdAt: Date.now() } },
       ];
       await commit(ops);
       ctx.added.push(id);

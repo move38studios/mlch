@@ -119,6 +119,9 @@ describe("mulch tools", () => {
     const writeup = Object.values(after.nodes).find((n) => n.kind === "writeup")!;
     expect(writeup.docPath).toBe("docs/my-summary.md");
     expect(fs.readFileSync(path.join(library, mulch.id, "docs/my-summary.md"), "utf8")).toBe("# My Summary\n\nBody");
+    const { withoutTitleHeading } = await import("../tools");
+    expect(withoutTitleHeading("# My summary!\n\nBody", "My Summary")).toBe("Body");
+    expect(withoutTitleHeading("# Other\n\nBody", "My Summary")).toBe("# Other\n\nBody");
   });
 
   it("file tools stay inside the folder", async () => {

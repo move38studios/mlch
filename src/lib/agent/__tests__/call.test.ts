@@ -17,8 +17,8 @@ describe("call transcript", () => {
       at(9, 30),
     );
     expect(text).toBe(
-      "# Call, 12 Oct 2026, 09:00 to 09:30 (30 min)\n\n**Me** (09:00) Thanks for joining. Shall we start?\n\n**Them** (09:02) Yes.\n\n(09:03) Without the Mac's sound.",
+      "**Me** (09:00) Thanks for joining. Shall we start?\n\n**Them** (09:02) Yes.\n\n(09:03) Without the Mac's sound.",
     );
-    expect(callMarkdown([], at(9, 0))).toBe("# Call, 12 Oct 2026, 09:00\n\nListening.");
+    expect(callMarkdown([], at(9, 0))).toBe("Listening.");
   });
 });
