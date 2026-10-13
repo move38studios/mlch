@@ -156,7 +156,7 @@ export const DEFAULT_HOUSE_STYLE = `Minimal and quiet, like black marker on a cl
 - One accent: amber #FFC000, only as a fill (a highlight behind a word, a marker, one key number), never as text colour, at most once per slide or section.
 - Type: Schibsted Grotesk for everything. Embed it: @font-face { font-family: "Schibsted Grotesk"; src: url("{{file:mlch:fonts/SchibstedGrotesk.woff2}}") format("woff2"); font-weight: 400 900; } (italic: {{file:mlch:fonts/SchibstedGrotesk-Italic.woff2}}). Large, tight headlines (weight 600-700, slightly negative letter-spacing), calm body text (400), sentence case, no all-caps labels.
 - Space: generous margins, left-aligned, few words, lots of white. No gradients, no drop shadows, no stock icons, no emoji.
-- Slides: one idea each; big statement slides; numbers large; a thin rule or a small amber mark rather than decoration.
+- Slides: one idea each; big statement slides; numbers large; a thin rule or a small amber mark rather than decoration. The slides and the page around them (html) are the same paper colour.
 - Charts and tables: black and greys, amber for the one thing to look at.
 - PowerPoint and Word: Schibsted Grotesk if it is installed, otherwise Helvetica Neue; the same colours and space.
 - At the end (the last slide, or the foot of a page or document), small and light (40% black): "made with mlch".`;
