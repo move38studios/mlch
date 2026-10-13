@@ -14,6 +14,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { log } from "@/lib/log";
+import { resolveRef } from "@/lib/links/links";
 import { desktopRequest } from "@/lib/desktop/server";
 import { hasThumbnail } from "@/lib/artifacts/thumbnails";
 import { atomicWriteFile, createMulch, applyToMulch, getMulch, mulchDir, onAfterApply } from "@/lib/mulch/store";
@@ -125,19 +126,27 @@ async function upload(share: ShareRecord, mulchId: string, files: string[]): Pro
   }
 }
 
-/** The canvas as it is shared: links into the person's own folders keep only their title. */
-export function sharedMulch(mulch: Mulch): Mulch {
-  const nodes = Object.fromEntries(Object.entries(mulch.nodes).map(([id, node]) => [id, sharedNode(node)]));
+type TitleOf = (ref: NonNullable<MulchNode["ref"]>) => Promise<string | undefined>;
+const resolvedTitle: TitleOf = async (ref) => (await resolveRef(ref).catch(() => undefined))?.title;
+
+/**
+ * The canvas as it is shared: a link card into the person's other mulches or
+ * folders keeps only the linked item's title (taken now if the card has none);
+ * where it lives and what it says stay private.
+ */
+export async function sharedMulch(mulch: Mulch, titleOf: TitleOf = resolvedTitle): Promise<Mulch> {
+  const nodes = Object.fromEntries(await Promise.all(Object.entries(mulch.nodes).map(async ([id, node]) => [id, await sharedNode(node, titleOf)] as const)));
   return { ...mulch, nodes };
 }
 
-function sharedNode(node: MulchNode): MulchNode {
-  if (node.ref && "sourceId" in node.ref) return { ...node, ref: { sourceId: "shared", path: "" } };
-  return node;
+async function sharedNode(node: MulchNode, titleOf: TitleOf): Promise<MulchNode> {
+  if (!node.ref) return node;
+  const title = node.title ?? (await titleOf(node.ref));
+  return { ...node, ...(title ? { title } : {}), ref: "sourceId" in node.ref ? { sourceId: "shared", path: "" } : { mulchId: "shared", itemId: "" } };
 }
 
-function sharedOps(ops: MulchOp[]): MulchOp[] {
-  return ops.map((op) => (op.op === "addNode" ? { ...op, node: sharedNode(op.node) } : op));
+async function sharedOps(ops: MulchOp[]): Promise<MulchOp[]> {
+  return Promise.all(ops.map(async (op) => (op.op === "addNode" ? { ...op, node: await sharedNode(op.node, resolvedTitle) } : op)));
 }
 
 /* ── sharing ───────────────────────────────────────────────────── */
@@ -176,7 +185,7 @@ export async function shareMulch(mulchId: string): Promise<ShareView> {
   const files = Object.values(mulch.nodes).flatMap(filesOf);
   for (const node of Object.values(mulch.nodes)) if (node.docPath) files.push(...(await htmlCompanions(mulchId, node.docPath)));
   await upload(record, mulchId, files);
-  await api.uploadSnapshot(record, sharedMulch(mulch));
+  await api.uploadSnapshot(record, await sharedMulch(mulch));
   await api.setLive(record, true).catch(() => undefined);
   state().senders.delete(record.id);
   log.info("share", "Shared a canvas", { mulchId, shareId: record.id, files: files.length });
@@ -235,14 +244,14 @@ async function forward(mulchId: string, batch: OpBatch): Promise<void> {
     if (!s.uploaded.has(record.id)) {
       const mulch = await getMulch(mulchId);
       await upload(record, mulchId, Object.values(mulch.nodes).flatMap(filesOf));
-      await api.uploadSnapshot(record, sharedMulch(mulch));
+      await api.uploadSnapshot(record, await sharedMulch(mulch));
     }
     sender = api.liveSender(record);
     s.senders.set(record.id, sender);
   }
   const files = batch.ops.flatMap((op) => (op.op === "addNode" ? filesOf(op.node) : op.op === "updateNode" && (op.patch.assetId || op.patch.docPath) ? [op.patch.assetId ? `assets/${op.patch.assetId}` : "", op.patch.docPath ?? ""].filter(Boolean) : []));
   if (files.length) await upload(record, mulchId, files);
-  sender.send({ ...batch, ops: sharedOps(batch.ops) });
+  sender.send({ ...batch, ops: await sharedOps(batch.ops) });
   if (sender.stopped) {
     log.warn("share", "live sharing stopped", { mulchId, shareId: record.id, error: sender.stopped.message });
     record.live = false;

@@ -158,7 +158,20 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
 
 /** A link to an item in another mulch or a note in a linked folder, shown live; the panel opens it. */
 function RefBody({ node }: { node: MulchNode }) {
-  const target = useResolvedRef(node.ref);
+  // In a shared canvas a link card keeps only the linked item's title (shares.ts sharedMulch).
+  const shared = !!node.ref && ("mulchId" in node.ref ? node.ref.mulchId : node.ref.sourceId) === "shared";
+  const target = useResolvedRef(shared ? undefined : node.ref);
+  if (shared) {
+    return (
+      <div className="px-3.5 py-3">
+        <div className="flex items-center gap-1.5 mb-1 text-[12px] text-ink-3">
+          <Link2 size={12} strokeWidth={1.75} className="shrink-0" />
+          <span>Linked item, not shared</span>
+        </div>
+        {node.title && <div className="font-semibold leading-[1.3]">{node.title}</div>}
+      </div>
+    );
+  }
   const gone = target && !target.exists;
   const title = target?.title ?? node.title;
   return (
@@ -239,7 +252,9 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        if (node.kind === "ref") setOpen(node.id);
+        if (node.kind === "ref") {
+          if (!readOnly) setOpen(node.id);
+        }
         // A made file opens: pages and decks in the viewer, other files in their app.
         else if (node.kind === "artifact" && node.docPath) {
           if (/\.(html|svg)$/.test(node.docPath)) setViewer(node.id);
