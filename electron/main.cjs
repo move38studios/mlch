@@ -235,7 +235,7 @@ async function recentMulches() {
   try {
     const response = await fetch(`${origin}/api/mulches`, { headers: { 'X-Mlch-Desktop': token } });
     const body = await response.json();
-    return Array.isArray(body.mulches) ? body.mulches.slice(0, 5) : [];
+    return Array.isArray(body.mulches) ? body.mulches.filter((mulch) => !mulch.archivedAt).slice(0, 5) : [];
   } catch { return []; }
 }
 

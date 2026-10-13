@@ -155,6 +155,10 @@ export interface MulchSummary {
   nodeCount: number;
   /** The person's instructions and long work: running, finished unseen, failed unseen. */
   activity?: { working: number; unseen: number; failed: number };
+  /** Archived: out of the list, kept on disk, can be restored. */
+  archivedAt?: number;
+  /** Share links made from it that still work. */
+  shares?: number;
 }
 
 /** A field set to null is cleared. */

@@ -148,6 +148,7 @@ export async function listMulches(): Promise<MulchSummary[]> {
           updatedAt: mulch.updatedAt,
           nodeCount: Object.keys(mulch.nodes).length,
           activity: jobActivity(jobs),
+          ...(await sideFacts(path.join(root, id))),
         };
       } catch {
         return undefined;
@@ -155,6 +156,24 @@ export async function listMulches(): Promise<MulchSummary[]> {
     }),
   );
   return summaries.filter((s): s is MulchSummary => !!s).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** Archived (archived.json) and how many share links it has (shares.json, kept by share/shares.ts). */
+async function sideFacts(dir: string): Promise<{ archivedAt?: number; shares?: number }> {
+  const read = async (name: string) => JSON.parse(await fs.readFile(path.join(dir, name), "utf8").catch(() => "null")) as unknown;
+  const [archived, shares] = await Promise.all([read("archived.json"), read("shares.json")]);
+  const at = (archived as { at?: number } | null)?.at;
+  const count = Array.isArray(shares) ? shares.length : 0;
+  return { ...(at ? { archivedAt: at } : {}), ...(count ? { shares: count } : {}) };
+}
+
+/** Archive a mulch (out of the list, kept as it is) or bring it back. */
+export async function archiveMulch(id: string, archived: boolean): Promise<void> {
+  const dir = mulchDir(id);
+  if (!existsSync(dir)) throw new MulchNotFoundError(id);
+  const file = path.join(dir, "archived.json");
+  if (archived) await atomicWriteFile(file, JSON.stringify({ at: Date.now() }));
+  else await fs.rm(file, { force: true });
 }
 
 /** A mulch as it is now, without opening it (for reading many: links, backlinks). */

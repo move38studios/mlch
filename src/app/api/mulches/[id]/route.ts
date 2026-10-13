@@ -1,5 +1,7 @@
 import { handle } from "@/lib/http";
-import { getMulch, trashMulch } from "@/lib/mulch/store";
+import { archiveMulch, getMulch, trashMulch } from "@/lib/mulch/store";
+import { deleteShare, readShares } from "@/lib/share/shares";
+import { log } from "@/lib/log";
 import { dropMulch } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +13,29 @@ export async function GET(_request: Request, { params }: Params) {
   return handle(async () => ({ mulch: await getMulch(id) }));
 }
 
+/** Turns off every share link of a mulch (best effort: an unreachable server leaves that link). */
+async function deleteShares(id: string): Promise<void> {
+  for (const record of await readShares(id)) {
+    await deleteShare(id, record.id).catch((error) => log.warn("share", "share link could not be deleted", { mulchId: id, shareId: record.id, error }));
+  }
+}
+
+/** PATCH {archived, stopShares?}: archive or restore; archiving can turn off its share links. */
+export async function PATCH(request: Request, { params }: Params) {
+  const { id } = await params;
+  const body = (await request.json().catch(() => ({}))) as { archived?: unknown; stopShares?: unknown };
+  return handle(async () => {
+    if (body.archived === true && body.stopShares === true) await deleteShares(id);
+    await archiveMulch(id, body.archived === true);
+    return { ok: true };
+  });
+}
+
+/** Deleting a mulch turns off its share links first: after this nothing in the app could. */
 export async function DELETE(_request: Request, { params }: Params) {
   const { id } = await params;
   return handle(async () => {
+    await deleteShares(id);
     await trashMulch(id);
     dropMulch(id);
     return { ok: true };

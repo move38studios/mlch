@@ -105,6 +105,20 @@ describe("mulch store", () => {
     expect((await store.getJobs(mulch.id))[0].message?.dismissed).toBeUndefined();
   });
 
+  it("archives and restores, and lists how many share links there are", async () => {
+    const store = await import("../store");
+    const mulch = await store.createMulch("Archive me");
+    await store.applyToMulch(mulch.id, [{ op: "addNode", node: { id: "n1", kind: "note", x: 0, y: 0, text: "kept", origin: "user", createdAt: 1 } }], "user");
+    fs.writeFileSync(path.join(library, mulch.id, "shares.json"), JSON.stringify([{ id: "s1" }, { id: "s2" }]));
+    await store.archiveMulch(mulch.id, true);
+    let [summary] = await store.listMulches();
+    expect(summary.archivedAt).toBeGreaterThan(0);
+    expect(summary.shares).toBe(2);
+    await store.archiveMulch(mulch.id, false);
+    [summary] = await store.listMulches();
+    expect(summary.archivedAt).toBeUndefined();
+  });
+
   it("refuses ids that could leave the library", async () => {
     const store = await import("../store");
     await expect(store.getMulch("../etc")).rejects.toBeInstanceOf(store.MulchNotFoundError);
