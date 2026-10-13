@@ -83,7 +83,7 @@ export function pageProblems(measure: PageMeasure, html: string): string[] {
     if (shot.scrollWidth > shot.width + 1) {
       problems.push(`${at} the page scrolls sideways (it is ${shot.scrollWidth}px wide). A page must fit every width down to ${PHONE.width}px: one column, max-width on text, images and tables at max-width: 100%, long words wrapped (overflow-wrap: anywhere), no fixed widths wider than the screen.`);
     }
-    if (shot.clipped && shot.scrollHeight > shot.height + 1) {
+    if (shot.clipped && shot.scrollHeight > shot.height + 1 && !problems.some((p) => p.includes("cannot scroll"))) {
       problems.push(`${at} the content is ${shot.scrollHeight}px tall but the page cannot scroll: html or body has overflow: hidden. A page must scroll normally; remove overflow: hidden (and fixed heights) from html and body.`);
     }
     if (shot.width <= PHONE.width && shot.smallText.length) {

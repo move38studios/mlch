@@ -84,7 +84,7 @@ Stripe is in test mode: pay with card 4242 4242 4242 4242, any future date, any 
 - In a mulch: Share (header). The link is copied. Open it in a browser, and on your phone.
 - The page has the mlch tab icon and the canvas title; a mouse wheel zooms at the pointer, the trackpad pans.
 - Add a card or speak in the app: it appears in the browser within seconds. Stop sharing: the page says it's no longer live.
-- On a deck card: Share (says Sharing, then Link copied). The link opens the deck in a frame with Full screen and Fill the window.
+- On a deck card: Share (says Sharing, then Link copied). The link opens the deck filling the window, one slide at a time, with Full screen (not on an iPhone, where a swipe moves between slides). A shared page fills the window and scrolls, edge to edge on a phone.
 - Paste a shared link into Slack or iMessage: a preview with the title and a picture (the canvas as shared, or the deck's first slide).
 - In the shared canvas page: Open in mlch. It should open mlch with a copy as a new mulch.
 - Delete link from the Share menu: the page stops working.
