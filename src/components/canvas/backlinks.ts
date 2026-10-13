@@ -13,7 +13,7 @@ export function useBacklinks(mulchId: string | undefined): Backlink[] {
     const load = () =>
       fetch(`/api/mulches/${mulchId}/backlinks`)
         .then((response) => (response.ok ? (response.json() as Promise<{ backlinks: Backlink[] }>) : undefined))
-        .then((body) => !cancelled && body && setLinks({ mulchId, links: body.backlinks }))
+        .then((body) => !cancelled && body && setLinks({ mulchId, links: Array.isArray(body.backlinks) ? body.backlinks : [] }))
         .catch(() => {});
     void load();
     window.addEventListener("focus", load);

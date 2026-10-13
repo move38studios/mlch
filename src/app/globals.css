@@ -150,13 +150,6 @@ select:focus-visible {
 .mlch-fade-bottom {
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
-.mlch-resize.react-flow__resize-control.line.bottom {
-  border-bottom-width: 3px;
-  border-color: transparent;
-}
-.mlch-resize.react-flow__resize-control.line.bottom:hover {
-  border-color: var(--amber);
-}
 .mlch-resize.react-flow__resize-control.line.right {
   border-right-width: 3px;
   border-color: transparent;

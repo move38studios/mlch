@@ -273,6 +273,25 @@ function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   );
 }
 
+/** Whether a card the person sized cuts its text off (then it fades and offers Open). */
+function useClipped(ref: React.RefObject<HTMLDivElement | null>, active: boolean): boolean {
+  const [clipped, setClipped] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!active || !element) {
+      setClipped(false);
+      return;
+    }
+    const measure = () => setClipped(element.scrollHeight > element.clientHeight + 2);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    return () => observer.disconnect();
+  }, [ref, active]);
+  return clipped;
+}
+
 function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const { node, mulchId, fresh } = data;
   const style = KIND_STYLES[node.kind];
@@ -284,6 +303,8 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const apply = useMulch((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
   const sizedByShape = node.kind === "image" || node.kind === "media" || node.kind === "artifact";
+  const clipRef = useRef<HTMLDivElement>(null);
+  const clipped = useClipped(clipRef, !!node.fixedH && !editing);
   const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || node.kind === "image" || (node.kind === "link" && !!node.assetId);
 
   return (
@@ -302,7 +323,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
         } else if (node.kind === "image") setOpen(node.id);
         else if (node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
         // Read-only (a shared canvas): long or clipped cards open in full.
-        else if (readOnly && (long || node.fixedH)) setOpen(node.id);
+        else if (readOnly && (long || clipped)) setOpen(node.id);
       }}
     >
       {editing ? (
@@ -310,14 +331,14 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
           <Editor node={node} onDone={() => setEditing(undefined)} />
         </div>
       ) : node.fixedH ? (
-        // A height the person chose: the text clips, fading out at the bottom.
-        <div className="h-full overflow-hidden mlch-fade-bottom">
+        // A height the person chose: the text clips, fading out at the bottom (only when there is more).
+        <div ref={clipRef} className={`h-full overflow-hidden ${clipped ? "mlch-fade-bottom" : ""}`}>
           <Body node={node} mulchId={mulchId} />
         </div>
       ) : (
         <Body node={node} mulchId={mulchId} />
       )}
-      {(long || node.fixedH) && !editing && (
+      {(long || clipped) && !editing && (
         <button
           className="nodrag absolute top-2 right-2 p-1 rounded-md text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-paper-2 hover:text-ink"
           onClick={() => setOpen(node.id)}
@@ -333,13 +354,13 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
       ))}
       {selected && !editing && !readOnly && (
         <>
-          {/* The right edge sets the width; the bottom edge and the corner the height too (pictures, files and players keep their shape). */}
-          {(sizedByShape ? (["right", "bottom-right"] as const) : (["right", "bottom", "bottom-right"] as const)).map((position) => (
+          {/* The right edge sets the width; the corner the height too (pictures, files and players keep their shape). Not the bottom edge: its middle is a connection point. */}
+          {(["right", "bottom-right"] as const).map((position) => (
             <NodeResizeControl
               key={position}
               position={position}
               variant={position === "bottom-right" ? ResizeControlVariant.Handle : ResizeControlVariant.Line}
-              resizeDirection={position === "right" || sizedByShape ? "horizontal" : position === "bottom" ? "vertical" : undefined}
+              resizeDirection={position === "right" || sizedByShape ? "horizontal" : undefined}
               minWidth={140}
               maxWidth={1400}
               minHeight={48}
