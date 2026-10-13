@@ -6,15 +6,15 @@ One pass through everything, on the packaged app as a new person would get it. A
 
 1. Quit any running mlch (`npm run app` and the packaged app use the same port).
 2. Open `dist/mlch-0.1.0-arm64.dmg` and drag mlch to Applications. It is signed, not notarized: fine on this Mac.
-3. Start it as a new person would, with an empty library and profile, so your real mulches, settings and keys are not touched:
+3. Start it as a new person would. Either:
+   - **Clean Mac** (as on 2026-10-13, see "Where things stand" in docs/ROADMAP.md): open mlch from Applications normally. Library, settings, keys, models and the downloaded CLIs are gone, so everything downloads again.
+   - **Keep your real mulches**: start it with an empty library and profile instead:
 
-   ```sh
-   open -n --env MLCH_LIBRARY=$HOME/mlch-test --env MLCH_ELECTRON_USER_DATA=$HOME/mlch-test-profile /Applications/mlch.app
-   ```
+     ```sh
+     open -n --env MLCH_LIBRARY=$HOME/mlch-test --env MLCH_ELECTRON_USER_DATA=$HOME/mlch-test-profile /Applications/mlch.app
+     ```
 
-   Optional, to watch the downloads happen too (about 720 MB again): first `rm -rf ~/Library/Application\ Support/mlch/models ~/.mlch/models ~/Library/Application\ Support/mlch/cli`.
-
-   Afterwards, `rm -rf ~/mlch-test ~/mlch-test-profile`. To test with your real mulches instead, open mlch from Applications normally.
+     Afterwards, `rm -rf ~/mlch-test ~/mlch-test-profile`.
 
 ## 1. First run
 

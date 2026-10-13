@@ -4,6 +4,15 @@ What we want to build or improve next, in priority order. One entry per item, wi
 
 Order agreed 2026-10-12: **docs/PLAN-2.md**, from a call to a shared link (links and sources, local transcription, call mode, menu bar, sharing, onboarding, signed release, then collaboration). Its milestones and checks are the work list; this file keeps what is outside it.
 
+## Where things stand (2026-10-13)
+
+- Everything up to and including sharing accounts is committed on main; `npm run check` and the scenarios pass. mlch.app runs the accounts Worker (Stripe test mode, Google sign-in in testing mode).
+- `dist/mlch-0.1.0-arm64.dmg` is the latest signed build (sharing choices included). It is not installed: /Applications/mlch.app was removed for a fresh install.
+- For a clean first run, this Mac's mlch data was moved to `~/mlch-before-reinstall-20261013/` (`library` was ~/Documents/mlch with 4 mulches, `app-support` was ~/Library/Application Support/mlch with saved keys, models and CLIs, `logs`, the preferences plist). Put `library` back to get the old mulches; delete the folder when no longer needed.
+- mlch.app has no accounts yet: the first sign-in (george@m38.ai) and the first test subscription are the next things to try (docs/TESTING.md, sections 0, 1 and 6).
+- Open: roll the Stripe test-mode secret key (shown in a session transcript): a new restricted test key as `STRIPE_SECRET_KEY` (command below), then delete the old one.
+- If sharing fails with "The sharing server could not be reached.", desktop.log / mulch.jsonl now have the cause (it used to hide other errors).
+
 ## Before sharing on mlch.app goes live (George)
 
 Built 2026-10-13: the three sharing choices, Google sign-in, $12/year subscription (Stripe test mode), own servers. What's left needs George:
