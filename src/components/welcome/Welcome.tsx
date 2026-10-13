@@ -11,7 +11,7 @@ import { AiAccess, type AuthMode } from "@/components/settings/AiAccess";
 import { KeyField } from "@/components/settings/KeyField";
 import { Scribble } from "@/components/brand/Scribble";
 
-type KeyName = "groq" | "exa" | "fal" | "firecrawl" | "anthropic" | "openai";
+type KeyName = "groq" | "exa" | "fal" | "firecrawl" | "gemini" | "anthropic" | "openai";
 type HarnessId = "claude" | "codex";
 interface Status {
   onboarded: boolean;
@@ -37,10 +37,11 @@ const AI: Record<HarnessId, { name: string; app: string; plan: string }> = {
   claude: { name: "Claude", app: "Claude Code", plan: "Claude" },
   codex: { name: "ChatGPT", app: "Codex", plan: "ChatGPT" },
 };
-const KEYS: Array<{ id: "exa" | "firecrawl" | "fal"; label: string; use: string; url: string }> = [
+const KEYS: Array<{ id: "exa" | "firecrawl" | "fal" | "gemini"; label: string; use: string; url: string }> = [
   { id: "exa", label: "Exa", use: "Web search, for enrichment and research.", url: "https://dashboard.exa.ai/api-keys" },
   { id: "firecrawl", label: "Firecrawl", use: "Reads web pages and documents in full.", url: "https://www.firecrawl.dev/app/api-keys" },
   { id: "fal", label: "fal", use: "Makes images, video, voice and music.", url: "https://fal.ai/dashboard/keys" },
+  { id: "gemini", label: "Gemini", use: "Watches YouTube videos you add, for a summary and a transcript.", url: "https://aistudio.google.com/apikey" },
 ];
 
 const PRIMARY = "h-10 px-5 rounded-xl bg-ink text-white text-[14px] font-medium disabled:bg-paper-2 disabled:text-ink-3 transition-colors";

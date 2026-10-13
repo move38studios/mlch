@@ -58,10 +58,11 @@ const PROMPTS: Array<{ id: string; label: string; sub?: boolean }> = [
   { id: "image", label: "Images" },
   { id: "folder", label: "Folders" },
 ];
-const KEYS: Array<{ id: "groq" | "firecrawl" | "fal" | "exa"; label: string; use: string; url: string }> = [
+const KEYS: Array<{ id: "groq" | "firecrawl" | "fal" | "exa" | "gemini"; label: string; use: string; url: string }> = [
   { id: "exa", label: "Exa", use: "Web search, for enrichment and research.", url: "https://dashboard.exa.ai/api-keys" },
   { id: "firecrawl", label: "Firecrawl", use: "Reads web pages and documents in full.", url: "https://www.firecrawl.dev/app/api-keys" },
   { id: "fal", label: "fal", use: "Makes images, video, voice and music.", url: "https://fal.ai/dashboard/keys" },
+  { id: "gemini", label: "Gemini", use: "Watches YouTube videos you add, for a summary and a transcript.", url: "https://aistudio.google.com/apikey" },
   { id: "groq", label: "Groq", use: "Speech to text, when Transcription is set to Groq.", url: "https://console.groq.com/keys" },
 ];
 
