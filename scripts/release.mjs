@@ -25,7 +25,8 @@ const notes = value("--notes");
 
 const run = (command, list, options = {}) => execFileSync(command, list, { cwd: root, stdio: "inherit", ...options });
 const read = (command, list) => execFileSync(command, list, { cwd: root, encoding: "utf8" }).trim();
-const r2 = (args) => run("npx", ["--no-install", "wrangler", "r2", "object", ...args, "--remote"], { cwd: path.join(root, "cloud") });
+// mlch.app's config (its Cloudflare account and bucket), not an own server's.
+const r2 = (args) => run("npx", ["--no-install", "wrangler", "r2", "object", ...args, "--remote", "-c", "wrangler.mlch.jsonc"], { cwd: path.join(root, "cloud") });
 const put = (name, from = path.join(dist, name)) => {
   console.log(`uploading ${name}`);
   r2(["put", `mlch-shares/releases/mac/${name}`, "--file", from]);
