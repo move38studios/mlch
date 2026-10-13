@@ -33,6 +33,8 @@ const card = (id: string, kind: MulchNode["kind"], x: number, y: number, text: s
 const ai = (node: MulchNode): MulchNode => ({ ...node, origin: "agent:landing" });
 
 const NODES: MulchNode[] = [
+  // The logo, as a picture on the canvas (served from /brand by the Worker at the asset address image cards use).
+  card("logo", "image", 120, -330, "", { assetId: "icon.svg", w: 180 }),
   card("about", "idea", 0, 0, "A partner to think with, and a live canvas for every project, call and idea. While you talk, it maps, researches and connects what you say to everything you’ve explored before. Then it makes the deck.", { title: "A whiteboard that thinks with you", w: 420 }),
   card("note", "note", -330, -20, "An AI app for non-linear thinkers."),
   ai(card("talk", "idea", 520, -180, "You talk or type; mlch maps it onto the canvas while you speak.")),
@@ -45,11 +47,11 @@ const NODES: MulchNode[] = [
 const EDGES: MulchEdge[] = ["talk", "lookup", "connect", "make", "calls"].map((target) => ({ id: `e-${target}`, source: "about", target, origin: "agent:landing", createdAt: at }));
 
 /** On a phone the same cards go in one column, so the canvas can open zoomed in at the top and be scrolled. */
-const PHONE_ORDER = ["about", "note", "talk", "lookup", "connect", "make", "calls"];
-const PHONE_Y: Record<string, number> = { about: 0, note: 300, talk: 520, lookup: 700, connect: 900, make: 1120, calls: 1300 };
+const PHONE_ORDER = ["logo", "about", "note", "talk", "lookup", "connect", "make", "calls"];
+const PHONE_Y: Record<string, number> = { logo: -280, about: 0, note: 300, talk: 520, lookup: 700, connect: 900, make: 1120, calls: 1300 };
 
 function seed(phone: boolean): Mulch {
-  const nodes = phone ? NODES.map((node) => ({ ...node, x: node.kind === "note" ? 40 : 0, y: PHONE_Y[node.id] ?? PHONE_ORDER.indexOf(node.id) * 200, w: 300 })) : NODES;
+  const nodes = phone ? NODES.map((node) => ({ ...node, x: node.kind === "note" ? 40 : node.id === "logo" ? 70 : 0, y: PHONE_Y[node.id] ?? PHONE_ORDER.indexOf(node.id) * 200, w: node.id === "logo" ? 160 : 300 })) : NODES;
   return {
     version: 1,
     id: LANDING_ID,
@@ -80,7 +82,7 @@ export function Landing() {
     useCanvasUi.setState({ readOnly: false });
     // A phone opens on the first card, readable; the rest is below.
     if (phone) {
-      const focus = setTimeout(() => useMulch.getState().setFocus({ ids: ["about"] }), 500);
+      const focus = setTimeout(() => useMulch.getState().setFocus({ ids: ["logo", "about"] }), 500);
       // Focusing selects the card; a click on the empty canvas lets it go again.
       const release = setTimeout(() => document.querySelector(".react-flow__pane")?.dispatchEvent(new MouseEvent("click", { bubbles: true })), 1300);
       return () => {
@@ -94,9 +96,6 @@ export function Landing() {
     <main className="landing h-full flex">
       <div className="relative flex-1 min-w-0">
         {mulch && <Canvas mulch={mulch} />}
-        <header className="absolute inset-x-0 top-0 pt-5 flex justify-center z-10 pointer-events-none">
-          <img src="/brand/icon.svg" alt="mlch" className="h-16 w-16 sm:h-20 sm:w-20 -rotate-3 drop-shadow-[0_10px_22px_rgba(0,0,0,0.16)]" />
-        </header>
         {/* Where the app has its input bar: the download, what it needs, and the site's links. */}
         <footer className="absolute inset-x-0 bottom-0 px-3 sm:px-4 pb-3 sm:pb-4 flex justify-center z-10 pointer-events-none">
           <div className="pointer-events-auto float rounded-2xl p-2 w-full sm:w-auto sm:min-w-[420px] max-w-[560px]">

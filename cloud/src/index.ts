@@ -405,6 +405,9 @@ export async function handle(request: Request, givenEnv: Env): Promise<Response>
     if (admin) return admin;
   }
 
+  // The landing canvas's picture cards load from the asset address the app's cards use; they are the brand files.
+  const landingAsset = (!onShareHost || share.host === apex.host) && url.pathname.match(/^\/api\/mulches\/landing\/assets\/([\w.-]+)$/);
+  if (landingAsset) return asset(env, request, `/brand/${landingAsset[1]}`, { "Cache-Control": "public, max-age=300" });
   const shared = parts[0] === "s" || (parts[0] === "api" && parts[1] === "mulches" && parts.length > 2);
   if (shared) {
     if (!onShareHost) return Response.redirect(`${env.SHARE_ORIGIN}${url.pathname}${url.search}`, 301);

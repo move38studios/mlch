@@ -11,6 +11,10 @@ describe("landing", () => {
     expect(html).toContain('property="og:image" content="https://mlch.app/brand/og-site.png"');
     expect(html).toMatch(/<script type="module"[^>]*src="\/viewer\/assets\/landing-[^"]+\.js"/);
     expect((await call(`${APEX}/brand/og-site.png`)).status).toBe(200);
+    // The canvas's picture card (the logo) loads from the address image cards use.
+    const logo = await call(`${APEX}/api/mulches/landing/assets/icon.svg`);
+    expect(logo.status).toBe(200);
+    expect(logo.headers.get("Content-Type")).toMatch(/svg/);
     const download = await call(`${APEX}/download`);
     expect(download.status).toBe(302);
     expect(download.headers.get("Location")).toMatch(/\/releases\/mac\/mlch\.dmg$/);
