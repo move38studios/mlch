@@ -46,6 +46,8 @@ if (flag("--promote")) {
 }
 
 const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+// The commit this release is built from (tagged at the end, even if work goes on meanwhile).
+const commit = read("git", ["rev-parse", "HEAD"]);
 if (!flag("--upload-only")) {
   if (read("git", ["status", "--porcelain"])) throw new Error("Uncommitted changes: commit first, so the release matches a commit.");
   if (read("git", ["tag", "--list", `v${version}`])) throw new Error(`v${version} is already released: raise the version in package.json.`);
@@ -75,5 +77,5 @@ if (dmg) {
 const out = path.join(dist, `${channel}-mac.yml`);
 fs.writeFileSync(out, yml);
 put(`${channel}-mac.yml`, out);
-if (!flag("--upload-only")) run("git", ["tag", "-a", `v${version}`, "-m", `mlch ${version}${notes ? `: ${notes}` : ""}`]);
+if (!flag("--upload-only")) run("git", ["tag", "-a", `v${version}`, commit, "-m", `mlch ${version}${notes ? `: ${notes}` : ""}`]);
 console.log(`released ${version} to ${channel}`);
