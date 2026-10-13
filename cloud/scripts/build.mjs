@@ -16,7 +16,15 @@ const vite = path.join(root, "node_modules", "vite", "bin", "vite.js");
 const built = spawnSync(process.execPath, [vite, "build", "--config", path.join(cloud, "viewer", "vite.config.ts"), "--logLevel", "warn"], { cwd: root, stdio: "inherit" });
 if (built.status !== 0) process.exit(built.status ?? 1);
 
-fs.copyFileSync(path.join(cloud, "landing", "index.html"), path.join(dist, "index.html"));
+// The landing page is the canvas built beside the viewer; Cloudflare Web Analytics' beacon when a token is set (landing/analytics.txt).
+const tokenFile = path.join(cloud, "landing", "analytics.txt");
+const analytics = fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, "utf8").trim() : "";
+const landing = fs.readFileSync(path.join(dist, "viewer", "landing.html"), "utf8").replace(
+  "<!--ANALYTICS-->",
+  analytics ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: analytics })}'></script>` : "",
+);
+fs.writeFileSync(path.join(dist, "index.html"), landing);
+fs.rmSync(path.join(dist, "viewer", "landing.html"));
 fs.mkdirSync(path.join(dist, "server"));
 fs.copyFileSync(path.join(cloud, "landing", "server.html"), path.join(dist, "server", "index.html"));
 // Legal pages (/privacy, /terms, /refunds, /company), the admin page (/admin), and their stylesheet.

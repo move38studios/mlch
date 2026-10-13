@@ -11,3 +11,10 @@
 [title="Show in Finder"] {
   display: none;
 }
+
+/* The landing page on a phone: pinch to zoom; the footer takes the bottom edge. */
+@media (max-width: 640px) {
+  .landing .react-flow__controls {
+    display: none;
+  }
+}

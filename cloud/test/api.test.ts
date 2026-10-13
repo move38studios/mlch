@@ -3,14 +3,17 @@ import { describe, expect, it } from "vitest";
 import { APEX, SHARE, auth, call, create, mulch, putFile, putSnapshot } from "./helpers";
 
 describe("landing", () => {
-  it("serves the placeholder page with the wordmark and nothing else", async () => {
+  it("serves the landing canvas with its preview tags, and Download", async () => {
     const response = await call(`${APEX}/`);
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain("<title>mlch</title>");
-    expect(html).toContain('src="/brand/wordmark.svg"');
-    expect(html.replace(/<[^>]+>|<style>[\s\S]*?<\/style>/g, "").replace(/\s+/g, " ").trim()).toMatch(/^mlch\b/);
-    expect((await call(`${APEX}/brand/wordmark.svg`)).status).toBe(200);
+    expect(html).toContain('property="og:image" content="https://mlch.app/brand/og-site.png"');
+    expect(html).toMatch(/<script type="module"[^>]*src="\/viewer\/assets\/landing-[^"]+\.js"/);
+    expect((await call(`${APEX}/brand/og-site.png`)).status).toBe(200);
+    const download = await call(`${APEX}/download`);
+    expect(download.status).toBe(302);
+    expect(download.headers.get("Location")).toMatch(/\/releases\/mac\/mlch\.dmg$/);
   });
 
   it("sends www to the apex", async () => {

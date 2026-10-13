@@ -1,0 +1,120 @@
+/**
+ * mlch.app's landing page: a small canvas, the product as its own preview.
+ * The app's canvas runs here with nothing behind it (landing-main.tsx answers its
+ * requests): cards can be moved, written and connected; nothing is saved, and
+ * a reload starts again. Wording from the app's onboarding (George's).
+ */
+
+import { useEffect } from "react";
+import { Download } from "lucide-react";
+import { Canvas } from "@/components/canvas/Canvas";
+import { SidePanel } from "@/components/canvas/SidePanel";
+import { useCanvasUi } from "@/components/canvas/ui";
+import { useMulch } from "@/lib/mulch/client";
+import type { Mulch, MulchEdge, MulchNode } from "@/lib/mulch/types";
+
+export const LANDING_ID = "landing";
+/** The current release, marked as early (package.json's version, at build time). */
+const VERSION = import.meta.env.VITE_MLCH_VERSION ?? "";
+/** Where the source lives once it is public; empty hides the link. */
+const SOURCE_URL = import.meta.env.VITE_MLCH_SOURCE_URL ?? "";
+
+const at = Date.UTC(2026, 9, 13);
+const card = (id: string, kind: MulchNode["kind"], x: number, y: number, text: string, extra: Partial<MulchNode> = {}): MulchNode => ({
+  id,
+  kind,
+  x,
+  y,
+  text,
+  origin: "user",
+  createdAt: at,
+  ...extra,
+});
+const ai = (node: MulchNode): MulchNode => ({ ...node, origin: "agent:landing" });
+
+const NODES: MulchNode[] = [
+  card("about", "idea", 0, 0, "A partner to think with, and a live canvas for every project, call and idea. While you talk, it maps, researches and connects what you say to everything you’ve explored before. Then it makes the deck.", { title: "A whiteboard that thinks with you", w: 420 }),
+  card("note", "note", -330, -20, "An AI app for non-linear thinkers."),
+  ai(card("talk", "idea", 520, -180, "You talk or type; mlch maps it onto the canvas while you speak.")),
+  ai(card("lookup", "idea", 560, 20, "It looks things up as you go: sources, examples, definitions, the questions worth asking.")),
+  ai(card("connect", "idea", 520, 230, "It spots where today’s thinking meets what you explored before, in other canvases and in your notes, and draws the line.")),
+  ai(card("make", "idea", 80, 330, "Ask for a deck, a document or an interactive page, and share it with a link.")),
+  ai(card("calls", "idea", -300, 260, "On calls it listens to both sides and keeps the notes.")),
+];
+
+const EDGES: MulchEdge[] = ["talk", "lookup", "connect", "make", "calls"].map((target) => ({ id: `e-${target}`, source: "about", target, origin: "agent:landing", createdAt: at }));
+
+/** On a phone the same cards go in one column, so the canvas can open zoomed in at the top and be scrolled. */
+const PHONE_ORDER = ["about", "note", "talk", "lookup", "connect", "make", "calls"];
+const PHONE_Y: Record<string, number> = { about: 0, note: 300, talk: 520, lookup: 700, connect: 900, make: 1120, calls: 1300 };
+
+function seed(phone: boolean): Mulch {
+  const nodes = phone ? NODES.map((node) => ({ ...node, x: node.kind === "note" ? 40 : 0, y: PHONE_Y[node.id] ?? PHONE_ORDER.indexOf(node.id) * 200, w: 300 })) : NODES;
+  return {
+    version: 1,
+    id: LANDING_ID,
+    title: "mlch",
+    createdAt: at,
+    updatedAt: at,
+    nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
+    edges: Object.fromEntries(EDGES.map((edge) => [edge.id, edge])),
+    groups: {},
+  };
+}
+
+const LINKS: Array<[string, string]> = [
+  ...(SOURCE_URL ? ([["Source code", SOURCE_URL]] as Array<[string, string]>) : []),
+  ["Your own server", "/server"],
+  ["Privacy", "/privacy"],
+  ["Terms", "/terms"],
+  ["Refunds", "/refunds"],
+  ["Company", "/company"],
+];
+
+export function Landing() {
+  const mulch = useMulch((s) => s.mulch);
+  useEffect(() => {
+    const phone = window.matchMedia("(max-width: 640px)").matches;
+    useMulch.setState({ id: LANDING_ID, mulch: seed(phone), connected: true });
+    useCanvasUi.setState({ readOnly: false });
+    // A phone opens on the first card, readable; the rest is below.
+    if (phone) {
+      const timer = setTimeout(() => useMulch.getState().setFocus({ ids: ["about"] }), 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  return (
+    <main className="landing h-full flex">
+      <div className="relative flex-1 min-w-0">
+        {mulch && <Canvas mulch={mulch} />}
+        <header className="absolute inset-x-0 top-0 px-4 pt-4 flex items-start gap-3 z-10 pointer-events-none">
+          <div className="pointer-events-auto float rounded-2xl h-12 px-3.5 sm:px-4 flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <img src="/brand/wordmark.svg" alt="mlch" className="h-5 sm:h-6 w-auto shrink-0" />
+            {VERSION && <span className="text-[12px] sm:text-[12.5px] leading-tight text-ink-3 tabular-nums">Early release {VERSION}</span>}
+          </div>
+          <div className="flex-1" />
+          <div className="pointer-events-auto flex flex-col items-end gap-1">
+            <a href="/download" className="h-12 px-4 sm:px-5 rounded-2xl bg-amber text-ink text-[15px] sm:text-[16px] font-semibold flex items-center gap-2 whitespace-nowrap shadow-[var(--float-shadow)] hover:brightness-[1.03]">
+              <Download size={18} strokeWidth={2.25} />
+              <span>
+                Download<span className="hidden sm:inline"> for Mac</span>
+              </span>
+            </a>
+            <span className="text-[12px] text-ink-3 pr-1 text-right">macOS 14.4 or later, Apple silicon</span>
+          </div>
+        </header>
+        <footer className="absolute inset-x-0 bottom-0 px-4 pb-4 flex z-10 pointer-events-none">
+          <nav className="pointer-events-auto float rounded-xl px-2 py-1 flex flex-wrap items-center gap-x-1 text-[13px] text-ink-2 max-w-full">
+            {LINKS.map(([label, href]) => (
+              <a key={href} href={href} className="px-2 py-1 rounded-lg hover:bg-paper-2 hover:text-ink">
+                {label}
+              </a>
+            ))}
+          </nav>
+        </footer>
+      </div>
+      <SidePanel />
+    </main>
+  );
+}
