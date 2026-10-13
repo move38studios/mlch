@@ -220,12 +220,20 @@ describe("Codex harness runTurn", () => {
 
   it("starts the turn at medium effort with the history-seeded prompt", async () => {
     const { harness, child } = setup();
-    await collect(harness.runTurn(params({ model: "gpt-6-luna" })));
+    await collect(harness.runTurn(params({ model: "gpt-6-astra" })));
     const [turn] = child().requests("turn/start");
     // Medium: "low" produced stray text in the recorded evals (build/integrate.md).
-    expect(turn.params).toMatchObject({ threadId: RECORDED_THREAD, model: "gpt-6-luna", effort: "medium", summary: "auto" });
+    expect(turn.params).toMatchObject({ threadId: RECORDED_THREAD, model: "gpt-6-astra", effort: "medium", summary: "auto" });
     expect(turnText(turn)).toContain("User: The secret word is banana.");
     expect(turnText(turn).endsWith("<canvas/>\n<user>add 2 and 3</user>")).toBe(true);
+  });
+
+  it("falls back to Codex's default when the account doesn't list the model asked for", async () => {
+    const { harness, child } = setup();
+    await collect(harness.runTurn(params({ model: "gpt-9-imaginary" })));
+    const [turn] = child().requests("turn/start");
+    expect(turn.params.model).not.toBe("gpt-9-imaginary");
+    expect(["gpt-6-astra", "gpt-5.6-luna"]).toContain(turn.params.model);
   });
 
   it("continues a known thread without re-sending the history", async () => {

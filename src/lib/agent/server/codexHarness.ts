@@ -648,9 +648,10 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
 
   /* ── threads ────────────────────────────────────────────────── */
 
+  /** The model asked for when this account lists it (or the list can't be read), else Codex's default. */
   async function resolveModel(server: CodexAppServer, requested: string | undefined): Promise<string | undefined> {
-    if (requested) return requested;
     const models = await listModels(server).catch(() => [] as AgentModelOption[]);
+    if (requested && (!models.length || models.some((model) => model.id === requested))) return requested;
     return models.find((model) => model.isDefault)?.id;
   }
 
@@ -895,12 +896,13 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
       thread.settled = false;
       startSent = true;
       try {
+        const turnModel = params.model ? await resolveModel(server, params.model) : undefined;
         const started = await server.request<{ turn: { id: string } }>(
           "turn/start",
           {
             threadId: thread.id,
             input: [{ type: "text", text: prompt, text_elements: [] }],
-            ...(params.model ? { model: params.model } : {}),
+            ...(turnModel ? { model: turnModel } : {}),
             effort: params.effort ?? deps.effort,
             summary: "auto",
           },

@@ -87,10 +87,15 @@ export const settingsSchema = z.object({
 export type Settings = z.infer<typeof settingsSchema>;
 export type Lane = "fast" | "slow" | "command";
 
-/** Fast lane wants speed; the rest want quality. */
+/**
+ * By how often a lane runs: capture (every utterance) fast; enrichment (every
+ * batch) strong; instructions, making and research (rare, and what mlch is
+ * judged by) the strongest. A Codex model the account doesn't list falls back
+ * to Codex's default (codexHarness `resolveModel`).
+ */
 export const DEFAULT_MODELS: Record<AgentHarnessId, Record<Lane, string | undefined>> = {
-  claude: { fast: "haiku", slow: "sonnet", command: "sonnet" },
-  codex: { fast: undefined, slow: undefined, command: undefined },
+  claude: { fast: "haiku", slow: "sonnet", command: "opus" },
+  codex: { fast: "gpt-6.1-sol", slow: "gpt-6-astra", command: "gpt-6-astra" },
 };
 
 function file(): string {
