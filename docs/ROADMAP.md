@@ -4,10 +4,15 @@ What we want to build or improve next, in priority order. One entry per item, wi
 
 Order agreed 2026-10-12: **docs/PLAN-2.md**, from a call to a shared link (links and sources, local transcription, call mode, menu bar, sharing, onboarding, signed release, then collaboration). Its milestones and checks are the work list; this file keeps what is outside it.
 
-## To decide (George)
+## Before sharing on mlch.app goes live (George)
 
-- **Share server for an open-source mlch.** Proposal (2026-10-13): open-source the app and `cloud/`; Settings → Sharing → Server: mlch.app (hosted, with limits and expiry of unopened shares) or your own (a "Deploy to Cloudflare" template of cloud/, address pasted in). Same documented protocol, links carry their server, collaboration follows. No Cloudflare credentials in the app. Licence: George's call (e.g. MIT app, AGPL server).
-- **Including linked items in a share.** Today link cards are shared as titles only. Proposal: the Share menu counts them and offers "Include what they link to" (a copy of each linked item at that moment).
+Built 2026-10-13: the three sharing choices, Google sign-in, $12/year subscription (Stripe test mode), own servers. What's left needs George:
+
+- **Legal pages on mlch.app:** privacy policy, terms, refund policy, company details. Drafts to rewrite: `docs/drafts/`. Google needs the privacy and terms links before the sign-in screen can be published (Google Auth Platform → Branding, then Audience → Publish app); until then only test users can sign in (george@m38.ai). Stripe needs them for live payments.
+- **Stripe live mode:** a restricted live key (Customers, Checkout Sessions, Subscriptions, Billing portal, Prices: write) as the Worker secret `STRIPE_SECRET_KEY` (`npx wrangler secret put STRIPE_SECRET_KEY -c wrangler.mlch.jsonc` in cloud/), the live product and price (lookup key `mlch_sharing_yearly`, $12/year USD, tax exclusive), a live webhook to `https://mlch.app/api/stripe/webhook` (customer.subscription.*) as `STRIPE_WEBHOOK_SECRET`, tax registrations in live mode (EU one-stop VAT scheme: accountant). Test mode now uses the Stripe CLI's key, which expires 2027-01-11.
+- **Publishing the source:** the own-server guide (mlch.app/server) says "the mlch source code" without a link until the repo is public. A "Deploy to Cloudflare" button needs cloud/ to build on its own (the viewer builds from the app's components today).
+- **Deleting an account** (privacy): not built. Sessions can be signed out; account rows stay.
+- **Licence:** George's call (e.g. MIT app, AGPL server).
 
 ## Outside plan 2
 

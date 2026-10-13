@@ -168,10 +168,14 @@ export const linkedContent: LinkedOf = async (card) => {
   if ("mulchId" in ref) {
     const target = (await peekMulch(ref.mulchId).catch(() => undefined))?.nodes[ref.itemId];
     if (!target || target.kind === "ref" || target.gen) return undefined;
-    const { ref: _ref, groupId: _group, w: _w, h: _h, ...content } = target;
-    void _ref, _group, _w, _h;
+    // The item's content in the card's place: not its link, group or size there.
+    const content: Partial<MulchNode> = { ...target };
+    delete content.ref;
+    delete content.groupId;
+    delete content.w;
+    delete content.h;
     const dir = mulchDir(ref.mulchId);
-    return { node: { ...content, ...place }, files: filesOf(target).map((file) => ({ from: path.join(dir, file), path: file })) };
+    return { node: { ...content, ...place } as MulchNode, files: filesOf(target).map((file) => ({ from: path.join(dir, file), path: file })) };
   }
   const resolved = await resolveRef(ref, true).catch(() => undefined);
   if (!resolved?.exists || !resolved.text) return undefined;

@@ -28,6 +28,7 @@ Onboarding goes one step at a time; Back works everywhere, and downloads show at
 - **Web and making**: Exa, Firecrawl, fal, Gemini (watches YouTube videos), each with Get a key. A saved key shows its last four characters, is checked with the service (Works, or why not), and can be changed or removed. Skip.
 - **Your context**: what to add and what not, what mlch reads. Your Obsidian vaults offered; Add folder as many times as you like; each shows its file count and how many were skipped. Adding your home folder, Documents or a whole disk asks first.
 - **Calls**: what a call does; Open at login.
+- **Sharing**: mlch.app (chosen), No sharing, Your own server. Under mlch.app: Sign in with Google (see 6).
 - **Ready**: Open mlch goes to the list, with "Start here" in it (not opened). Settings → App → Setup goes back through the steps.
 - With nothing in the list, the home screen is the wordmark and New, centred.
 
@@ -73,10 +74,17 @@ Onboarding goes one step at a time; Back works everywhere, and downloads show at
 
 ## 6. Sharing
 
+Stripe is in test mode: pay with card 4242 4242 4242 4242, any future date, any CVC. Google sign-in works only for george@m38.ai until the sign-in screen is published (docs/ROADMAP.md).
+
+- Settings → Sharing (or setup): Sign in with Google. The browser opens; pick george@m38.ai; the page says "Signed in as …" and asks to open mlch; mlch shows "Signed in as …".
+- Share menu before subscribing: "New links on mlch.app need a subscription." and Sharing settings. Subscribe, $12 a year: Stripe Checkout in the browser, with tax added for your address. Pay with the test card; back in mlch: "Subscribed, renews …". Manage subscription opens Stripe's page (cancel there: the old links keep working, new ones are refused).
+- A canvas with a link card to another canvas: the Share menu says "Also shared: what 1 link card links to". In the shared page the linked item appears as an ordinary card with its content (not a link).
+- No sharing: the Share buttons are gone (canvas header, deck cards, the deck viewer).
+- Your own server (optional, for the technical route): follow mlch.app/server, then enter the address and key. Check says Connected; new links are on your server; links made before stay on mlch.app.
 - In a mulch: Share (header). The link is copied. Open it in a browser, and on your phone.
 - The page has the mlch tab icon and the canvas title; a mouse wheel zooms at the pointer, the trackpad pans.
 - Add a card or speak in the app: it appears in the browser within seconds. Stop sharing: the page says it's no longer live.
-- On a deck card: Share (says Sharing, then Link copied). The link opens the deck in a frame with Full screen and Fill the window. Link cards to other canvases show only their title.
+- On a deck card: Share (says Sharing, then Link copied). The link opens the deck in a frame with Full screen and Fill the window.
 - Paste a shared link into Slack or iMessage: a preview with the title and a picture (the canvas as shared, or the deck's first slide).
 - In the shared canvas page: Open in mlch. It should open mlch with a copy as a new mulch.
 - Delete link from the Share menu: the page stops working.

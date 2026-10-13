@@ -119,7 +119,7 @@ function Account({ view, reload }: { view: SharingView; reload: () => Promise<un
   if (!account) return null;
   if (!account.signedIn) {
     return (
-      <div className="mt-3 pl-9">
+      <div className="mt-3 mb-5 pl-9">
         <div className="flex items-center gap-3 flex-wrap">
           <button onClick={() => void open("sign-in")} className={PRIMARY}>
             Sign in with Google
@@ -137,7 +137,7 @@ function Account({ view, reload }: { view: SharingView; reload: () => Promise<un
   const sub = account.subscription;
   const lapsed = sub && !account.canShare;
   return (
-    <div className="mt-3 pl-9 space-y-3">
+    <div className="mt-3 mb-5 pl-9 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <Done>Signed in as {account.email}</Done>
         <span className="flex-1" />
@@ -208,7 +208,7 @@ function OwnServer({ view, reload }: { view: SharingView; reload: () => Promise<
   }
 
   return (
-    <div className="mt-3 pl-9 space-y-2.5">
+    <div className="mt-3 mb-5 pl-9 space-y-2.5">
       <a href={SERVER_GUIDE_URL} target="_blank" rel="noreferrer" className="inline-block text-[13px] text-ink-2 underline underline-offset-2 hover:text-ink">
         How to set up your server
       </a>
