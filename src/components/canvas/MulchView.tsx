@@ -112,6 +112,8 @@ function ShareMenu({ mulchId }: { mulchId: string }) {
   useEffect(() => {
     if (!sharing) void useSharing.getState().load();
   }, [sharing]);
+  // The app menu's File > Share.
+  useEffect(() => desktop()?.onMenu?.((command) => command === "share" && setOpen(true)), []);
   useEffect(() => {
     if (!open) return;
     // The account may have changed in the browser (signed in, subscribed) since the page loaded.
@@ -218,7 +220,12 @@ function ConversationButton() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // The app menu's View > Conversation.
+    const offMenu = desktop()?.onMenu?.((command) => command === "conversation" && useConversation.getState().setOpen(!useConversation.getState().open));
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      offMenu?.();
+    };
   }, []);
   return (
     <button

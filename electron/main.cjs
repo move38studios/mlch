@@ -232,17 +232,47 @@ function setupScreenshots() {
   if (!globalShortcut.register(CALL_SHORTCUT, () => void openPage('/new?call=1'))) log(`Shortcut ${CALL_SHORTCUT} is taken by another app.`);
 }
 
-// mlch: updates for the packaged app, from mlch.app (electron-builder.yml publish). Downloaded quietly, installed on quit.
+// mlch: updates for the packaged app, from mlch.app (electron-builder.yml publish). Downloaded quietly, installed on quit;
+// once one is ready the menus offer "Restart to Update" (a menu bar app is rarely quit).
+let updater;
+let updateReady = false;
+/** Official builds only: a build from source has no feed (MLCH_UPDATE_URL sets one). */
+function updatesOn() {
+  return app.isPackaged && !process.env.MLCH_NO_UPDATES;
+}
 function startUpdates() {
-  if (!app.isPackaged || process.env.MLCH_NO_UPDATES) return;
+  if (!updatesOn()) return;
   const { autoUpdater } = require('electron-updater');
+  updater = autoUpdater;
   // One line per problem: the updater's own errors carry whole HTTP responses.
   const firstLine = (value) => String(value?.message ?? value).split('\n')[0];
   autoUpdater.logger = { info: log, warn: (value) => log(firstLine(value)), error: (value) => log(firstLine(value)), debug: () => {} };
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-downloaded', () => {
+    updateReady = true;
+    Menu.setApplicationMenu(buildMenu());
+    void refreshTray();
+  });
   const check = () => autoUpdater.checkForUpdates().catch((error) => log(`Update check failed: ${firstLine(error)}`));
   void check();
   setInterval(check, 6 * 60 * 60 * 1000).unref();
+}
+async function checkForUpdatesNow() {
+  if (!updater) {
+    await dialog.showMessageBox({ message: 'Updates are off in this build.', buttons: ['OK'] });
+    return;
+  }
+  try {
+    const result = await updater.checkForUpdates();
+    const next = result?.updateInfo?.version;
+    if (!next || next === app.getVersion()) await dialog.showMessageBox({ message: `mlch ${app.getVersion()} is the latest version.`, buttons: ['OK'] });
+    else await dialog.showMessageBox({ message: `mlch ${next} is downloading. Restart to update when it is ready.`, buttons: ['OK'] });
+  } catch (error) {
+    await dialog.showMessageBox({ type: 'warning', message: 'Could not check for updates.', detail: String(error?.message ?? error).split('\n')[0], buttons: ['OK'] });
+  }
+}
+function restartToUpdate() {
+  if (updateReady) updater?.quitAndInstall();
 }
 
 // mlch: the menu bar. New, New Call, the last few mulches, and the call being listened to.
@@ -259,12 +289,38 @@ async function openPage(pathname) {
   await window.loadURL(new URL(pathname, origin).href);
 }
 
-async function recentMulches() {
+async function recentMulches(count = 5) {
   try {
     const response = await fetch(`${origin}/api/mulches`, { headers: { 'X-Mlch-Desktop': token } });
     const body = await response.json();
-    return Array.isArray(body.mulches) ? body.mulches.filter((mulch) => !mulch.archivedAt).slice(0, 5) : [];
+    return Array.isArray(body.mulches) ? body.mulches.filter((mulch) => !mulch.archivedAt).slice(0, count) : [];
   } catch { return []; }
+}
+
+/** A recent mulch as a menu item: working or with new results shows in its label. */
+function recentItem(mulch) {
+  const state = mulch.activity?.working ? ' (working)' : mulch.activity?.unseen ? ' (new results)' : '';
+  return { label: `${String(mulch.title).slice(0, 60)}${state}`, click: () => void openPage(`/n/${mulch.id}`) };
+}
+
+/** Sent to the page: Search, Share, Conversation and the like act where the person is. */
+function pageCommand(command) {
+  if (!window) return;
+  window.show();
+  window.focus();
+  window.webContents.send('desktop:menu', command);
+}
+
+/** Settings → Diagnostics' report, from the menu: saved to Downloads and shown in Finder. */
+async function saveSupportReport() {
+  try {
+    const response = await fetch(`${origin}/api/diagnostics`, { method: 'POST', headers: { 'X-Mlch-Desktop': token } });
+    const body = await response.json();
+    if (body.file) shell.showItemInFolder(body.file);
+    else await dialog.showMessageBox({ type: 'warning', message: 'The report could not be saved.', detail: body.error ?? '', buttons: ['OK'] });
+  } catch (error) {
+    await dialog.showMessageBox({ type: 'warning', message: 'The report could not be saved.', detail: String(error?.message ?? error), buttons: ['OK'] });
+  }
 }
 
 async function refreshTray() {
@@ -280,12 +336,30 @@ async function refreshTray() {
     ] : []),
     { label: 'New', click: () => void openPage('/new') },
     { label: 'New Call', accelerator: CALL_SHORTCUT, registerAccelerator: false, click: () => void openPage('/new?call=1') },
-    ...(recent.length ? [{ type: 'separator' }, ...recent.map((mulch) => ({ label: String(mulch.title).slice(0, 60), click: () => void openPage(`/n/${mulch.id}`) }))] : []),
+    ...(recent.length ? [{ type: 'separator' }, ...recent.map(recentItem)] : []),
     { type: 'separator' },
+    { label: 'Search…', click: () => void openPage('/?search=1') },
     { label: 'Open mlch', click: () => { if (!window) void createWindow(); else { window.show(); window.focus(); } } },
+    { label: 'Settings…', click: () => void openPage('/settings') },
+    ...(updateReady ? [{ type: 'separator' }, { label: 'Restart to Update', click: restartToUpdate }] : []),
+    { type: 'separator' },
     { role: 'quit' },
   ]);
   tray.setContextMenu(menu);
+  // The Dock's menu: the same start points.
+  if (process.platform === 'darwin') {
+    app.dock?.setMenu(Menu.buildFromTemplate([
+      { label: 'New', click: () => void openPage('/new') },
+      { label: 'New Call', click: () => void openPage('/new?call=1') },
+      ...(recent.length ? [{ type: 'separator' }, ...recent.map(recentItem)] : []),
+    ]));
+  }
+  // The app menu's Open Recent follows the list too.
+  const longer = recent.length ? await recentMulches(10) : [];
+  if (JSON.stringify(longer.map((m) => [m.id, m.title])) !== JSON.stringify(openRecent.map((m) => [m.id, m.title]))) {
+    openRecent = longer;
+    Menu.setApplicationMenu(buildMenu());
+  }
   // Scripted runs (scripts/scenarios/menubar.cjs) read and click the menu.
   if (process.env.MLCH_ELECTRON_USER_DATA) globalThis.__mlchTrayMenu = menu;
 }
@@ -484,10 +558,34 @@ function registerBridge() {
   }));
 }
 
+/** The app menu's Open Recent (kept fresh by refreshTray). */
+let openRecent = [];
+
 function buildMenu() {
+  // Keys the page handles itself (⌘K, ⌘J, zoom) are shown here but not taken from it (registerAccelerator: false).
   return Menu.buildFromTemplate([
-    { role: 'appMenu' },
+    { label: app.name, submenu: [
+      { role: 'about' },
+      { label: 'Check for Updates…', enabled: updatesOn(), click: () => void checkForUpdatesNow() },
+      ...(updateReady ? [{ label: 'Restart to Update', click: restartToUpdate }] : []),
+      { type: 'separator' },
+      { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => void openPage('/settings') },
+      { type: 'separator' },
+      { role: 'services' },
+      { type: 'separator' },
+      { role: 'hide' },
+      { role: 'hideOthers' },
+      { role: 'unhide' },
+      { type: 'separator' },
+      { role: 'quit' },
+    ] },
     { label: 'File', submenu: [
+      { label: 'New', accelerator: 'CmdOrCtrl+N', click: () => void openPage('/new') },
+      { label: 'New Call', accelerator: CALL_SHORTCUT, registerAccelerator: false, click: () => void openPage('/new?call=1') },
+      { label: 'Open Recent', enabled: openRecent.length > 0, submenu: openRecent.map(recentItem) },
+      { type: 'separator' },
+      { label: 'Search…', accelerator: 'CmdOrCtrl+K', registerAccelerator: false, click: () => pageCommand('search') },
+      { label: 'Share…', click: () => pageCommand('share') },
       { label: 'Add Screenshot', accelerator: SCREENSHOT_SHORTCUT, registerAccelerator: false, click: () => void screenshotToCanvas() },
       { type: 'separator' },
       { role: 'close' },
@@ -495,6 +593,8 @@ function buildMenu() {
     { role: 'editMenu' },
     // Zoom acts on the canvas, not the page; the keys reach the page (gestures.ts), clicks are sent to it.
     { label: 'View', submenu: [
+      { label: 'Conversation', accelerator: 'CmdOrCtrl+J', registerAccelerator: false, click: () => pageCommand('conversation') },
+      { type: 'separator' },
       { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', registerAccelerator: false, click: () => window?.webContents.send('desktop:menu', 'zoom-in') },
       { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', registerAccelerator: false, click: () => window?.webContents.send('desktop:menu', 'zoom-out') },
       { label: 'Show All', accelerator: 'CmdOrCtrl+0', registerAccelerator: false, click: () => window?.webContents.send('desktop:menu', 'zoom-fit') },
@@ -502,8 +602,15 @@ function buildMenu() {
       ...(app.isPackaged ? [] : [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }]),
       { role: 'togglefullscreen' },
     ] },
+    { label: 'Go', submenu: [
+      { label: 'Home', accelerator: 'Shift+CmdOrCtrl+H', click: () => void openPage('/') },
+      { label: 'Back', accelerator: 'CmdOrCtrl+[', click: () => window?.webContents.navigationHistory.goBack() },
+    ] },
     { role: 'windowMenu' },
-    { label: 'Help', submenu: [
+    { role: 'help', submenu: [
+      { label: 'mlch Help', click: () => void shell.openExternal('https://mlch.app') },
+      { label: 'Save Support Report', click: () => void saveSupportReport() },
+      { type: 'separator' },
       { label: 'Open Logs', click: () => void openLogs() },
       { label: 'Restart Local Server', click: () => void startWithRetry() },
     ] },

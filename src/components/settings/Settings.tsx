@@ -191,10 +191,10 @@ export function Settings() {
   useEffect(() => setInApp(!!desktop()), []);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 4);
-    // Back: Esc (when not typing) and ⌘[.
+    // Back: Esc when not typing (⌘[ is the app menu's Back).
     const onKey = (event: KeyboardEvent) => {
       const typing = event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable]");
-      if ((event.key === "Escape" && !typing) || (event.metaKey && event.key === "[")) {
+      if (event.key === "Escape" && !typing) {
         event.preventDefault();
         router.push("/");
       }
