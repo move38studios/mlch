@@ -21,13 +21,13 @@ export function framePage(title: string, entry: string, nonce: string): string {
 <link rel="apple-touch-icon" href="/brand/icon-180.png">
 <style>
   html, body { margin: 0; height: 100%; background: #161616; font: 13px/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
-  #stage { position: fixed; inset: 0; display: grid; place-items: center; container-type: size; padding: 12px; box-sizing: border-box; }
-  #stage:fullscreen { padding: 0; background: #000; }
+  /* The page above, the buttons in their own strip below, so a large page never covers them. */
+  #stage { position: fixed; inset: 0 0 48px 0; display: grid; place-items: center; container-type: size; padding: 12px 12px 0; box-sizing: border-box; }
+  #stage:fullscreen { inset: 0; padding: 0; background: #000; }
   iframe { border: 0; background: #fff; border-radius: 10px; width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9; }
   #stage:fullscreen iframe { border-radius: 0; }
   body.fill iframe { width: 100%; height: 100%; aspect-ratio: auto; }
-  #bar { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 6px; opacity: .35; transition: opacity .15s; }
-  #bar:hover, #bar:focus-within { opacity: 1; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; height: 48px; padding: 0 12px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   button { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: rgba(255,255,255,.14); color: #fff; font: inherit; cursor: pointer; }
   button:hover { background: rgba(255,255,255,.24); }
   :fullscreen ~ #bar { display: none; }

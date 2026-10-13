@@ -4,6 +4,13 @@ What we want to build or improve next, in priority order. One entry per item, wi
 
 Order agreed 2026-10-12: **docs/PLAN-2.md**, from a call to a shared link (links and sources, local transcription, call mode, menu bar, sharing, onboarding, signed release, then collaboration). Its milestones and checks are the work list; this file keeps what is outside it.
 
+## To decide after George's testing round (2026-10-13)
+
+George is collecting findings; these wait for his decision, then go in or out.
+
+- **Hold-to-talk for instructions.** Proposal: always-listening stays the default; holding a key (⌥ suggested) while speaking makes that speech one instruction, sent on release (no cut-off, no thinking mistaken for an instruction). In the window first; from any app later (needs Accessibility permission). No speech-mode setting unless people ask. Meanwhile spoken instructions wait for 4 s of quiet (up to 20 s) before running.
+- **Voice detection instead of the loudness gate.** A small voice-activity model (WebAssembly) would skip typing and music and cut at sentence ends. In the first test, 3 of 9 chunks came back empty (about 0.2 s each locally, discarded). Do it if empty or noisy chunks matter in use.
+
 ## Outside plan 2
 
 1. **Home screen.** The full logo on the empty screen (centred, the scribbles and lettering), the small wordmark top-left once there is a list. The empty screen as one clear start (New, or straight into a new mulch with the mic ready, tied to onboarding). Whether mlch needs a tagline at all (in the app: probably not; on mlch.app: maybe). Wording from George.
