@@ -18,9 +18,10 @@
     // New shares need a signed-in, subscribed account (src/accounts.ts).
     "ACCOUNTS": "on",
     "GOOGLE_CLIENT_ID": "846064973171-sh4vljtpv2f4e5rvrod1pfs2kk3808dd.apps.googleusercontent.com",
-    "STRIPE_PRICE": "mlch_sharing_yearly"
-    // /admin (src/admin.ts), after creating its Cloudflare Access application (README.md, "Admin"):
-    // "ACCESS_TEAM_DOMAIN": "<team>.cloudflareaccess.com", "ACCESS_AUD": "<the application's audience tag>". Unset: admin is refused.
+    "STRIPE_PRICE": "mlch_sharing_yearly",
+    // /admin (src/admin.ts): the Cloudflare Access application "mlch admin" (move38 team, m38.ai addresses).
+    "ACCESS_TEAM_DOMAIN": "move38.cloudflareaccess.com",
+    "ACCESS_AUD": "d113a5cbd676f2f47b9a9cf7148413f08d8bbe35870bfa02d8953646b874021d"
     // Secrets: GOOGLE_CLIENT_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET (wrangler secret put … -c wrangler.mlch.jsonc).
   },
   // Landing page, brand files and the shared-canvas viewer, built by scripts/build.mjs.
