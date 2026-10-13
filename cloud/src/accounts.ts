@@ -23,6 +23,8 @@ let outbound: Outbound = (...args) => fetch(...args);
 export function setOutbound(next: Outbound): void {
   outbound = next;
 }
+/** Calls out of the Worker (Google, Stripe, Cloudflare Access), replaceable in tests. */
+export const send: Outbound = (...args) => outbound(...args);
 
 const GRANT_MS = 10 * 60_000;
 /** Subscription states that may make new shares (past_due: Stripe is still retrying the card). */
@@ -74,9 +76,14 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS grants (code_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, challenge TEXT NOT NULL, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL, created_at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS shares_user ON shares (user_id)`,
+  // Friend codes (admin.ts): a Stripe coupon and its promotion code. The same as migrations/0001_admin.sql.
+  `CREATE TABLE IF NOT EXISTS coupons (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, coupon_id TEXT NOT NULL UNIQUE, percent_off INTEGER NOT NULL, max_redemptions INTEGER NOT NULL, expires_at INTEGER, created_at INTEGER NOT NULL, created_by TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, deactivated_at INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS account_codes (user_id TEXT PRIMARY KEY, promotion_code_id TEXT NOT NULL, code TEXT NOT NULL, subscription_id TEXT, created_at INTEGER NOT NULL)`,
+  // Only that an account was deleted, when and by which admin; never whose.
+  `CREATE TABLE IF NOT EXISTS deletions (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, by TEXT NOT NULL)`,
 ];
 const ready = new WeakMap<D1Database, Promise<unknown>>();
-function db(env: Env): Promise<D1Database> {
+export function db(env: Env): Promise<D1Database> {
   const database = env.DB!;
   if (!ready.has(database)) ready.set(database, database.batch(SCHEMA.map((sql) => database.prepare(sql))));
   return ready.get(database)!.then(() => database);
@@ -220,23 +227,38 @@ async function exchange(request: Request, env: Env): Promise<Response> {
 
 /* ── Stripe ────────────────────────────────────────────────────── */
 
-async function stripe<T>(env: Env, path: string, form?: Record<string, string>): Promise<T> {
-  const response = await outbound(`https://api.stripe.com/v1/${path}`, {
-    method: form ? "POST" : "GET",
-    headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {}) },
-    body: form ? new URLSearchParams(form) : undefined,
-  });
-  const body = (await response.json()) as T & { error?: { message?: string } };
-  if (!response.ok) throw new Error(`Stripe ${path}: ${body.error?.message ?? response.status}`);
+/** The Stripe API version of every call (webhook payloads follow the endpoint's own version). */
+const STRIPE_VERSION = "2026-01-28.clover";
+
+export class StripeError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string | undefined,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/** A Stripe call: GET without a form, POST with one, or the method given. */
+export async function stripe<T>(env: Env, path: string, form?: Record<string, string>, options: { method?: string; idempotencyKey?: string } = {}): Promise<T> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Stripe-Version": STRIPE_VERSION };
+  if (form) headers["Content-Type"] = "application/x-www-form-urlencoded";
+  if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+  const response = await outbound(`https://api.stripe.com/v1/${path}`, { method: options.method ?? (form ? "POST" : "GET"), headers, body: form ? new URLSearchParams(form) : undefined });
+  const body = (await response.json()) as T & { error?: { message?: string; code?: string } };
+  if (!response.ok) throw new StripeError(response.status, body.error?.code, `Stripe ${path}: ${body.error?.message ?? response.status}`);
   return body;
 }
 
-let priceId: string | undefined;
-async function yearlyPrice(env: Env): Promise<string> {
-  if (priceId) return priceId;
-  const prices = await stripe<{ data: Array<{ id: string }> }>(env, `prices?active=true&lookup_keys[]=${encodeURIComponent(env.STRIPE_PRICE ?? "mlch_sharing_yearly")}`);
-  if (!prices.data[0]) throw new Error("No price with that lookup key.");
-  return (priceId = prices.data[0].id);
+let yearly: { id: string; product: string } | undefined;
+/** The sharing subscription's price (by its lookup key) and its product. */
+export async function yearlyPrice(env: Env): Promise<{ id: string; product: string }> {
+  if (yearly) return yearly;
+  const prices = await stripe<{ data: Array<{ id: string; product: string | { id: string } }> }>(env, `prices?active=true&lookup_keys[]=${encodeURIComponent(env.STRIPE_PRICE ?? "mlch_sharing_yearly")}`);
+  const price = prices.data[0];
+  if (!price) throw new Error("No price with that lookup key.");
+  return (yearly = { id: price.id, product: typeof price.product === "string" ? price.product : (price.product?.id ?? "") });
 }
 
 async function customerOf(env: Env, account: Account): Promise<string> {
@@ -253,13 +275,16 @@ async function checkout(env: Env, account: Account): Promise<Response> {
     mode: "subscription",
     customer: await customerOf(env, account),
     client_reference_id: account.id,
-    "line_items[0][price]": await yearlyPrice(env),
+    "line_items[0][price]": (await yearlyPrice(env)).id,
     "line_items[0][quantity]": "1",
     "automatic_tax[enabled]": "true",
     "customer_update[address]": "auto",
     "customer_update[name]": "auto",
     "tax_id_collection[enabled]": "true",
     "subscription_data[metadata][user_id]": account.id,
+    // Friend codes (admin.ts); a card only when there is something to pay.
+    allow_promotion_codes: "true",
+    payment_method_collection: "if_required",
     success_url: `${env.APEX_ORIGIN}/account/subscribed`,
     cancel_url: `${env.APEX_ORIGIN}/account/back`,
   });
@@ -291,6 +316,46 @@ interface Subscription {
   current_period_end?: number;
   items?: { data?: Array<{ current_period_end?: number }> };
   metadata?: { user_id?: string };
+  /** Before API 2025-03-31: the one discount. */
+  discount?: Discount | null;
+  /** Discount ids, or the discounts when expanded. */
+  discounts?: Array<string | Discount>;
+}
+
+type Ref = string | { id: string } | null | undefined;
+interface Discount {
+  coupon?: Ref;
+  source?: { coupon?: Ref };
+  promotion_code?: Ref;
+}
+const idOf = (ref: Ref) => (typeof ref === "string" ? ref : ref?.id);
+
+/** A subscription whose discount is not one of our friend codes: never allowed to share. */
+export const REFUSED_DISCOUNT = "refused_discount";
+
+/** The subscription's discounts as objects, from Stripe when the event carries only their ids. */
+async function discountsOf(env: Env, sub: Subscription): Promise<Discount[]> {
+  const listed = [...(sub.discounts ?? []), ...(sub.discount ? [sub.discount] : [])];
+  if (!listed.length) return [];
+  if (listed.every((d) => typeof d === "object")) return listed as Discount[];
+  const full = await stripe<Subscription>(env, `subscriptions/${encodeURIComponent(sub.id)}?expand[]=discounts`);
+  return [...(full.discounts ?? []), ...(full.discount ? [full.discount] : [])].filter((d): d is Discount => typeof d === "object");
+}
+
+/** Our friend code behind each discount; undefined when any discount is not ours. */
+async function ourCodes(env: Env, discounts: Discount[]): Promise<Array<{ id: string; code: string }> | undefined> {
+  const database = await db(env);
+  const codes: Array<{ id: string; code: string }> = [];
+  for (const discount of discounts) {
+    const coupon = idOf(discount.coupon) ?? idOf(discount.source?.coupon);
+    const found = coupon ? await database.prepare(`SELECT id, code FROM coupons WHERE coupon_id = ?`).bind(coupon).first<{ id: string; code: string }>() : null;
+    if (!found) {
+      console.warn("subscription discount is not one of our friend codes", { coupon: coupon ?? null, promotionCode: idOf(discount.promotion_code) ?? null });
+      return undefined;
+    }
+    codes.push(found);
+  }
+  return codes;
 }
 
 async function webhook(request: Request, env: Env): Promise<Response> {
@@ -301,13 +366,26 @@ async function webhook(request: Request, env: Env): Promise<Response> {
   if (!event.type.startsWith("customer.subscription.")) return json(200, { ignored: true });
   const sub = event.data.object;
   const end = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
+  const deleted = event.type === "customer.subscription.deleted";
+  // A discount must be one of our friend codes (a coupon made elsewhere in the Stripe account must not unlock sharing).
+  const codes = deleted ? [] : await ourCodes(env, await discountsOf(env, sub));
+  const status = deleted ? "canceled" : codes ? sub.status : REFUSED_DISCOUNT;
+  if (status === REFUSED_DISCOUNT) console.warn("subscription not granted sharing: discount not ours", sub.id);
   const database = await db(env);
   // By the customer Stripe has for the person, else the user id given at checkout.
   const result = await database
     .prepare(`UPDATE users SET subscription_id = ?, status = ?, period_end = ?, stripe_customer = COALESCE(stripe_customer, ?) WHERE stripe_customer = ? OR (stripe_customer IS NULL AND id = ?)`)
-    .bind(sub.id, event.type === "customer.subscription.deleted" ? "canceled" : sub.status, end ? end * 1000 : null, sub.customer, sub.customer, sub.metadata?.user_id ?? "")
+    .bind(sub.id, status, end ? end * 1000 : null, sub.customer, sub.customer, sub.metadata?.user_id ?? "")
     .run();
   if (!result.meta.changes) console.warn("subscription for no known account", sub.id);
+  else if (codes?.[0]) {
+    const user = await database.prepare(`SELECT id FROM users WHERE stripe_customer = ?`).bind(sub.customer).first<{ id: string }>();
+    if (user)
+      await database
+        .prepare(`INSERT INTO account_codes (user_id, promotion_code_id, code, subscription_id, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET promotion_code_id = excluded.promotion_code_id, code = excluded.code, subscription_id = excluded.subscription_id`)
+        .bind(user.id, codes[0].id, codes[0].code, sub.id, Date.now())
+        .run();
+  }
   return json(200, { received: true });
 }
 

@@ -11,6 +11,9 @@ A share is a long random link; anyone with it can view. Creating one returns an 
 
 - `src/index.ts`: routing, API, serving files.
 - `src/accounts.ts`: Google sign-in for the app, sessions, Stripe Checkout, the billing page and Stripe's webhook (D1: users, sessions, sign-ins, grants, shares; tables made on first use).
+- `src/admin.ts`: mlch.app/admin behind Cloudflare Access: friend codes, accounts, deleting an account.
+- `migrations/`: the D1 schema (the Worker also makes its tables on first use).
+- `landing/legal/`: privacy, terms, refunds and company pages (`/privacy`, `/terms`, `/refunds`, `/company`); `landing/admin/`: the admin page; `landing/site.css`: their stylesheet.
 - `src/room.ts`: `ShareRoom`, one Durable Object per share (owner token hash, file sizes, live state), and `CreateLimiter` (new shares per install per hour).
 - `src/files.ts`: paths, types, and the sandbox CSP (the app's `ARTIFACT_CSP` plus the share's own files; `src/lib/share/__tests__/client.test.ts` keeps them in step).
 - `landing/`: the landing page. `viewer/`: the read-only canvas for shared mulches, built with Vite from the app's own components (`@/components/canvas/*`).
@@ -42,6 +45,34 @@ npm run deploy     # check, then wrangler deploy -c wrangler.mlch.jsonc
 `wrangler deploy` attaches the custom domains in `wrangler.mlch.jsonc` (`mlch.app`, `www.mlch.app`, `share.mlch.app`) and creates their DNS records. If the zone already has DNS records for those names, remove them first or the deploy refuses. The Durable Object classes are created by migration `v1`.
 
 After that, `npm run deploy` for every change. Logs: `npx wrangler tail` or Workers observability in the dashboard.
+
+### D1 migrations
+
+```sh
+npx wrangler d1 migrations apply mlch-accounts --remote -c wrangler.mlch.jsonc
+```
+
+`0001_admin.sql` adds `coupons` (friend codes), `account_codes` (the code an account used) and `deletions` (that an account was deleted, when, by which admin). Every statement is `IF NOT EXISTS`, so it is safe on the live database, whose older tables the Worker made on first use.
+
+### Admin (mlch.app/admin)
+
+Friend codes (create, list with uses, turn off), accounts (email, subscription, code used, shares made, created) and deleting an account on request. Two locks: Cloudflare Access in front, and the Worker checking Access's token again (`Cf-Access-Jwt-Assertion`, RS256 against `https://<team>/cdn-cgi/access/certs`, audience, expiry, an `@m38.ai` email). Without `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` every admin request gets 403. Changes (POST) must come from the page itself (`Origin: https://mlch.app`).
+
+Once:
+
+1. Cloudflare dashboard, account "move38 account": Zero Trust. If there is no team yet, pick a team name; the team domain is `<team>.cloudflareaccess.com` (Settings, Custom pages shows it).
+2. Zero Trust, Integrations, Identity providers: add Google (or use One-time PIN).
+3. Zero Trust, Access controls, Applications, Add an application, Self-hosted. Name "mlch admin". Public hostnames: `mlch.app` with path `admin`, and `mlch.app` with path `api/admin` (a path covers everything under it). Session duration 24 hours.
+4. Policy "m38": Action Allow, Include "Emails ending in" `@m38.ai`.
+5. Save, then copy the application's Application Audience (AUD) tag (Basic information).
+6. In `wrangler.mlch.jsonc` vars: `"ACCESS_TEAM_DOMAIN": "<team>.cloudflareaccess.com"`, `"ACCESS_AUD": "<AUD tag>"`. Deploy.
+7. Check: mlch.app/admin asks for an m38.ai sign-in; `curl -i https://mlch.app/api/admin/me` gets Access's login redirect, never JSON.
+
+The live Stripe key needs write access to Coupons and Promotion codes for friend codes, and to Customers and Subscriptions for deleting an account.
+
+**Friend codes:** each is a Stripe coupon (100% off unless set lower, `duration: forever`, `applies_to` the sharing price's product) and a promotion code (the code, how many uses, optional expiry), with idempotency keys, kept in D1 `coupons`. Checkout has `allow_promotion_codes` and `payment_method_collection: if_required`, so a 100% code subscribes without a card. The webhook checks every discount on a subscription is one of these coupons; otherwise the account's status becomes `refused_discount` (no sharing) and it is logged. Turning a code off deactivates the promotion code; subscriptions made with it keep it.
+
+**Deleting an account** (on an emailed request; type the account's email to confirm): cancels the Stripe subscription and deletes the Stripe customer, deletes every share the account made (R2 files and the share's Durable Object, live viewers are told), then its sessions, grants, code and row. The log (D1 `deletions` and the Worker log) says only when and by which admin.
 
 ## API
 
@@ -87,9 +118,21 @@ Accounts (mlch.app only):
 | `POST /api/stripe/webhook` | Stripe (signed): `customer.subscription.*` sets the account's status. `active` and `past_due` may make shares. |
 | `GET /account/subscribed`, `/account/back` | Pages after Checkout and the billing page, with a link back to mlch (`mlch://account`). |
 
+Admin (mlch.app only; Access token, and `Origin: https://mlch.app` on POST):
+
+| Request | Does |
+|---|---|
+| `GET /api/admin/me` | `{ email }` of the admin. |
+| `GET /api/admin/codes` | `{ codes: [{ id, code, percent, uses, used, expiresAt, createdAt, createdBy, active, deactivatedAt }] }`; `used` is Stripe's `times_redeemed`. |
+| `POST /api/admin/codes` `{ code, uses, expires?: "YYYY-MM-DD", percent?: 1-100 }` | Makes a friend code. |
+| `POST /api/admin/codes/:id/off` | Turns it off. |
+| `GET /api/admin/accounts` | `{ accounts: [{ id, email, status, periodEnd, code, shares, createdAt }] }` |
+| `POST /api/admin/accounts/:id/delete` `{ email }` | Deletes the account and everything of it (above). |
+
+Pages: `/privacy`, `/terms`, `/refunds`, `/company` (from `landing/legal/`), `/admin`.
+
 ## Not done yet
 
 - Expiry of old shares (they stay until deleted; a lapsed subscription keeps its links).
-- Deleting an account.
 - Reporting abuse; a rate limit on uploads beyond the per-share caps.
 - Collaboration (several writers): the room already orders batches; it needs per-person origins, presence and edit locks (docs/PLAN-2.md M8).

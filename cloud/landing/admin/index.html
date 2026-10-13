@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>mlch admin</title>
+    <link rel="icon" href="/brand/icon-32.png" type="image/png" sizes="32x32" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/site.css" />
+    <script src="/admin/admin.js" defer></script>
+  </head>
+  <body>
+    <main class="wide">
+      <img class="mark" src="/brand/wordmark.svg" alt="mlch" />
+      <h1>Admin</h1>
+      <p class="who" id="who"></p>
+
+      <section class="panel">
+        <h2>Friend codes</h2>
+        <form class="row" id="new-code">
+          <label>Code <input name="code" required maxlength="30" autocomplete="off" /></label>
+          <label>Uses <input name="uses" type="number" min="1" max="10000" value="1" required /></label>
+          <label>Percent off <input name="percent" type="number" min="1" max="100" value="100" required /></label>
+          <label>Expires <input name="expires" type="date" /></label>
+          <button class="primary" type="submit">Create</button>
+        </form>
+        <p class="error" id="codes-error"></p>
+        <table>
+          <thead>
+            <tr><th>Code</th><th>Percent off</th><th>Used</th><th>Expires</th><th>Created</th><th>By</th><th></th></tr>
+          </thead>
+          <tbody id="codes"></tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h2>Accounts</h2>
+        <p class="error" id="accounts-error"></p>
+        <table>
+          <thead>
+            <tr><th>Email</th><th>Subscription</th><th>Code used</th><th>Shares</th><th>Created</th><th></th></tr>
+          </thead>
+          <tbody id="accounts"></tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

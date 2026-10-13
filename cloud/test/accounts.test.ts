@@ -93,7 +93,7 @@ describe("mlch.app accounts", () => {
       const url = String(input);
       calls.push(`${init?.method ?? "GET"} ${url.replace("https://api.stripe.com/v1/", "")}`);
       if (url.includes("/customers")) return Response.json({ id: "cus_cy" });
-      if (url.includes("/prices")) return Response.json({ data: [{ id: "price_1" }] });
+      if (url.includes("/prices")) return Response.json({ data: [{ id: "price_1", product: "prod_mlch" }] });
       if (url.includes("/checkout/sessions")) {
         const form = new URLSearchParams(String(init?.body));
         expect(form.get("automatic_tax[enabled]")).toBe("true");

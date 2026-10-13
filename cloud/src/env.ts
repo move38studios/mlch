@@ -21,6 +21,10 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
   /** The yearly price's lookup key. */
   STRIPE_PRICE?: string;
+  /** /admin (admin.ts): the Cloudflare Access team domain, e.g. m38.cloudflareaccess.com. Unset: admin is refused. */
+  ACCESS_TEAM_DOMAIN?: string;
+  /** /admin: the Access application's audience tag. Unset: admin is refused. */
+  ACCESS_AUD?: string;
   /** Local tests: /auth/dev signs in without Google. */
   DEV_SIGN_IN?: string;
 }
