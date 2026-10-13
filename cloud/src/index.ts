@@ -3,8 +3,10 @@
  * share.mlch.app (a separate origin, so nothing shared ever runs on the
  * landing page's origin).
  *
- * No accounts: a share is reached by a long random link, and changed only
- * with the owner token the app got when it created it. API in README.md.
+ * A share is reached by a long random link, and changed only with the owner
+ * token the app got when it created it. Who may make new shares: a
+ * self-hosted server's key, or on mlch.app a subscribed account
+ * (accounts.ts). API in README.md.
  */
 
 import { LIMITS, type Env, type ShareKind } from "./env";
@@ -12,6 +14,7 @@ import { FAVICON_DATA_URL } from "./favicon";
 import { frameCsp, framePage } from "./frame";
 import { fileHeaders, mimeOf, ownSources, sandboxCsp, validPath } from "./files";
 import { r2Key, type Result } from "./room";
+import { accountRoutes, accountsOn, mayCreate, recordShare } from "./accounts";
 import type { OpBatch } from "../../src/lib/mulch/types";
 
 export { ShareRoom, CreateLimiter } from "./room";
@@ -175,6 +178,8 @@ async function createShare(request: Request, env: Env): Promise<Response> {
   const title = typeof body?.title === "string" ? body.title.trim().slice(0, LIMITS.titleChars) : "";
   const entry = body?.entry;
   if (kind === "artifact" && (typeof entry !== "string" || !validPath(entry))) return error(400, "An artifact share needs entry: the path of its main file, e.g. deck.html.");
+  const allowed = await mayCreate(request, env);
+  if (!allowed.ok) return allowed.response;
   const install = request.headers.get("X-Mlch-Install")?.slice(0, 200);
   const who = install ? `install:${await sha256(install)}` : `ip:${request.headers.get("CF-Connecting-IP") ?? "unknown"}`;
   const limiter = env.LIMITER.get(env.LIMITER.idFromName(who));
@@ -183,6 +188,7 @@ async function createShare(request: Request, env: Env): Promise<Response> {
   const ownerToken = randomId(40);
   const result = await room(env, id).init({ id, kind, title, ...(kind === "artifact" ? { entry } : {}), token: ownerToken });
   if (!result.ok) return error(result.status, result.error);
+  if (allowed.userId) await recordShare(env, id, allowed.userId, kind);
   return json(201, { id, ownerToken, url: `${env.SHARE_ORIGIN}/s/${id}/`, manifestUrl: `${env.SHARE_ORIGIN}/api/shares/${id}/manifest` });
 }
 
@@ -341,8 +347,20 @@ async function shareHost(request: Request, env: Env, url: URL, parts: string[]):
 
 // ---------------------------------------------------------------- router
 
-export async function handle(request: Request, env: Env): Promise<Response> {
+/** GET /api/server: what the app needs to know about a server before using it. */
+function serverInfo(env: Env) {
+  return { mlch: 1, auth: env.SERVER_KEY ? "key" : accountsOn(env) ? "account" : "none" };
+}
+
+/** A self-hosted server may leave the origins unset: then everything is on the address it was reached at. */
+function withOrigins(env: Env, url: URL): Env {
+  if (env.APEX_ORIGIN && env.SHARE_ORIGIN) return env;
+  return { ...env, APEX_ORIGIN: env.APEX_ORIGIN || url.origin, SHARE_ORIGIN: env.SHARE_ORIGIN || env.APEX_ORIGIN || url.origin };
+}
+
+export async function handle(request: Request, givenEnv: Env): Promise<Response> {
   const url = new URL(request.url);
+  const env = withOrigins(givenEnv, url);
   const apex = new URL(env.APEX_ORIGIN);
   const share = new URL(env.SHARE_ORIGIN);
   if (url.host === `www.${apex.host}`) return Response.redirect(`${env.APEX_ORIGIN}${url.pathname}${url.search}`, 301);
@@ -350,6 +368,9 @@ export async function handle(request: Request, env: Env): Promise<Response> {
   const onShareHost = url.host === share.host;
 
   if (parts[0] === "api" && parts[1] === "shares") return api(request, env, parts);
+  if (parts[0] === "api" && parts[1] === "server" && parts.length === 2) return json(200, serverInfo(env));
+  const account = await accountRoutes(request, env, url, parts);
+  if (account) return account;
 
   const shared = parts[0] === "s" || (parts[0] === "api" && parts[1] === "mulches" && parts.length > 2);
   if (shared) {

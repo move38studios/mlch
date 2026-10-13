@@ -4,11 +4,13 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "dev": "npm run build && wrangler dev --local-upstream localhost:8787 --var APEX_ORIGIN:http://localhost:8787 --var SHARE_ORIGIN:http://localhost:8787",
+    "dev": "npm run build && wrangler dev -c wrangler.mlch.jsonc --var APEX_ORIGIN:http://localhost:8787 --var SHARE_ORIGIN:http://localhost:8787 --var DEV_SIGN_IN:1",
     "typecheck": "tsc --noEmit && tsc --noEmit -p viewer",
     "test": "npm run build && vitest run",
     "check": "npm run typecheck && npm run test",
-    "deploy": "npm run check && wrangler deploy"
+    "deploy": "npm run check && wrangler deploy -c wrangler.mlch.jsonc",
+    "dev:own": "npm run build && wrangler dev --var SERVER_KEY:dev-key",
+    "deploy:own": "node scripts/deploy-own.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.0",

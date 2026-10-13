@@ -16,3 +16,4 @@ native/*/.build/
 native/*/.swiftpm/
 dist/
 build/app/
+client_secret*.json

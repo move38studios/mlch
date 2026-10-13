@@ -1,23 +1,19 @@
-// mlch.app: the placeholder landing, and sharing (share.mlch.app).
-// Deploy steps are in README.md. Local: `npm run dev`.
+// Your own mlch server: sharing for your mlch app, on your Cloudflare account.
+// Steps in README.md ("Your own server"): `npm run deploy:own` creates the
+// storage, makes the server key and deploys. Anyone can open shared links;
+// only someone with the key can make new shares.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mlch",
-  "account_id": "a7b1e373a9581b6f04e2a48d3abc9aa3",
+  "name": "mlch-server",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
-  "routes": [
-    { "pattern": "mlch.app", "custom_domain": true },
-    { "pattern": "www.mlch.app", "custom_domain": true },
-    { "pattern": "share.mlch.app", "custom_domain": true }
-  ],
-  "vars": {
-    "APEX_ORIGIN": "https://mlch.app",
-    "SHARE_ORIGIN": "https://share.mlch.app"
-  },
-  // Landing page, brand files and the shared-canvas viewer, built by scripts/build.mjs.
+  "workers_dev": true,
+  // Empty: everything is served from the server's own address. To use your own
+  // domains, set both (e.g. https://mlch.example.com and https://share.mlch.example.com) and add routes.
+  "vars": { "APEX_ORIGIN": "", "SHARE_ORIGIN": "" },
+  // Secret: SERVER_KEY (set by `npm run deploy:own`).
   "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": true },
-  "r2_buckets": [{ "binding": "SHARES", "bucket_name": "mlch-shares" }],
+  "r2_buckets": [{ "binding": "SHARES", "bucket_name": "mlch-server-shares" }],
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "ShareRoom" },

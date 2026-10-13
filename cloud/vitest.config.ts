@@ -7,8 +7,8 @@ import { cloudflareTest } from "@cloudflare/vitest-plugin";
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: "./wrangler.jsonc" },
-      miniflare: { bindings: { APEX_ORIGIN: "https://mlch.test", SHARE_ORIGIN: "https://share.mlch.test" } },
+      wrangler: { configPath: "./wrangler.mlch.jsonc" },
+      miniflare: { bindings: { APEX_ORIGIN: "https://mlch.test", SHARE_ORIGIN: "https://share.mlch.test", ACCOUNTS: "", GOOGLE_CLIENT_ID: "test-client" } },
     }),
   ],
   resolve: { alias: { "@": path.resolve(__dirname, "../src") } },
