@@ -16,10 +16,13 @@ export interface SearchResult {
   title?: string;
   snippet: string;
   page?: number;
+  /** When the item was last changed (items in mulches). */
+  at?: number;
+  score?: number;
 }
 
 /** Results for a query, debounced. `mulchId` limits to one mulch. */
-export function useSearch(query: string, mulchId?: string) {
+export function useSearch(query: string, mulchId?: string, limit?: number) {
   const [results, setResults] = useState<SearchResult[]>();
   const [loading, setLoading] = useState(false);
   useEffect(() => {
@@ -32,7 +35,7 @@ export function useSearch(query: string, mulchId?: string) {
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(q)}${mulchId ? `&mulch=${mulchId}` : ""}`);
+        const response = await fetch(`/api/search?q=${encodeURIComponent(q)}${mulchId ? `&mulch=${mulchId}` : ""}${limit ? `&limit=${limit}` : ""}`);
         const body = (await response.json()) as { hits?: SearchResult[] };
         if (!cancelled) setResults(body.hits ?? []);
       } finally {
@@ -43,12 +46,12 @@ export function useSearch(query: string, mulchId?: string) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, mulchId]);
+  }, [query, mulchId, limit]);
   return { results, loading };
 }
 
 /** A snippet as plain text: no markdown markers. */
-function plain(text: string): string {
+export function plain(text: string): string {
   return text
     .replace(/\\n/g, " ")
     .replace(/(^|[\s…])#{1,6}\s+/g, "$1")
@@ -57,7 +60,7 @@ function plain(text: string): string {
     .trim();
 }
 
-const KIND_LABEL: Record<string, string> = {
+export const KIND_LABEL: Record<string, string> = {
   transcript: "said",
   doc: "file",
   link: "link",
@@ -129,6 +132,15 @@ export function SearchPalette({ mulchId, onFocus }: { mulchId: string; onFocus(r
   const input = useRef<HTMLInputElement>(null);
   const { results, loading } = useSearch(open ? query : "", all ? undefined : mulchId);
   useEffect(() => setActive(0), [results]);
+
+  // Opened from home's "N more": the search in this mulch, already typed.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) {
+      setQuery(q);
+      setOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

@@ -6,11 +6,8 @@ import { FOCUS_SEARCH } from "@/components/desktop/SearchKey";
 import { Archive, ArchiveRestore, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { Scribble, Wordmark } from "@/components/brand/Scribble";
 import Link from "next/link";
-import {
-  openResult,
-  ResultList,
-  useSearch,
-} from "@/components/search/SearchPalette";
+import { useSearch } from "@/components/search/SearchPalette";
+import { HomeList } from "./HomeList";
 import { formatDateTime } from "@/lib/format";
 import type { MulchSummary } from "@/lib/mulch/types";
 
@@ -56,7 +53,7 @@ export function Home() {
   const [confirming, setConfirming] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
-  const { results } = useSearch(query);
+  const { results } = useSearch(query, undefined, 40);
   const searchField = useRef<HTMLInputElement>(null);
   const loaded = mulches !== undefined;
 
@@ -205,90 +202,37 @@ export function Home() {
               <Plus size={17} strokeWidth={2.25} /> New
             </button>
           </div>
-          {results && (
-            <div className="mb-8 rounded-xl float overflow-hidden">
-              <ResultList
-                results={results}
-                showMulch
-                onPick={(hit) => openResult(router, hit)}
-              />
-            </div>
-          )}
           {error && <p className="text-sm text-danger mb-4">{error}</p>}
-          <ul className="-mx-3">
-            {active?.map((mulch) => (
-              <li
-                key={mulch.id}
-                className="group flex items-center rounded-xl hover:bg-paper-2"
-              >
-                <Link
-                  href={`/n/${mulch.id}`}
-                  className="flex-1 min-w-0 flex items-baseline gap-4 py-3 px-3"
-                >
-                  <span className="truncate text-[17px] font-medium tracking-[-0.01em]">
-                    {mulch.title}
-                  </span>
-                  {/* Something running; results not yet seen; a failure. */}
-                  {mulch.activity?.working ? (
-                    <span
-                      className="shrink-0 self-center"
-                      title="Working"
-                      aria-label="Working"
-                    >
-                      <Scribble
-                        which="bottom"
-                        mode="loop"
-                        strokeWidth={11}
-                        className="h-3 w-8 text-ink"
-                      />
-                    </span>
-                  ) : null}
-                  {mulch.activity?.unseen ? (
-                    <span
-                      className="h-2 w-2 shrink-0 self-center rounded-full bg-amber"
-                      title="New results"
-                      aria-label="New results"
-                    />
-                  ) : null}
-                  {mulch.activity?.failed ? (
-                    <span
-                      className="h-2 w-2 shrink-0 self-center rounded-full bg-danger"
-                      title="Failed"
-                      aria-label="Failed"
-                    />
-                  ) : null}
-                  <span className="flex-1" />
-                  <span className="text-[13px] text-ink-3 shrink-0 tabular-nums">
-                    {mulch.nodeCount} items
-                  </span>
-                  <span className="text-[13px] text-ink-3 shrink-0 tabular-nums w-36 text-right">
-                    {formatDateTime(mulch.updatedAt)}
-                  </span>
-                </Link>
-                {confirming === mulch.id ? (
-                  // Archiving something that is shared: keep its links working, or turn them off.
-                  <span className="mr-2 flex items-center gap-1.5 text-[12.5px] text-ink-2 shrink-0">
-                    {mulch.shares === 1 ? "1 share link:" : `${mulch.shares} share links:`}
-                    <button onClick={() => archive(mulch.id, true)} className="px-2 py-1 rounded-lg hover:bg-line text-ink">
-                      Keep working
-                    </button>
-                    <button onClick={() => archive(mulch.id, true, true)} className="px-2 py-1 rounded-lg bg-ink text-white">
-                      Turn off
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => (mulch.shares ? setConfirming(mulch.id) : archive(mulch.id, true))}
-                    className="mr-2 p-1.5 rounded-lg text-ink-3 opacity-0 group-hover:opacity-100 hover:text-ink focus-visible:opacity-100"
-                    aria-label="Archive"
-                    title="Archive"
-                  >
-                    <Archive size={15} strokeWidth={1.75} />
+          <HomeList
+            mulches={mulches ?? []}
+            query={query}
+            results={results}
+            field={searchField}
+            onClear={() => setQuery("")}
+            renderActions={(mulch) =>
+              confirming === mulch.id ? (
+                // Archiving something that is shared: keep its links working, or turn them off.
+                <span className="mr-2 flex items-center gap-1.5 text-[12.5px] text-ink-2 shrink-0">
+                  {mulch.shares === 1 ? "1 share link:" : `${mulch.shares} share links:`}
+                  <button onClick={() => archive(mulch.id, true)} className="px-2 py-1 rounded-lg hover:bg-line text-ink">
+                    Keep working
                   </button>
-                )}
-              </li>
-            ))}
-          </ul>
+                  <button onClick={() => archive(mulch.id, true, true)} className="px-2 py-1 rounded-lg bg-ink text-white">
+                    Turn off
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => (mulch.shares ? setConfirming(mulch.id) : archive(mulch.id, true))}
+                  className="mr-2 p-1.5 rounded-lg text-ink-3 opacity-0 group-hover:opacity-100 hover:text-ink focus-visible:opacity-100"
+                  aria-label="Archive"
+                  title="Archive"
+                >
+                  <Archive size={15} strokeWidth={1.75} />
+                </button>
+              )
+            }
+          />
           <ArchivedList mulches={archivedList} confirming={confirming} setConfirming={setConfirming} restore={(id) => archive(id, false)} remove={remove} />
         </div>
       )}

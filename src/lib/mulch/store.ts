@@ -135,7 +135,7 @@ export async function listMulches(): Promise<MulchSummary[]> {
         // Left behind empty (the app quit before it was cleaned up).
         if (!open && Date.now() - mulch.createdAt > 60_000 && isEmpty({ mulch, transcript: [], jobs: new Map(jobs.map((job) => [job.id, job])) })) {
           const dir = path.join(root, id);
-          const leftovers = (await fs.readdir(dir)).filter((name) => !["mulch.json", "events.jsonl", "jobs.json", "history"].includes(name));
+          const leftovers = (await fs.readdir(dir)).filter((name) => !["mulch.json", "events.jsonl", "jobs.json", "history", "opened.json"].includes(name));
           if (!leftovers.length && !existsSync(path.join(dir, "transcript.jsonl"))) {
             await fs.rm(dir, { recursive: true, force: true });
             return undefined;
@@ -155,16 +155,24 @@ export async function listMulches(): Promise<MulchSummary[]> {
       }
     }),
   );
-  return summaries.filter((s): s is MulchSummary => !!s).sort((a, b) => b.updatedAt - a.updatedAt);
+  // Most recent first, by last change or last opened.
+  const recent = (s: MulchSummary) => Math.max(s.updatedAt, s.openedAt ?? 0);
+  return summaries.filter((s): s is MulchSummary => !!s).sort((a, b) => recent(b) - recent(a));
 }
 
-/** Archived (archived.json) and how many share links it has (shares.json, kept by share/shares.ts). */
-async function sideFacts(dir: string): Promise<{ archivedAt?: number; shares?: number }> {
+/** Archived (archived.json), last opened (opened.json) and how many share links it has (shares.json, kept by share/shares.ts). */
+async function sideFacts(dir: string): Promise<{ archivedAt?: number; openedAt?: number; shares?: number }> {
   const read = async (name: string) => JSON.parse(await fs.readFile(path.join(dir, name), "utf8").catch(() => "null")) as unknown;
-  const [archived, shares] = await Promise.all([read("archived.json"), read("shares.json")]);
+  const [archived, opened, shares] = await Promise.all([read("archived.json"), read("opened.json"), read("shares.json")]);
   const at = (archived as { at?: number } | null)?.at;
+  const openedAt = (opened as { at?: number } | null)?.at;
   const count = Array.isArray(shares) ? shares.length : 0;
-  return { ...(at ? { archivedAt: at } : {}), ...(count ? { shares: count } : {}) };
+  return { ...(at ? { archivedAt: at } : {}), ...(openedAt ? { openedAt } : {}), ...(count ? { shares: count } : {}) };
+}
+
+/** The person opened it (for the list's order). */
+export async function markOpened(id: string): Promise<void> {
+  await atomicWriteFile(path.join(mulchDir(id), "opened.json"), JSON.stringify({ at: Date.now() }));
 }
 
 /** Archive a mulch (out of the list, kept as it is) or bring it back. */

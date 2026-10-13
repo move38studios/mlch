@@ -159,6 +159,8 @@ export interface MulchSummary {
   activity?: { working: number; unseen: number; failed: number };
   /** Archived: out of the list, kept on disk, can be restored. */
   archivedAt?: number;
+  /** Last opened by the person. */
+  openedAt?: number;
   /** Share links made from it that still work. */
   shares?: number;
 }

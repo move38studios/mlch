@@ -2,7 +2,7 @@ import { jsonError } from "@/lib/http";
 import { log } from "@/lib/log";
 import type { ServerEvent } from "@/lib/mulch/events";
 import { resumeGenerations } from "@/lib/media/generations";
-import { getMulch, MulchNotFoundError, subscribe } from "@/lib/mulch/store";
+import { getMulch, markOpened, MulchNotFoundError, subscribe } from "@/lib/mulch/store";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +21,8 @@ export async function GET(request: Request, { params }: Params) {
   try {
     // A missing mulch is a 404, not a stream that errors.
     await getMulch(id);
+    // The list puts what was opened recently near the top, not only what changed.
+    void markOpened(id).catch(() => {});
     // Generations still running from before a restart pick up again.
     await resumeGenerations(id).catch((error) => log.error("media", "resume failed", { mulchId: id, error }));
     const stream = new ReadableStream<Uint8Array>({
