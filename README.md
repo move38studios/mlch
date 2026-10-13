@@ -1,98 +1,54 @@
 # mlch
 
-*Say "mulch".*
+*Say "mulch".* A whiteboard that thinks with you: an AI app for non-linear thinkers, for Mac.
 
-An app for non-linear thinkers.
+You talk or type; mlch maps it onto an endless canvas while you speak, looks things up, connects it to what you explored before, and makes the deck when you ask. The AI runs on your own Claude Code or Codex subscription.
 
-**Early release (0.2.0).** Expect rough edges. Download for Mac: [mlch.app](https://mlch.app). MIT licensed (LICENSE).
+**Early release (0.2.0).** Expect rough edges. Download: [mlch.app](https://mlch.app). MIT licensed.
 
-Speak your stream of consciousness and have the ideas visually organized on an endless 2D canvas, with search results, associations and connections appearing as you go. Drop in documents, links and folders and they get incorporated.
+This README is for building, forking, self-hosting and contributing. CLAUDE.md has the architecture in detail.
 
-Ideas emerge from the mess and from cross-pollination, and they happen at the intersections. Go linear only after the braindump.
+## What is in this repository
 
-## How it works
+| Folder | What it is |
+|---|---|
+| `src/`, `electron/` | The Mac app: a Next.js app inside Electron. The canvas, the AI lanes, search, sharing, voice. |
+| `native/mlch-audio/` | A small Swift helper: speech to text on the Mac (Parakeet), and the Mac's sound during calls. |
+| `cloud/` | The sharing server (a Cloudflare Worker): shared links, the viewer, accounts for making shares, mlch.app itself. |
+| `scripts/` | Packaging and releases, and scenarios that drive the real app for testing. |
 
-**Your mulches.** The home screen is a list of everything you have started, to go back to, and a button to start a new one.
+## How it works, briefly
 
-**Braindump.** Starting a new one, you speak into the microphone. As you speak, the canvas populates with:
+- **A mulch is a folder** in your library: the canvas (`mulch.json`), every change (`events.jsonl`), history, files. Every change goes through ops, so it is logged and undoable.
+- **The AI** is Claude Code or Codex on your Mac, run through the Claude Agent SDK or Codex's app server with mlch's own tools. Several lanes run side by side: capturing what you say, enriching it, carrying out instructions, research, making files. Making files runs in an OS sandbox.
+- **Search** is one local SQLite index with local embeddings, no server.
+- **Sharing** uploads a canvas or a made file to a sharing server (mlch.app, or yours), where anyone with the link can view it.
 
-- the key things you said
-- web search results
-- relevant related ideas
-- dictionary definitions
-- examples
-- connections between items
-- small post-its with further questions
+## Your data
 
-**Organize and add.** You can look at the canvas, rearrange it, and drop more things onto it (documents, links, files). They get incorporated.
+- The library folder is `~/Documents/mlch` until you choose another in Settings, Library (a synced folder such as iCloud Drive or Dropbox works when one Mac uses it at a time). Settings live in the library too.
+- Keys are in the macOS Keychain. Logs are in `~/Library/Logs/mlch`.
+- What leaves the Mac: what the AI needs, to your AI provider; audio to Groq only if you choose Groq; what you share, to the sharing server; services you add keys for (fal, Exa, Gemini, Firecrawl).
 
-**Speak again.** Click the mic to add more, or to ask the AI to act on it: organize it, clean it up, or produce a linear summary or write-up. Write-ups are produced as markdown documents and dropped onto the canvas.
+## Build and run from source
 
-**Folders and files.** Point mlch at a folder and the AI explores it and builds a mulch out of its contents. You can also just ask ("look at my dev/briefbuster folder and describe its key ideas"); it reads files on your machine read-only and never looks into credentials or app data.
-
-**Images.** The AI sees images: dropped images are captioned and their content joins the canvas.
-
-**Made things.** Ask for a slide deck, a one-pager, a table or a diagram and it is made as an HTML page you can open full-window on top of the canvas (and present). PowerPoint, Word, PDF, spreadsheets and charts are made by Claude Code or Codex with their own tools, inside their sandbox. Files land in the mulch's folder and as cards on the canvas.
-
-**Media.** Ask for images, video, voice, music or 3D models and the AI picks a model on fal, generates, looks at the result and redoes it if it misses. Cards show progress while generating. Paid per use with your fal key, with a daily cap.
-
-**Search and research.** Cmd+K searches everything in a mulch, or across all of them, by meaning and by words, including the full text of documents and what you said. You can ask "find that image where…" or "do you remember the quote about…". Competitor scans and landscape questions run as research jobs that put sources, a comparison table and a write-up on the canvas.
-
-**History.** Every mulch keeps its history. You can travel back in time to any earlier state.
-
-**Calls.** Click the mlch icon in the menu bar (or press ⌃⌘L) for a new mulch that listens to a call: your microphone as you, the Mac's sound as the others. Every half minute or so the conversation becomes cards (ideas, decisions, to-dos, questions), enriched as usual. Type while it listens to steer it ("make a quick deck from what we just discussed").
-
-**What you already know.** Link folders once in Settings (company documents, an Obsidian vault): every mulch can search them. When something in another mulch or a linked note bears on what you're saying, the AI puts a link card next to it, saying why. A link copies nothing; it shows the original as it is now and opens it. Obsidian notes open in Obsidian; mlch can add new notes to a folder you allow and never edits existing ones.
-
-**Sharing.** Share a made file (a deck, a page) or the whole canvas as a link on mlch.app. A shared canvas is live while sharing is on, so people can watch it build during a call. Anyone with the link can open it read-only or copy it into their own mlch. Sharing a canvas shares the files on it; links into your folders go as titles only.
-
-## Platform
-
-- macOS desktop app (macOS 14.4 or later, Apple silicon): Next.js wrapped in Electron.
-- mlch.app (the `cloud/` Worker on Cloudflare): the landing page, shared links, accounts for making shares. You can run your own: [mlch.app/server](https://mlch.app/server).
-
-## AI
-
-- No separate AI subscription. mlch uses your existing Claude Code or Codex subscription.
-- Speech is transcribed on your Mac (Parakeet), or by Groq with your key.
-- Some features use your own keys, entered in Settings: fal (media generation), Exa (research search), Gemini (watching YouTube videos), Firecrawl (reading pages and documents, optional).
-
-## Running
-
-Needs Node 24, and Claude Code and/or Codex installed and signed in with a subscription.
+Needs macOS on Apple silicon, Node 24, a Swift toolchain (Xcode, or swift.org's toolchain in `~/Library/Developer/Toolchains`), and Claude Code or Codex installed and signed in.
 
 ```sh
 npm install
-npm run app          # build, then open the desktop app
-npm run app:start    # open the last build
-npm run electron:dev # desktop app with live reload
-npm run dev          # browser at http://localhost:3100 (no folder picker or key storage)
-```
-
-Keys: Settings in the app (stored in the macOS Keychain), or `.env.local` for development:
-
-```
-GROQ_API_KEY=...       # microphone (Groq Whisper)
-FAL_KEY=...            # images, video, voice, music, 3D
-EXA_API_KEY=...        # research search
-FIRECRAWL_API_KEY=...  # optional: better link and document reading
-```
-
-Each mulch is a folder in `~/Documents/mlch`. Logs are in `~/Library/Logs/mlch`; Settings → Diagnostics saves a report for support.
-
-## Building the app from source
-
-Needs Node 24 and a Swift toolchain (Xcode, or swift.org's toolchain in `~/Library/Developer/Toolchains`) for the audio helper.
-
-```sh
-npm install
+npm run electron:dev     # the app with live reload
 npm run check            # typecheck, lint, tests
-npm run dist:unsigned    # dist/mac-arm64/mlch.app
+npm run dist:unsigned    # a packaged app in dist/mac-arm64/
 ```
 
-A build from source shows as "mlch dev", keeps its own settings and saved keys, and never updates itself (official builds update from mlch.app; a fork can set its own feed with `MLCH_UPDATE_URL`). macOS asks you to allow it the first time, as with any unsigned app. Official releases are made with `npm run release` (signing and notarizing need move38's Developer ID).
+A build from source shows as "mlch dev", keeps its own settings and saved keys, and never updates itself (official builds update from mlch.app). macOS asks you to allow an unsigned app the first time.
 
-## Not built yet
+Forks: set your own update feed with `MLCH_UPDATE_URL`, your own sharing server in Settings, and your own source link with `MLCH_SOURCE_URL` when building `cloud/`.
 
-- Using your own Claude Code / Codex connectors (MCP) inside mlch.
-- Live collaboration on a shared canvas.
+## Run your own sharing server
+
+Shared links can live on your own Cloudflare account instead of mlch.app: [mlch.app/server](https://mlch.app/server) has the steps (`npm run deploy:own` in `cloud/`). Details and the API: [cloud/README.md](cloud/README.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security problems: [SECURITY.md](SECURITY.md), privately please.
