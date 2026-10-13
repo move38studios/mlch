@@ -23,7 +23,8 @@ import { addFile, addLink } from "@/lib/ingest/place";
 import { videoEmbed } from "@/lib/ingest/video";
 import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
 import { desktopRequest } from "@/lib/desktop/server";
-import { modelSchema, searchModels } from "@/lib/media/fal";
+import { modelSchema, searchModels, type FalModel } from "@/lib/media/fal";
+import { PICKS_CHECKED, picksFor } from "@/lib/media/picks";
 import { startGeneration, waitFor } from "@/lib/media/generations";
 import { viewForModel } from "@/lib/media/inspect";
 import { checkBudget, estimateCost } from "@/lib/media/spend";
@@ -486,8 +487,9 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     name: "media_search",
     title: "Find models",
     description:
-      "Search fal's catalogue of generative models (image, video, speech, music, 3D, editing, upscaling…). Returns endpoint ids, what they do, how recent, and price. " +
-      "Filter by category (e.g. text-to-image, image-to-image, text-to-video, image-to-video, video-to-video, text-to-speech, text-to-audio, audio-to-audio, image-to-3d, text-to-3d) and/or a query. Prefer recent, well-known models.",
+      "Search fal's catalogue of generative models (image, video, speech, music, 3D, editing, upscaling…). Without a query: the recommended models for the category first (quality and fast picks), then the newest. " +
+      "Returns endpoint ids, what they do, when they were released, and price. " +
+      "Filter by category (e.g. text-to-image, image-to-image, text-to-video, image-to-video, video-to-video, text-to-speech, text-to-audio, audio-to-audio, image-to-3d, text-to-3d) and/or a query.",
     inputShape: { query: z.string().max(200).optional(), category: z.string().max(60).optional() },
     readOnly: true,
   },
@@ -1135,12 +1137,26 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
 
     async media_search(args) {
       const { query, category } = args as { query?: string; category?: string };
-      const models = await searchModels({ query, category, limit: 40 });
-      if (!models.length) return ok("No models found. Try a broader query or another category.", "Found none");
-      return ok(
-        models.map((m) => `${m.endpoint} — ${m.name} [${m.category}] ${m.updated}${m.price ? ` · ${m.price}` : ""}\n  ${m.description}`).join("\n"),
-        `Found ${models.length} models`,
-      );
+      const line = (m: FalModel) =>
+        `${m.endpoint} — ${m.name} [${m.category}] released ${m.released || "?"}${m.price ? `, ${m.price}` : ""}${m.tags?.length ? ` (${m.tags.join(", ")})` : ""}\n  ${m.description}`;
+      // Recommended first (only those fal still lists), then the catalogue.
+      const picks = query ? [] : picksFor(category);
+      const listed = picks.length ? await searchModels({ endpoints: picks.map((p) => p.endpoint), limit: 50 }).catch(() => [] as FalModel[]) : [];
+      const live = new Map(listed.map((m) => [m.endpoint, m]));
+      const recommended = picks.filter((p) => live.has(p.endpoint));
+      const models = (await searchModels({ query, category, limit: 40 })).filter((m) => !live.has(m.endpoint));
+      const newest = recommended.map((p) => live.get(p.endpoint)!.released).sort().pop() ?? "";
+      if (!models.length && !recommended.length) return ok("No models found. Try a broader query or another category.", "Found none");
+      const parts = [
+        recommended.length
+          ? `Recommended (checked ${PICKS_CHECKED}):\n` + recommended.map((p) => `${p.tier}: ${line(live.get(p.endpoint)!)}\n  why: ${p.note}`).join("\n")
+          : "",
+        models.length
+          ? `${query ? "Matching" : "Newest first"}${newest ? ` (released after the recommended ones are marked NEW)` : ""}:\n` +
+            models.map((m) => `${newest && m.released > newest ? "NEW " : ""}${line(m)}`).join("\n")
+          : "",
+      ].filter(Boolean);
+      return ok(parts.join("\n\n"), `Found ${recommended.length + models.length} models`);
     },
 
     async media_schema(args) {

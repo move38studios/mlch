@@ -54,13 +54,15 @@ export interface FalModel {
   name: string;
   category: string;
   description: string;
-  updated: string;
+  released: string;
+  family?: string;
+  tags?: string[];
   price?: string;
 }
 
 interface RawModel {
   endpoint_id: string;
-  metadata?: { display_name?: string; category?: string; description?: string; updated_at?: string; status?: string };
+  metadata?: { display_name?: string; category?: string; description?: string; updated_at?: string; date?: string; status?: string; tags?: string[]; group?: { label?: string } };
 }
 
 export async function getPrices(endpoints: string[]): Promise<Map<string, { unit_price: number; unit: string }>> {
@@ -77,10 +79,17 @@ export async function getPrices(endpoints: string[]): Promise<Map<string, { unit
   return prices;
 }
 
-export async function searchModels(options: { query?: string; category?: string; limit?: number }): Promise<FalModel[]> {
+/**
+ * The catalogue: by relevance for a query, newest first otherwise (fal's own
+ * default order is what is trending, which favours old, cheap models).
+ * `endpoints` looks up exact ids (to check that picks still exist).
+ */
+export async function searchModels(options: { query?: string; category?: string; limit?: number; endpoints?: string[] }): Promise<FalModel[]> {
   const params = new URLSearchParams({ status: "active", limit: String(Math.min(100, options.limit ?? 40)) });
   if (options.query) params.set("q", options.query);
+  else if (!options.endpoints) params.set("sort", "recent");
   if (options.category) params.set("category", options.category);
+  for (const endpoint of options.endpoints ?? []) params.append("endpoint_id", endpoint);
   const data = await json<{ models: RawModel[] }>(await falFetch(`${API}/models?${params}`), "Model search");
   const prices = await getPrices(data.models.map((m) => m.endpoint_id));
   return data.models.map((m) => {
@@ -90,7 +99,10 @@ export async function searchModels(options: { query?: string; category?: string;
       name: m.metadata?.display_name ?? m.endpoint_id,
       category: m.metadata?.category ?? "",
       description: (m.metadata?.description ?? "").slice(0, 220),
-      updated: (m.metadata?.updated_at ?? "").slice(0, 10),
+      // When the model came out (not when its page was last edited).
+      released: (m.metadata?.date ?? m.metadata?.updated_at ?? "").slice(0, 10),
+      ...(m.metadata?.group?.label ? { family: m.metadata.group.label } : {}),
+      ...(m.metadata?.tags?.length ? { tags: m.metadata.tags.slice(0, 6) } : {}),
       ...(price ? { price: `$${price.unit_price} per ${price.unit}` } : {}),
     };
   });
