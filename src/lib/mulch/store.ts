@@ -345,6 +345,9 @@ function saveKeptJobs(id: string, entry: OpenMulch): void {
 
 export async function setJob(id: string, job: JobStatus): Promise<void> {
   const entry = await openMulch(id);
+  // A running job saves its own copy as it goes: a message the person already closed stays closed.
+  const before = entry.jobs.get(job.id)?.message;
+  if (before?.dismissed && job.message && job.message.at === before.at && !job.message.dismissed) job = { ...job, message: { ...job.message, dismissed: true } };
   entry.jobs.set(job.id, job);
   // Keep the list short: the last 30 finished kept jobs, the last 10 others.
   const finished = [...entry.jobs.values()].filter((j) => j.state !== "queued" && j.state !== "running");

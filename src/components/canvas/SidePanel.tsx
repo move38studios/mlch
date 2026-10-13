@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ExternalLink, FolderOpen, Link2, X } from "lucide-react";
+import { ExternalLink, FolderOpen, Link2, Pencil, X } from "lucide-react";
 import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import { KIND_STYLES } from "./kinds";
@@ -150,7 +150,12 @@ export function SidePanel() {
   }, [mulchId, textAsset]);
 
   const highlight = useCanvasUi((s) => s.highlight);
+  const readOnly = useCanvasUi((s) => s.readOnly);
+  const apply = useMulch((s) => s.apply);
   const contentRef = useRef<HTMLDivElement>(null);
+  // Editing the item's own text (as double-click does on the card); documents show text extracted from a file, so not those.
+  const [draft, setDraft] = useState<string>();
+  useEffect(() => setDraft(undefined), [openId]);
 
   // Find the quote (or page marker) in the shown text, highlight and scroll to it.
   useEffect(() => {
@@ -184,6 +189,11 @@ export function SidePanel() {
       body: JSON.stringify(node.docPath ? { docPath: node.docPath } : { assetId: node.assetId }),
     });
   const label = KIND_STYLES[node.kind].label;
+  const editable = !readOnly && !textAsset && !["artifact", "image", "media", "ref"].includes(node.kind);
+  const save = () => {
+    if (draft !== undefined && draft !== node.text && draft.trim()) apply([{ op: "updateNode", id: node.id, patch: { text: draft, userTouched: true, updatedAt: Date.now() } }]);
+    setDraft(undefined);
+  };
   return (
     <aside className="float w-[min(560px,45%)] shrink-0 my-3 mr-3 rounded-2xl flex flex-col overflow-hidden">
       <div className="h-12 shrink-0 flex items-center gap-2 pl-6 pr-3 text-[12.5px] text-ink-3">
@@ -195,6 +205,16 @@ export function SidePanel() {
           </a>
         )}
         <div className="flex-1" />
+        {editable && draft === undefined && (
+          <button onClick={() => setDraft(node.text)} className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink" title="Edit" aria-label="Edit">
+            <Pencil size={14} strokeWidth={1.75} />
+          </button>
+        )}
+        {draft !== undefined && (
+          <button onClick={save} className="h-7 px-2.5 rounded-lg bg-ink text-white text-[12.5px] font-medium">
+            Done
+          </button>
+        )}
         {revealable && (
           <button onClick={reveal} className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink" title="Show in Finder" aria-label="Show in Finder">
             <FolderOpen size={15} strokeWidth={1.75} />
@@ -219,9 +239,27 @@ export function SidePanel() {
             {node.gen.error && `, ${node.gen.error}`}
           </p>
         )}
-        <div className="mlch-md mlch-md-full text-[15px] leading-[1.6]">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
-        </div>
+        {draft !== undefined ? (
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
+                e.preventDefault();
+                save();
+              }
+            }}
+            aria-label="Text"
+            className="w-full min-h-[50vh] resize-none bg-transparent outline-none text-[14.5px] leading-[1.6] font-mono field-sizing-content"
+          />
+        ) : (
+          <div className="mlch-md mlch-md-full text-[15px] leading-[1.6]" onDoubleClick={editable ? () => setDraft(node.text) : undefined}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+          </div>
+        )}
         {mulchId && <LinkedFrom mulchId={mulchId} itemId={node.id} />}
       </div>
     </aside>

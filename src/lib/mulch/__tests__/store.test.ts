@@ -93,6 +93,18 @@ describe("mulch store", () => {
     expect((await fresh.listMulches())[0].activity).toEqual({ working: 0, unseen: 0, failed: 0 });
   });
 
+  it("keeps a closed message closed when the job saves itself again", async () => {
+    const store = await import("../store");
+    const mulch = await store.createMulch("Message");
+    const job = { id: "j1", lane: "command" as const, state: "running" as const, label: "Question", retry: { kind: "command" as const, input: "?" }, message: { text: "An answer", at: 5 } };
+    await store.setJob(mulch.id, job);
+    await store.dismissJobMessage(mulch.id, "j1");
+    await store.setJob(mulch.id, { ...job, state: "done" }); // the job finishing, with its own copy
+    expect((await store.getJobs(mulch.id))[0].message).toEqual({ text: "An answer", at: 5, dismissed: true });
+    await store.setJob(mulch.id, { ...job, message: { text: "A second one", at: 9 } });
+    expect((await store.getJobs(mulch.id))[0].message?.dismissed).toBeUndefined();
+  });
+
   it("refuses ids that could leave the library", async () => {
     const store = await import("../store");
     await expect(store.getMulch("../etc")).rejects.toBeInstanceOf(store.MulchNotFoundError);
