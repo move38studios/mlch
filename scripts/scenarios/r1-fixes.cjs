@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-module.exports = async ({ app, page, base, shot }) => {
+module.exports = async ({ page, base, shot }) => {
   const api = (url, method = 'GET', body) => page.evaluate(async ({ url, method, body }) => {
     const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
     return { status: r.status, ...(await r.json().catch(() => ({}))) };
