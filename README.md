@@ -6,7 +6,7 @@ You talk or type; mlch maps it onto an endless canvas while you speak, looks thi
 
 **Early release (0.2.0).** Expect rough edges. Download: [mlch.app](https://mlch.app). MIT licensed.
 
-This README is for building, forking, self-hosting and contributing. CLAUDE.md has the architecture in detail.
+This README is for building, forking, self-hosting and contributing. CLAUDE.md describes the architecture in detail (it is also what coding agents working on mlch read first).
 
 ## What is in this repository
 
@@ -19,8 +19,8 @@ This README is for building, forking, self-hosting and contributing. CLAUDE.md h
 
 ## How it works, briefly
 
-- **A mulch is a folder** in your library: the canvas (`mulch.json`), every change (`events.jsonl`), history, files. Every change goes through ops, so it is logged and undoable.
-- **The AI** is Claude Code or Codex on your Mac, run through the Claude Agent SDK or Codex's app server with mlch's own tools. Several lanes run side by side: capturing what you say, enriching it, carrying out instructions, research, making files. Making files runs in an OS sandbox.
+- **A mulch is a folder** in your library: the canvas (`mulch.json`), every change (`events.jsonl`), history, files. Every change is recorded as an operation, so it can be undone and replayed.
+- **The AI** is Claude Code or Codex on your Mac, run through the Claude Agent SDK or Codex's app server with mlch's own tools. Several AI jobs run side by side: capturing what you say, adding to it, carrying out instructions, research, making files. Making files runs in a macOS sandbox.
 - **Search** is one local SQLite index with local embeddings, no server.
 - **Sharing** uploads a canvas or a made file to a sharing server (mlch.app, or yours), where anyone with the link can view it.
 

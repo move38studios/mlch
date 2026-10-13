@@ -1,11 +1,13 @@
 # mlch cloud
 
-The mlch server: one Cloudflare Worker. It runs two ways from the same code:
+The sharing server for mlch: one Cloudflare Worker. The app uploads a canvas or a file here, and anyone with the link can view it.
 
-- **mlch.app** (`wrangler.mlch.jsonc`, account "move38 account", `a7b1e373a9581b6f04e2a48d3abc9aa3`): the placeholder landing page, the sharing API, accounts and subscriptions. `www.mlch.app` redirects to it; **share.mlch.app** serves shared things on their own origin so nothing shared ever runs on mlch.app.
-- **Your own server** (`wrangler.jsonc`): the same sharing on someone's own Cloudflare account, on its workers.dev address, without accounts: new shares need the server's key (`SERVER_KEY`). `npm run deploy:own`; the guide for people is `landing/server.html` (mlch.app/server).
+It runs two ways from the same code:
 
-A share is a long random link; anyone with it can view. Creating one returns an **owner token**, the only way to change or delete it; the app keeps it (server-side) with the mulch, with the server it lives on. Who may create one: on mlch.app a signed-in account with an active subscription (`src/accounts.ts`), on an own server whoever has its key, on a local dev server anyone.
+- **Your own server** (`wrangler.jsonc`): on your Cloudflare account, at its workers.dev address. Anyone with the server's key (`SERVER_KEY`) can make shares; there are no accounts. Set it up with `npm run deploy:own`; the step-by-step guide is at [mlch.app/server](https://mlch.app/server) (`landing/server.html`).
+- **mlch.app** (`wrangler.mlch.jsonc`), run by move38: also the website (the landing page, legal pages, downloads), sign-in with Google and a subscription for making shares, and an admin page. `share.mlch.app` serves what is shared, on its own origin, so nothing shared ever runs on mlch.app.
+
+A share is a long random link; anyone with it can view. Making one returns an **owner token**, the only way to change or delete the share; the app keeps it with the mulch.
 
 ## Layout
 
@@ -16,8 +18,8 @@ A share is a long random link; anyone with it can view. Creating one returns an 
 - `landing/legal/`: privacy, terms, refunds and company pages (`/privacy`, `/terms`, `/refunds`, `/company`); `landing/admin/`: the admin page; `landing/site.css`: their stylesheet.
 - `src/room.ts`: `ShareRoom`, one Durable Object per share (owner token hash, file sizes, live state), and `CreateLimiter` (new shares per install per hour).
 - `src/files.ts`: paths, types, and the sandbox CSP (the app's `ARTIFACT_CSP` plus the share's own files; `src/lib/share/__tests__/client.test.ts` keeps them in step).
-- `landing/`: the landing page. `viewer/`: the read-only canvas for shared mulches, built with Vite from the app's own components (`@/components/canvas/*`).
-- `scripts/build.mjs` → `dist/` (landing, `brand/` from `public/brand`, `viewer/`), served as static assets.
+- `viewer/`: built with Vite from the app's own canvas components (`@/components/canvas/*`): the read-only canvas for shared mulches (`Viewer.tsx`), and mlch.app's landing page, the same canvas with nothing behind it (`Landing.tsx`).
+- `scripts/build.mjs` → `dist/` (the landing page, legal pages, admin page, `brand/` from `public/brand`, `viewer/`), served as static assets.
 
 ## Commands (in cloud/)
 
@@ -30,7 +32,11 @@ npm run check      # typecheck worker + viewer, build, tests (inside workerd: R2
 
 The app points at a local mlch.app with `MLCH_SHARE_URL=http://localhost:8787` (add `MLCH_DEV_SIGN_IN=you@example.com` so Sign in uses /auth/dev), or at an own server through Settings, Sharing.
 
-## Deploy mlch.app
+## Operating mlch.app (move38)
+
+The rest of this section is for running mlch.app itself; an own server needs none of it.
+
+### Deploy
 
 Secrets (once, `npx wrangler secret put NAME -c wrangler.mlch.jsonc`): `GOOGLE_CLIENT_SECRET` (Google Cloud project mlch-511514, OAuth client "mlch.app"), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (endpoint `https://mlch.app/api/stripe/webhook`, events `customer.subscription.*`). Vars in `wrangler.mlch.jsonc`: `ACCOUNTS`, `GOOGLE_CLIENT_ID`, `STRIPE_PRICE` (the price's lookup key). D1 database `mlch-accounts`.
 
@@ -56,7 +62,7 @@ npx wrangler d1 migrations apply mlch-accounts --remote -c wrangler.mlch.jsonc
 
 ### Admin (mlch.app/admin)
 
-Friend codes (create, list with uses, turn off), accounts (email, subscription, code used, shares made, created) and deleting an account on request. Two locks: Cloudflare Access in front, and the Worker checking Access's token again (`Cf-Access-Jwt-Assertion`, RS256 against `https://<team>/cdn-cgi/access/certs`, audience, expiry, an `@m38.ai` email). Without `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` every admin request gets 403. Changes (POST) must come from the page itself (`Origin: https://mlch.app`).
+Friend codes (create, list with uses, turn off), accounts (email, subscription, code used, shares made, created) and deleting an account on request. Only for @m38.ai addresses (`ADMIN_DOMAIN` in `src/admin.ts`). Two locks: Cloudflare Access in front, and the Worker checking Access's token again (`Cf-Access-Jwt-Assertion`, RS256 against `https://<team>/cdn-cgi/access/certs`, audience, expiry, an `@m38.ai` email). Without `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` every admin request gets 403. Changes (POST) must come from the page itself (`Origin: https://mlch.app`).
 
 Once:
 

@@ -1,6 +1,6 @@
 # Third-party notices
 
-Parts of `electron/`, `server.js`, `next.config.shared.cjs` and `src/lib/agent/server/` are adapted from node-banana.
+mlch's Electron shell and its AI harness started from [node-banana](https://github.com/shrimbly/node-banana), an open-source app for generative workflows. Parts of `electron/`, `server.js`, `next.config.shared.cjs` and `src/lib/agent/server/` are adapted from it, under its MIT licence:
 
 ## node-banana
 
