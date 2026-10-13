@@ -12,7 +12,7 @@ This README is for building, forking, self-hosting and contributing. CLAUDE.md d
 
 | Folder | What it is |
 |---|---|
-| `src/`, `electron/` | The Mac app: a Next.js app inside Electron. The canvas, the AI lanes, search, sharing, voice. |
+| `src/`, `electron/` | The Mac app: a Next.js app inside Electron. The canvas, the AI, search, sharing, voice. |
 | `native/mlch-audio/` | A small Swift helper: speech to text on the Mac (Parakeet), and the Mac's sound during calls. |
 | `cloud/` | The sharing server (a Cloudflare Worker): shared links, the viewer, accounts for making shares, mlch.app itself. |
 | `scripts/` | Packaging and releases, and scenarios that drive the real app for testing. |
