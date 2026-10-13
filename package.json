@@ -33,6 +33,7 @@
     "mammoth": "^1.13.0",
     "nanoid": "^6.0.2",
     "next": "^16.4.0",
+    "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0",
     "postcss": "^8.5.29",
     "pptxgenjs": "^4.0.1",
     "react": "^19.3.0",

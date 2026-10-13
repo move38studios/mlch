@@ -12,6 +12,8 @@
  * are dropped, keeping a little pre-roll so the next word's start survives.
  */
 
+import { VAD_RATE, VAD_WINDOW, VoiceDetector } from "./vad";
+
 export interface RecorderEvents {
   /** A finished chunk with speech in it. */
   onChunk(wav: Blob, startedAt: number): void;
@@ -126,6 +128,10 @@ export class Recorder {
   private chunker = new Chunker();
   private chunkStartedAt = 0;
   private noiseFloor = 0.004;
+  /** Voice detection (vad.ts) when it loads; the loudness check otherwise. */
+  private detector?: VoiceDetector;
+  private vadBuffer = new Float32Array(0);
+  private voiced = false;
 
   constructor(private readonly events: RecorderEvents) {}
 
@@ -145,6 +151,9 @@ export class Recorder {
     this.node.port.onmessage = (event: MessageEvent<Float32Array>) => this.receive(event.data);
     source.connect(this.node);
     this.chunkStartedAt = Date.now();
+    void VoiceDetector.create().then((detector) => {
+      if (this.context) this.detector = detector;
+    });
   }
 
   /** Stop and send what is left if it has speech. */
@@ -159,6 +168,9 @@ export class Recorder {
     this.frames = [];
     this.pending = new Float32Array(0);
     this.chunker.reset();
+    this.detector = undefined;
+    this.vadBuffer = new Float32Array(0);
+    this.voiced = false;
   }
 
   private frameSize(): number {
@@ -179,9 +191,10 @@ export class Recorder {
     let sum = 0;
     for (const s of frame) sum += s * s;
     const rms = Math.sqrt(sum / frame.length);
-    const speaking = rms > Math.max(0.012, this.noiseFloor * 3);
+    const loud = rms > Math.max(0.012, this.noiseFloor * 3);
+    const speaking = this.detect(frame) ?? loud;
     // Track the background level slowly, only while quiet.
-    if (!speaking) this.noiseFloor = this.noiseFloor * 0.98 + rms * 0.02;
+    if (!loud) this.noiseFloor = this.noiseFloor * 0.98 + rms * 0.02;
     this.events.onLevel?.(Math.min(1, rms * 8), speaking);
 
     if (!this.frames.length) this.chunkStartedAt = Date.now() - FRAME_MS;
@@ -195,6 +208,22 @@ export class Recorder {
       this.chunker.reset(this.frames.length * FRAME_MS);
       this.chunkStartedAt = Date.now() - this.frames.length * FRAME_MS;
     }
+  }
+
+  /** Speech or not by voice detection, with some hysteresis; undefined while it is not running. */
+  private detect(frame: Float32Array): boolean | undefined {
+    if (!this.detector) return undefined;
+    const resampled = downsample(frame, this.context?.sampleRate ?? 48_000, VAD_RATE);
+    const merged = new Float32Array(this.vadBuffer.length + resampled.length);
+    merged.set(this.vadBuffer);
+    merged.set(resampled, this.vadBuffer.length);
+    let offset = 0;
+    for (; offset + VAD_WINDOW <= merged.length; offset += VAD_WINDOW) this.detector.push(merged.slice(offset, offset + VAD_WINDOW));
+    this.vadBuffer = merged.slice(offset);
+    const p = this.detector.probability;
+    if (p === undefined) return undefined;
+    this.voiced = this.voiced ? p > 0.35 : p > 0.5;
+    return this.voiced;
   }
 
   private flush() {
