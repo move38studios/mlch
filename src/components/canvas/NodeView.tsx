@@ -1,7 +1,7 @@
 "use client";
 
 import { useSharingOn } from "@/components/settings/Sharing";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, NodeResizeControl, Position, ResizeControlVariant, type NodeProps, type Node } from "@xyflow/react";
 
 const SIDES = [["t", Position.Top], ["r", Position.Right], ["b", Position.Bottom], ["l", Position.Left]] as const;
@@ -354,6 +354,22 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
   const sizedByShape = node.kind === "image" || node.kind === "media" || node.kind === "artifact";
   const transparent = useTransparent(node, mulchId, readOnly, apply);
+  // Stable handlers (they depend only on the card's id and kind): React Flow rebinds a resize control's drag
+  // whenever its handler changes, which ended a touch resize after its first step (a mouse drag survives).
+  const nodeId = node.id;
+  const resizeEnd = useMemo(() => {
+    const end = (height: boolean) => (_event: unknown, params: { width: number; height: number; x: number; y: number }) => {
+      const withHeight = height && !sizedByShape;
+      apply([
+        {
+          op: "updateNode",
+          id: nodeId,
+          patch: { w: Math.round(params.width), x: Math.round(params.x), ...(withHeight ? { h: Math.round(params.height), y: Math.round(params.y), fixedH: true } : {}), userTouched: true },
+        },
+      ]);
+    };
+    return { width: end(false), both: end(true) };
+  }, [nodeId, sizedByShape, apply]);
   const clipRef = useRef<HTMLDivElement>(null);
   const clipped = useClipped(clipRef, !!node.fixedH && !editing);
   const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || node.kind === "image" || (node.kind === "link" && !!node.assetId);
@@ -416,16 +432,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
               maxWidth={1400}
               minHeight={48}
               className={position === "bottom-right" ? "mlch-resize-corner" : "mlch-resize"}
-              onResizeEnd={(_event, params) => {
-                const height = position !== "right" && !sizedByShape;
-                apply([
-                  {
-                    op: "updateNode",
-                    id: node.id,
-                    patch: { w: Math.round(params.width), x: Math.round(params.x), ...(height ? { h: Math.round(params.height), y: Math.round(params.y), fixedH: true } : {}), userTouched: true },
-                  },
-                ]);
-              }}
+              onResizeEnd={position === "right" ? resizeEnd.width : resizeEnd.both}
             />
           ))}
         </>

@@ -145,6 +145,24 @@ select:focus-visible {
   border-radius: 3px;
   background: var(--amber);
   border: 1.5px solid var(--ink);
+  /* A drag from here resizes; the browser must not scroll or zoom the page instead. */
+  touch-action: none;
+}
+/* A finger needs more than 10px: an invisible larger target around the corner. */
+.mlch-resize-corner.react-flow__resize-control.handle::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+@media (pointer: coarse) {
+  .mlch-resize-corner.react-flow__resize-control.handle {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+  }
+  .mlch-resize-corner.react-flow__resize-control.handle::after {
+    inset: -14px;
+  }
 }
 /* A card the person sized: its text fades out at the bottom. */
 .mlch-fade-bottom {
