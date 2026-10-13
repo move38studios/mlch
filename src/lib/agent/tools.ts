@@ -17,7 +17,8 @@ import { arrangeGroups, boundsOf, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/mulch/sizes";
 import { applyToMulch, atomicWriteFile, emit, getMulch, listMulches, mulchDir } from "@/lib/mulch/store";
 import { NODE_KINDS, type Mulch, type MulchNode, type MulchOp, type NodeKind, type NodeRef } from "@/lib/mulch/types";
-import { assetPath, isHttpUrl, isImage, readLink } from "@/lib/ingest/ingest";
+import { assetPath, isHttpUrl, isImage, readLink, saveAsset } from "@/lib/ingest/ingest";
+import { fetchImage } from "@/lib/ingest/fetchImage";
 import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
 import { desktopRequest } from "@/lib/desktop/server";
 import { modelSchema, searchModels } from "@/lib/media/fal";
@@ -42,6 +43,7 @@ export type ToolName =
   | "write_doc"
   | "say"
   | "tell"
+  | "add_image"
   | "hand_off"
   | "set_title"
   | "list_files"
@@ -439,6 +441,22 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     description: "The full text of a web page (more reliable than the built-in fetch for long or script-heavy pages).",
     inputShape: { url: z.string().url().max(2000) },
     readOnly: true,
+  },
+  add_image: {
+    name: "add_image",
+    title: "Add picture",
+    description:
+      "Put an existing picture on the canvas: from the web (`url`: the address of the image file itself, https) or from this Mac (`path`, read-only). " +
+      "Use it for diagrams, figures, photos and covers that sources show. Say what it is in `caption` and, for the web, where it comes from in `source_url` (the page). " +
+      "For pictures that do not exist yet, use media_generate.",
+    inputShape: {
+      url: z.string().max(2000).optional(),
+      path: z.string().max(1000).optional(),
+      caption: z.string().min(1).max(600),
+      source_url: z.string().max(2000).optional().describe("The page the picture is on, for credit."),
+      near: z.array(z.string()).max(6).optional(),
+    },
+    readOnly: false,
   },
   bring_in: {
     name: "bring_in",
@@ -841,6 +859,38 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       await emit(ctx.mulchId, { type: "say", text, jobId: ctx.jobId });
       ctx.onActivity?.(text);
       return ok("Shown.", "Status");
+    },
+
+    async add_image(args) {
+      const { url, path: file, caption, source_url, near } = args as { url?: string; path?: string; caption: string; source_url?: string; near?: string[] };
+      if (!url === !file) return fail("Give either url (an image on the web) or path (an image on this Mac).");
+      let bytes: Buffer;
+      let fileName: string;
+      if (url) {
+        const got = await fetchImage(url);
+        if ("error" in got) return fail(`${got.error} Nothing was added.`);
+        bytes = got.bytes;
+        fileName = `${path.basename(new URL(url).pathname).replace(/\.[^.]*$/, "") || "image"}${got.extension}`;
+      } else {
+        const resolved = resolveReadable(ctx.readRoot ?? os.homedir(), file!);
+        if (!resolved || !isImage(resolved)) return fail(`${file}: not an image you may read (png, jpg, gif, webp, svg in your home folder, private places excluded).`);
+        const read = await fs.readFile(resolved).catch(() => undefined);
+        if (!read) return fail(`${file}: not found.`);
+        if (read.length > 15 * 1024 * 1024) return fail(`${file}: over 15 MB.`);
+        bytes = read;
+        fileName = path.basename(resolved);
+      }
+      const assetId = await saveAsset(ctx.mulchId, bytes, fileName);
+      const mulch = await getMulch(ctx.mulchId);
+      const id = newClientId("n");
+      const position = placeResult(mulch, { w: NODE_WIDTH.image, h: 240 }, near, id);
+      const source = source_url && isHttpUrl(source_url) ? source_url : url;
+      const ops: MulchOp[] = [
+        { op: "addNode", node: { id, kind: "image", x: position.x, y: position.y, assetId, fileName: fileName.slice(0, 200), text: caption, ...(source ? { url: source } : {}), origin, createdAt: Date.now() } },
+      ];
+      await commit(ops);
+      ctx.added.push(id);
+      return ok(`Added picture ${id}.`, "Added a picture", ops);
     },
 
     async tell(args) {
