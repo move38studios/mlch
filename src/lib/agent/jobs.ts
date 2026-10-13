@@ -77,6 +77,8 @@ interface MulchJobs {
   running: Record<JobLane, Running[]>;
   /** Fast lane: segments not yet captured. */
   pendingSegments: TranscriptSegment[];
+  /** A spoken instruction waiting for the person to finish (speech cut at a pause can end mid-sentence). */
+  spoken?: { instruction: string; after: TranscriptSegment[]; startedAt: number; timer?: ReturnType<typeof setTimeout> };
   /** Slow lane: new item ids not yet enriched. */
   pendingEnrich: string[];
   paused: boolean;
@@ -692,6 +694,12 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
     touchCallCard(mulchId);
     return;
   }
+  // While a spoken instruction waits, more speech goes with it.
+  if (entry.spoken && segment.source === "speech") {
+    entry.spoken.after.push(segment);
+    armSpoken(mulchId);
+    return;
+  }
   const action = viewCommand(segment.text);
   if (action) {
     void emit(mulchId, { type: "view", action });
@@ -717,11 +725,49 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
         prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
         tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
         origin: `speech:${job.id}`,
-        onHandOff: (instruction) => submitCommand(mulchId, instruction),
+        onHandOff: (instruction) => (segments.some((segment) => segment.source === "speech") ? submitSpokenCommand(mulchId, instruction) : submitCommand(mulchId, instruction)),
       });
       if (added.length) requestEnrichment(mulchId, added);
     },
   });
+}
+
+/** How long a spoken instruction waits for more speech, and at most in all. */
+const SPOKEN_SETTLE_MS = Number(process.env.MLCH_SPOKEN_SETTLE_MS) || 4000;
+const SPOKEN_MAX_MS = 20_000;
+
+/**
+ * A spoken instruction runs once the person stops talking: speech arriving in
+ * the meantime (the rest of a sentence cut at a pause, or more detail) goes
+ * with it instead of being captured on its own.
+ */
+function submitSpokenCommand(mulchId: string, instruction: string): void {
+  const entry = jobsFor(mulchId);
+  if (entry.spoken) entry.spoken.instruction += `\n${instruction}`;
+  else entry.spoken = { instruction, after: [], startedAt: Date.now() };
+  // Speech already waiting for capture came after the instruction: it belongs to it.
+  entry.spoken.after.push(...entry.pendingSegments.splice(0).filter((segment) => segment.source === "speech"));
+  armSpoken(mulchId);
+}
+
+function armSpoken(mulchId: string): void {
+  const spoken = jobsFor(mulchId).spoken;
+  if (!spoken) return;
+  clearTimeout(spoken.timer);
+  const wait = Math.max(0, Math.min(SPOKEN_SETTLE_MS, spoken.startedAt + SPOKEN_MAX_MS - Date.now()));
+  spoken.timer = setTimeout(() => releaseSpoken(mulchId), wait);
+}
+
+function releaseSpoken(mulchId: string): void {
+  const entry = jobsFor(mulchId);
+  const spoken = entry.spoken;
+  if (!spoken) return;
+  entry.spoken = undefined;
+  const said = spoken.after.map((segment) => segment.text.trim()).filter(Boolean).join(" ");
+  submitCommand(
+    mulchId,
+    said ? `${spoken.instruction}\n\nThey went on (this may finish or change the instruction; anything else is thinking to capture as items): "${said}"` : spoken.instruction,
+  );
 }
 
 export function requestEnrichment(mulchId: string, ids: string[]): void {

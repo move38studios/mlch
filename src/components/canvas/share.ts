@@ -27,8 +27,9 @@ export async function requestShare(mulchId: string, body: { kind: "mulch" } | { 
   return { share: result.share, shares: result.shares ?? [] };
 }
 
-/** Share one made file and copy its link. */
-export async function shareArtifact(mulchId: string, nodeId: string): Promise<void> {
+/** Share one made file and copy its link. True when the link was made. */
+export async function shareArtifact(mulchId: string, nodeId: string): Promise<boolean> {
   const result = await requestShare(mulchId, { kind: "artifact", nodeId });
   if (result) await copyLink(result.share.url);
+  return !!result;
 }

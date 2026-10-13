@@ -337,6 +337,10 @@ async function createWindow() {
     event.preventDefault(); openExternal(url);
   });
   current.webContents.on('will-attach-webview', event => event.preventDefault());
+  // Esc reaches the page even when a made page in a frame has the keyboard (the viewer closes on it).
+  current.webContents.on('before-input-event', (_event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') current.webContents.send('desktop:menu', 'escape');
+  });
   // Frames inside the page (artifacts) may not navigate anywhere else.
   current.webContents.on('will-frame-navigate', (event) => {
     if (event.isMainFrame) return;

@@ -9,6 +9,7 @@
  */
 
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { newClientId } from "@/lib/mulch/ids";
@@ -294,7 +295,8 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     description:
       "Save a file you wrote (an HTML page or slide deck, SVG, markdown, CSV, JSON, text) in the canvas's artifacts folder and put a card for it on the canvas. " +
       "HTML opens full-window inside mlch and must be self-contained: inline CSS and JS; scripts and styles only from cdn.jsdelivr.net, cdnjs.cloudflare.com or unpkg.com; fonts from Google Fonts; " +
-      "images only as data: URIs. It cannot fetch anything at runtime and cannot open other pages.",
+      "images only as data: URIs. It cannot fetch anything at runtime and cannot open other pages. " +
+      "To use an image or font file from this Mac (the person's logo, their fonts), write {{file:~/path/to/logo.svg}} where its URL goes (an img src, a CSS url()); it is replaced with the file's contents as a data: URI.",
     inputShape: {
       title: z.string().max(120),
       extension: z.enum(["html", "svg", "md", "csv", "json", "txt"]),
@@ -566,6 +568,32 @@ function isUserOwned(node: MulchNode): boolean {
   return node.origin === "user" || node.origin.startsWith("speech:") || !!node.userTouched;
 }
 
+const EMBED_TYPES: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+  ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf",
+};
+
+/** {{file:~/path}} in a made file becomes that image or font from this Mac, as a data: URI (read-only, private places refused). */
+export async function embedFiles(content: string, readRoot: string | undefined): Promise<{ content: string; problems: string[] }> {
+  const problems: string[] = [];
+  const found = [...new Set([...content.matchAll(/\{\{file:([^}]+)\}\}/g)].map((m) => m[1].trim()))];
+  if (!found.length) return { content, problems };
+  const uris = new Map<string, string>();
+  for (const name of found) {
+    const type = EMBED_TYPES[path.extname(name).toLowerCase()];
+    const file = readRoot ? resolveReadable(readRoot, name) : undefined;
+    if (!type) problems.push(`${name}: only images and fonts can be embedded.`);
+    else if (!file) problems.push(`${name}: outside what you may read.`);
+    else {
+      const bytes = await fs.readFile(file).catch(() => undefined);
+      if (!bytes) problems.push(`${name}: not found.`);
+      else if (bytes.length > 5 * 1024 * 1024) problems.push(`${name}: over 5 MB.`);
+      else uris.set(name, `data:${type};base64,${bytes.toString("base64")}`);
+    }
+  }
+  return { content: content.replace(/\{\{file:([^}]+)\}\}/g, (all, name: string) => uris.get(name.trim()) ?? all), problems };
+}
+
 function slugify(title: string): string {
   return (
     title
@@ -831,9 +859,13 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
     },
 
     async write_artifact(args) {
-      const { title, extension, content, description, near, replace } = args as {
+      const { title, extension, description, near, replace } = args as {
         title: string; extension: string; content: string; description: string; near?: string[]; replace?: string;
       };
+      // Named files from anywhere the person may share (house style: their logo, fonts), private places refused.
+      const embedded = await embedFiles((args as { content: string }).content, ctx.readRoot ?? os.homedir());
+      if (embedded.problems.length) return fail(`${embedded.problems.join(" ")} Nothing was saved; fix the {{file:…}} paths or leave them out.`);
+      const content = embedded.content;
       if (replace) {
         const mulch = await getMulch(ctx.mulchId);
         const node = Object.values(mulch.nodes).find((n) => n.kind === "artifact" && n.docPath === replace);

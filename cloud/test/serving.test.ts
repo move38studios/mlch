@@ -24,7 +24,19 @@ describe("shared artifacts", () => {
     expect(bare.status).toBe(301);
     expect(bare.headers.get("Location")).toBe(`${SHARE}/s/${share.id}/`);
 
-    const page = await call(share.url);
+    // The link opens a frame page (Full screen, 16:9) around the file.
+    const frame = await call(share.url);
+    expect(frame.status).toBe(200);
+    const framed = await frame.text();
+    expect(framed).toContain('<iframe src="deck.html" sandbox="allow-scripts" title="Deck">');
+    expect(framed).toContain("<title>Deck</title>");
+    expect(framed).toContain("Full screen");
+    const frameCsp = directives(frame.headers.get("Content-Security-Policy"));
+    expect(frameCsp["script-src"]).toMatch(/^'nonce-[A-Za-z0-9_-]+'$/);
+    expect(frameCsp["frame-src"]).toBe("'self'");
+    expect(frameCsp["frame-ancestors"]).toBe("'none'");
+
+    const page = await call(`${share.url}deck.html`);
     expect(page.status).toBe(200);
     expect(page.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     const html = await page.text();

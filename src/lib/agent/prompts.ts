@@ -60,7 +60,7 @@ const COMMAND = `Your job now: carry out the person's instruction, given in the 
 - Other made things (a one-pager, a diagram, a table, a page): \`write_artifact\` with the fitting extension. Long prose stays a \`write_doc\`.
 - Remove, erase, clear, start over: remove_nodes takes items of every kind (cards, documents, made files, images) and groups (the boxes); \`all: true\` clears the whole canvas when the person asked for that. Nothing that was asked to go should stay behind.
 - A question rather than a task ("what is…", "why…", "what do you think…"): answer with \`tell\`, short, grounded in the canvas and your tools. Put something on the canvas only if the answer is material worth keeping.
-- If part of the instruction cannot be done, do the rest and say why with \`tell\`, with what would work instead. If the instruction is unclear in a way that matters, ask one question with \`tell\` instead of guessing.
+- If part of the instruction cannot be done, do the rest and say why with \`tell\`, with what would work instead. If the instruction is unclear in a way that matters, ask one question with \`tell\` instead of guessing. Spoken instructions are transcribed speech: one that trails off is usually finished by what they went on to say, or clear enough from the canvas; act on the obvious reading rather than asking.
 - Read get_mulch first if the canvas in the message is cut short.
 - Finish with \`say\`: one short line on what you did.`;
 
@@ -137,13 +137,20 @@ function lane(settings: Settings, key: PromptKey): string {
   return `${part(settings, "base")}\n\n${part(settings, key)}`;
 }
 
+/** The person's house style, for the lanes that make things. */
+function styleBlock(settings: Settings): string {
+  const style = settings.style.trim();
+  if (!style) return "";
+  return `\n\nHouse style: the person's own rules for everything you make (decks, documents, pages, diagrams, images). Follow them unless an instruction says otherwise. Files they name (a logo, fonts) are on this Mac; read them to use them.\n<house_style>\n${style}\n</house_style>`;
+}
+
 export const fastPrompt = (settings: Settings) => lane(settings, "fast");
 export const callPrompt = (settings: Settings) => lane(settings, "call");
-export const commandPrompt = (settings: Settings) => lane(settings, "command");
+export const commandPrompt = (settings: Settings) => lane(settings, "command") + styleBlock(settings);
 export const ingestPrompt = (settings: Settings) => lane(settings, "ingest");
 export const imagePrompt = (settings: Settings) => lane(settings, "image");
 export const folderPrompt = (settings: Settings) => lane(settings, "folder");
-export const researchPrompt = (settings: Settings) => lane(settings, "research");
+export const researchPrompt = (settings: Settings) => lane(settings, "research") + styleBlock(settings);
 
 export function slowPrompt(settings: Settings, web: boolean): string {
   const kinds = settings.enrich.filter((e) => e !== "search" || web).map((e) => `- ${part(settings, `enrich:${e}`)}`);
@@ -152,7 +159,7 @@ export function slowPrompt(settings: Settings, web: boolean): string {
 
 /** How to hand files over depends on the harness, so it is not editable. */
 export function makerPrompt(settings: Settings): string {
-  return `${part(settings, "maker")}
+  return `${part(settings, "maker")}${styleBlock(settings)}
 
 Save finished files directly in the artifacts folder (not in a subfolder), with short lowercase names. Never overwrite a file that is already there; pick a new name.${
     settings.harness === "claude"

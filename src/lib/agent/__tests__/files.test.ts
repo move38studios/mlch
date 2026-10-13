@@ -27,3 +27,21 @@ describe("resolveReadable", () => {
     }
   });
 });
+
+describe("files in made pages", () => {
+  it("embeds a named image as a data: URI and refuses other kinds", async () => {
+    const { embedFiles } = await import("../tools");
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "embed-"));
+    fs.writeFileSync(path.join(dir, "logo.svg"), "<svg/>");
+    fs.writeFileSync(path.join(dir, "notes.txt"), "x");
+    const done = await embedFiles('<img src="{{file:logo.svg}}"><img src="{{file:logo.svg}}">', dir);
+    expect(done.problems).toEqual([]);
+    expect(done.content).toBe(`<img src="data:image/svg+xml;base64,${Buffer.from("<svg/>").toString("base64")}">`.repeat(2));
+    const refused = await embedFiles("{{file:notes.txt}} {{file:missing.png}} {{file:../x.png}}", dir);
+    expect(refused.problems).toHaveLength(3);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

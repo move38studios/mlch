@@ -6,7 +6,7 @@ import { Handle, NodeResizeControl, Position, ResizeControlVariant, type NodePro
 const SIDES = [["t", Position.Top], ["r", Position.Right], ["b", Position.Bottom], ["l", Position.Left]] as const;
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ExternalLink, FileText, Link2, Maximize2 } from "lucide-react";
+import { Check, ExternalLink, FileText, Link2, Maximize2 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { useResolvedRef } from "./refs";
 import { shareArtifact } from "./share";
@@ -75,6 +75,26 @@ export async function openFile(mulchId: string, docPath: string, action: "open" 
   await fetch(`/api/mulches/${mulchId}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docPath }) });
 }
 
+/** Share a made file: says so while the link is made, then that it is copied. */
+function ShareButton({ mulchId, nodeId }: { mulchId: string; nodeId: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "copied">("idle");
+  return (
+    <button
+      onClick={async () => {
+        setState("busy");
+        const ok = await shareArtifact(mulchId, nodeId);
+        setState(ok ? "copied" : "idle");
+        if (ok) setTimeout(() => setState("idle"), 3000);
+      }}
+      disabled={state === "busy"}
+      className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2 inline-flex items-center gap-1"
+    >
+      {state === "copied" && <Check size={11} strokeWidth={2.5} />}
+      {state === "busy" ? "Sharing" : state === "copied" ? "Link copied" : "Share"}
+    </button>
+  );
+}
+
 function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   const setViewer = useCanvasUi((s) => s.setViewer);
   const ext = node.docPath?.split(".").pop() ?? "";
@@ -87,7 +107,7 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   return (
     <div>
       {viewable && src && (
-        <div className="relative h-[180px] overflow-hidden rounded-t-[inherit] border-b border-line bg-paper-2">
+        <div className="relative aspect-video overflow-hidden rounded-t-[inherit] border-b border-line bg-paper-2">
           {/* A live, non-interactive thumbnail: the page at 1280px wide, scaled down. */}
           <iframe
             src={src}
@@ -100,7 +120,7 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
         </div>
       )}
       {thumb && (
-        <div className="h-[180px] overflow-hidden rounded-t-[inherit] border-b border-line bg-paper-2 grid place-items-center">
+        <div className="aspect-video overflow-hidden rounded-t-[inherit] border-b border-line bg-paper-2 grid place-items-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={thumb} alt="" draggable={false} onError={() => setThumbFailed(true)} className="max-h-full max-w-full object-contain shadow-[0_1px_3px_rgba(0,0,0,0.12)]" />
         </div>
@@ -123,11 +143,7 @@ function ArtifactBody({ node, mulchId }: { node: MulchNode; mulchId: string }) {
                 Open
               </button>
             )}
-            {desktop() && (
-              <button onClick={() => void shareArtifact(mulchId, node.id)} className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2">
-                Share
-              </button>
-            )}
+            {desktop() && <ShareButton mulchId={mulchId} nodeId={node.id} />}
             {desktop() && (
               <button onClick={() => openFile(mulchId, node.docPath!, "reveal")} className="px-2 py-1 rounded text-xs text-ink-2 hover:bg-paper-2">
                 Show in Finder
@@ -212,6 +228,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const readOnly = useCanvasUi((s) => s.readOnly);
   const setEditing = useCanvasUi((s) => s.setEditing);
   const setOpen = useCanvasUi((s) => s.setOpen);
+  const setViewer = useCanvasUi((s) => s.setViewer);
   const apply = useMulch((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
   const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || (node.kind === "link" && !!node.assetId);
@@ -223,7 +240,11 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (node.kind === "ref") setOpen(node.id);
-        else if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
+        // A made file opens: pages and decks in the viewer, other files in their app.
+        else if (node.kind === "artifact" && node.docPath) {
+          if (/\.(html|svg)$/.test(node.docPath)) setViewer(node.id);
+          else if (!readOnly) openFile(mulchId, node.docPath, "open");
+        } else if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
       }}
     >
       {editing ? (

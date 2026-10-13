@@ -45,6 +45,11 @@ export const settingsSchema = z.object({
     .object(Object.fromEntries(PROMPT_KEYS.map((key) => [key, z.string().max(20_000).optional()])) as Record<PromptKey, z.ZodOptional<z.ZodString>>)
     .default({}),
   /**
+   * The person's house style for what the AI makes (decks, documents, pages, images): brand,
+   * colours, fonts, tone, a logo's path on this Mac. Empty: each thing is designed to suit its content.
+   */
+  style: z.string().max(20_000).default(""),
+  /**
    * Folders linked once and searched from every mulch (read-only). `auto`:
    * the AI uses them on its own; `asked`: only when the person asks.
    * `writeFolder` (relative to the source): where mlch may add new notes.

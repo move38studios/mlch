@@ -9,6 +9,7 @@
 
 import { LIMITS, type Env, type ShareKind } from "./env";
 import { FAVICON_DATA_URL } from "./favicon";
+import { frameCsp, framePage } from "./frame";
 import { fileHeaders, mimeOf, ownSources, sandboxCsp, validPath } from "./files";
 import { r2Key, type Result } from "./room";
 import type { OpBatch } from "../../src/lib/mulch/types";
@@ -257,6 +258,13 @@ async function shareHost(request: Request, env: Env, url: URL, parts: string[]):
           "Referrer-Policy": "no-referrer",
           "X-Content-Type-Options": "nosniff",
           "Cache-Control": "no-cache",
+        });
+      }
+      // Pages and drawings open in a frame page with Full screen; other files as themselves.
+      if (/\.(html?|svg)$/i.test(info.entry!)) {
+        const nonce = randomId(16);
+        return new Response(request.method === "HEAD" ? null : framePage(info.title, info.entry!, nonce), {
+          headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": frameCsp(nonce), "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache" },
         });
       }
       return serveFile(env, request, id, info.entry!);

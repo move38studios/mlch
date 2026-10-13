@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, Check, Loader2, X } from "lucide-react";
 import type { AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
 import { Recorder } from "@/lib/voice/recorder";
@@ -612,7 +612,13 @@ export function Welcome() {
   const framed = step !== "welcome" && step !== "ready";
   return (
     <main className="h-full flex flex-col bg-paper">
-      <header className="drag h-[52px] shrink-0 flex items-center justify-center">
+      <header className="drag relative h-[52px] shrink-0 flex items-center justify-center">
+        {/* Opened again from Settings: every step is saved as it goes, so it can be left at any point. */}
+        {status.onboarded && (
+          <button onClick={() => router.push("/settings")} className={`no-drag absolute right-3 ${SECONDARY} gap-1.5`}>
+            <X size={14} /> Close
+          </button>
+        )}
         {step !== "welcome" && (
           <div className="flex items-center gap-1.5" aria-label={`Step ${index} of ${STEPS.length - 1}`}>
             {STEPS.slice(1).map((s, i) => (
