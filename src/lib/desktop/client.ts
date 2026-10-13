@@ -15,6 +15,8 @@ export interface MlchDesktop {
   showWindow?(): Promise<void>;
   /** The call being listened to, for the menu bar. */
   setCallState?(state: { mulchId: string } | null): Promise<void>;
+  /** A PNG (base64) of part of the window, 1200 px wide: a shared link's preview. */
+  capture?(rect: { x: number; y: number; width: number; height: number }): Promise<string | null>;
   /** Open at login: read it, or set it. */
   openAtLogin?(value?: boolean): Promise<boolean>;
   /** Menu commands meant for the page ("zoom-in", "zoom-out", "zoom-fit", "stop-call"). */

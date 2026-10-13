@@ -436,6 +436,13 @@ function registerBridge() {
     callState = state && typeof state.mulchId === 'string' ? { mulchId: state.mulchId } : undefined;
     void refreshTray();
   }));
+  // A picture of the canvas for a shared link's preview (Slack, iMessage): the part of the window the page names.
+  ipcMain.handle('desktop:capture', guarded(async (rect) => {
+    if (!window || !rect || ![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) return null;
+    const area = { x: Math.max(0, Math.round(rect.x)), y: Math.max(0, Math.round(rect.y)), width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) };
+    const image = await window.webContents.capturePage(area);
+    return image.resize({ width: 1200 }).toPNG().toString('base64');
+  }));
   ipcMain.handle('desktop:login-item', guarded((value) => {
     if (typeof value === 'boolean') app.setLoginItemSettings({ openAtLogin: value });
     return app.getLoginItemSettings().openAtLogin;

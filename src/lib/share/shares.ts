@@ -152,6 +152,27 @@ async function sharedOps(ops: MulchOp[]): Promise<MulchOp[]> {
 
 /* ── sharing ───────────────────────────────────────────────────── */
 
+/** A shared link's preview picture (Slack, iMessage, email), next to the shared files. */
+const PREVIEW_FILE = "preview.png";
+
+/** A made file's preview: a page's first screen, or a deck's or document's first page. Best effort. */
+async function uploadPreview(record: ShareRecord, mulchId: string, docPath: string): Promise<void> {
+  try {
+    let png: Buffer | undefined;
+    if (/\.(html|svg)$/.test(docPath)) {
+      const result = await desktopRequest("render", { url: `/api/mulches/${mulchId}/${docPath}`, steps: 1 });
+      const image = result.ok ? (result.value as { images?: string[] }).images?.[0] : undefined;
+      if (image) png = Buffer.from(image, "base64");
+    } else if (hasThumbnail(docPath)) {
+      const result = await desktopRequest("thumbnail", { path: path.join(mulchDir(mulchId), docPath), size: 1200 });
+      if (result.ok && typeof result.value === "string") png = Buffer.from(result.value, "base64");
+    }
+    if (png) await (await client()).uploadFile(record, PREVIEW_FILE, new Uint8Array(png));
+  } catch (error) {
+    log.warn("share", "preview not made", { mulchId, docPath, error });
+  }
+}
+
 /** Share a made file (deck, page, document). Sharing it again updates the same link. */
 export async function shareArtifact(mulchId: string, nodeId: string): Promise<ShareView> {
   const mulch = await getMulch(mulchId);
@@ -166,12 +187,13 @@ export async function shareArtifact(mulchId: string, nodeId: string): Promise<Sh
   }
   state().uploaded.delete(record.id);
   await upload(record, mulchId, [node.docPath, ...(await htmlCompanions(mulchId, node.docPath))]);
+  await uploadPreview(record, mulchId, node.docPath);
   log.info("share", "Shared a file", { mulchId, shareId: record.id });
   return viewOf(record);
 }
 
 /** Share the whole canvas, live. Sharing again turns live updates back on and refreshes everything. */
-export async function shareMulch(mulchId: string): Promise<ShareView> {
+export async function shareMulch(mulchId: string, preview?: Buffer): Promise<ShareView> {
   const mulch = await getMulch(mulchId);
   const records = await readShares(mulchId);
   let record = records.find((r) => r.kind === "mulch");
@@ -187,6 +209,7 @@ export async function shareMulch(mulchId: string): Promise<ShareView> {
   for (const node of Object.values(mulch.nodes)) if (node.docPath) files.push(...(await htmlCompanions(mulchId, node.docPath)));
   await upload(record, mulchId, files);
   await api.uploadSnapshot(record, await sharedMulch(mulch));
+  if (preview?.subarray(1, 4).toString() === "PNG") await api.uploadFile(record, PREVIEW_FILE, new Uint8Array(preview)).catch((error) => log.warn("share", "preview not uploaded", { mulchId, error }));
   await api.setLive(record, true).catch(() => undefined);
   state().senders.delete(record.id);
   log.info("share", "Shared a canvas", { mulchId, shareId: record.id, files: files.length });

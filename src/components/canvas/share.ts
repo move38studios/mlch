@@ -1,5 +1,6 @@
 "use client";
 
+import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import type { ShareView } from "@/lib/share/shares";
 
@@ -18,6 +19,12 @@ export async function copyLink(url: string): Promise<void> {
 
 /** POST a share request; returns the share, or undefined after telling the person what went wrong. */
 export async function requestShare(mulchId: string, body: { kind: "mulch" } | { kind: "artifact"; nodeId: string }): Promise<{ share: ShareView; shares: ShareView[] } | undefined> {
+  // A shared canvas's link preview: the canvas as it is on screen now.
+  if (body.kind === "mulch") {
+    const canvas = document.querySelector(".react-flow")?.getBoundingClientRect();
+    const preview = canvas ? await desktop()?.capture?.({ x: canvas.x, y: canvas.y, width: canvas.width, height: canvas.height }).catch(() => null) : null;
+    if (preview) body = { ...body, preview } as typeof body;
+  }
   const response = await fetch(`/api/mulches/${mulchId}/shares`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const result = (await response.json().catch(() => ({}))) as { share?: ShareView; shares?: ShareView[]; error?: string };
   if (!response.ok || !result.share) {

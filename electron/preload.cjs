@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('mlchDesktop', {
   setCallState: (state) => ipcRenderer.invoke('desktop:call-state', state),
   /** Open at login: read it, or set it with a boolean. */
   openAtLogin: (value) => ipcRenderer.invoke('desktop:login-item', value),
+  capture: (rect) => ipcRenderer.invoke('desktop:capture', rect),
   onMenu: (callback) => {
     const listener = (_event, command) => callback(command);
     ipcRenderer.on('desktop:menu', listener);

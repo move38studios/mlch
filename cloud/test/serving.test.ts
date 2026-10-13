@@ -31,6 +31,11 @@ describe("shared artifacts", () => {
     expect(framed).toContain('<iframe src="deck.html" sandbox="allow-scripts" title="Deck">');
     expect(framed).toContain("<title>Deck</title>");
     expect(framed).toContain("Full screen");
+    // Link previews: the title, and the mlch picture until the app uploads one.
+    expect(framed).toContain('<meta property="og:title" content="Deck">');
+    expect(framed).toContain(`<meta property="og:image" content="${SHARE}/brand/og.png">`);
+    await putFile(share.id, share.ownerToken, "preview.png", "PNG");
+    expect(await (await call(share.url)).text()).toContain(`<meta property="og:image" content="${SHARE}/s/${share.id}/preview.png">`);
     const frameCsp = directives(frame.headers.get("Content-Security-Policy"));
     expect(frameCsp["script-src"]).toMatch(/^'nonce-[A-Za-z0-9_-]+'$/);
     expect(frameCsp["frame-src"]).toBe("'self'");
@@ -83,7 +88,10 @@ describe("shared canvases", () => {
     await putSnapshot(share.id, share.ownerToken, mulch());
     const page = await call(share.url);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain('id="root"');
+    const html = await page.text();
+    expect(html).toContain('id="root"');
+    expect(html).toContain("<title>t</title>");
+    expect(html).toContain('<meta property="og:description" content="A canvas shared from mlch.">');
     const csp = directives(page.headers.get("Content-Security-Policy"));
     expect(csp["script-src"]).toBe("'self'");
     expect(csp["connect-src"]).toBe("'self' wss://share.mlch.test");

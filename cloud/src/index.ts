@@ -105,6 +105,41 @@ async function asset(env: Env, request: Request, path: string, extra: Record<str
 }
 
 /** A file from a share's R2 folder, sandboxed. */
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/**
+ * Link previews (Slack, iMessage, email): title, description and picture in
+ * the page's head. The picture is the one the app uploaded with the share
+ * (preview.png: the canvas, or the file's first page), else the mlch icon.
+ * Wording is placeholder (George).
+ */
+export function withPreviewMeta(html: string, meta: { title: string; description: string; image: string; url: string }): string {
+  const tags = [
+    ["og:type", "website"],
+    ["og:site_name", "mlch"],
+    ["og:title", meta.title],
+    ["og:description", meta.description],
+    ["og:image", meta.image],
+    ["og:url", meta.url],
+  ]
+    .map(([property, content]) => `<meta property="${property}" content="${escapeHtml(content)}">`)
+    .concat(`<meta name="twitter:card" content="summary_large_image">`, `<meta name="description" content="${escapeHtml(meta.description)}">`)
+    .join("");
+  const titled = html.replace(/<title>[^<]*<\/title>/i, `<title>${escapeHtml(meta.title)}</title>`);
+  const head = /<head[^>]*>/i.exec(titled);
+  return head ? titled.slice(0, head.index + head[0].length) + tags + titled.slice(head.index + head[0].length) : tags + titled;
+}
+
+async function previewMeta(env: Env, id: string, title: string, kind: ShareKind): Promise<{ title: string; description: string; image: string; url: string }> {
+  const hasPreview = !!(await env.SHARES.head(r2Key.file(id, "preview.png")).catch(() => null));
+  return {
+    title: title || "mlch",
+    description: kind === "mulch" ? "A canvas shared from mlch." : "Shared from mlch.",
+    image: hasPreview ? `${env.SHARE_ORIGIN}/s/${id}/preview.png` : `${env.SHARE_ORIGIN}/brand/og.png`,
+    url: `${env.SHARE_ORIGIN}/s/${id}/`,
+  };
+}
+
 /** The mlch icon as the tab icon of a shared page that has none. */
 export function withFavicon(html: string): string {
   if (/<link[^>]+rel=["']?(shortcut )?icon/i.test(html)) return html;
@@ -254,17 +289,23 @@ async function shareHost(request: Request, env: Env, url: URL, parts: string[]):
       const info = await room(env, id).info();
       if (!info) return notFound();
       if (info.kind === "mulch") {
-        return asset(env, request, "/viewer/", {
+        const page = await asset(env, request, "/viewer/", {
           "Content-Security-Policy": viewerCsp(env),
           "Referrer-Policy": "no-referrer",
           "X-Content-Type-Options": "nosniff",
           "Cache-Control": "no-cache",
         });
+        if (!page.ok || request.method === "HEAD") return page;
+        const html = withPreviewMeta(await page.text(), await previewMeta(env, id, info.title, "mulch"));
+        const headers = new Headers(page.headers);
+        headers.delete("Content-Length");
+        return new Response(html, { status: 200, headers });
       }
       // Pages and drawings open in a frame page with Full screen; other files as themselves.
       if (/\.(html?|svg)$/i.test(info.entry!)) {
         const nonce = randomId(16);
-        return new Response(request.method === "HEAD" ? null : framePage(info.title, info.entry!, nonce), {
+        const page = withPreviewMeta(framePage(info.title, info.entry!, nonce), await previewMeta(env, id, info.title, "artifact"));
+        return new Response(request.method === "HEAD" ? null : page, {
           headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": frameCsp(nonce), "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache" },
         });
       }
