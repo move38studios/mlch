@@ -126,8 +126,9 @@ export function withPreviewMeta(html: string, meta: { title: string; description
     .concat(`<meta name="twitter:card" content="summary_large_image">`, `<meta name="description" content="${escapeHtml(meta.description)}">`)
     .join("");
   const titled = html.replace(/<title>[^<]*<\/title>/i, `<title>${escapeHtml(meta.title)}</title>`);
-  const head = /<head[^>]*>/i.exec(titled);
-  return head ? titled.slice(0, head.index + head[0].length) + tags + titled.slice(head.index + head[0].length) : tags + titled;
+  // At the end of the head, so the page's charset stays first.
+  const end = titled.search(/<\/head>/i);
+  return end >= 0 ? titled.slice(0, end) + tags + titled.slice(end) : tags + titled;
 }
 
 async function previewMeta(env: Env, id: string, title: string, kind: ShareKind): Promise<{ title: string; description: string; image: string; url: string }> {

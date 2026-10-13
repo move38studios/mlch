@@ -90,7 +90,7 @@ describe("shared canvases", () => {
     expect(page.status).toBe(200);
     const html = await page.text();
     expect(html).toContain('id="root"');
-    expect(html).toContain("<title>t</title>");
+    expect(html).toContain("<title>Pricing ideas</title>"); // the canvas's own title, from its snapshot
     expect(html).toContain('<meta property="og:description" content="A canvas shared from mlch.">');
     const csp = directives(page.headers.get("Content-Security-Policy"));
     expect(csp["script-src"]).toBe("'self'");
