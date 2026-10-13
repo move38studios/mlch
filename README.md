@@ -4,6 +4,8 @@
 
 An app for non-linear thinkers.
 
+**Early release (0.2.0).** Expect rough edges. Download for Mac: [mlch.app](https://mlch.app).
+
 Speak your stream of consciousness and have the ideas visually organized on an endless 2D canvas, with search results, associations and connections appearing as you go. Drop in documents, links and folders and they get incorporated.
 
 Ideas emerge from the mess and from cross-pollination, and they happen at the intersections. Go linear only after the braindump.
@@ -46,13 +48,14 @@ Ideas emerge from the mess and from cross-pollination, and they happen at the in
 
 ## Platform
 
-- macOS desktop app: Next.js wrapped in Electron.
-- A web version may follow, so the app is built as a Next.js app first.
+- macOS desktop app (macOS 14.4 or later, Apple silicon): Next.js wrapped in Electron.
+- mlch.app (the `cloud/` Worker on Cloudflare): the landing page, shared links, accounts for making shares. You can run your own: [mlch.app/server](https://mlch.app/server).
 
 ## AI
 
 - No separate AI subscription. mlch uses your existing Claude Code or Codex subscription.
-- Some features use your own keys, entered in Settings: Groq (microphone), fal (media generation), Exa (research search), Firecrawl (reading pages and documents, optional).
+- Speech is transcribed on your Mac (Parakeet), or by Groq with your key.
+- Some features use your own keys, entered in Settings: fal (media generation), Exa (research search), Gemini (watching YouTube videos), Firecrawl (reading pages and documents, optional).
 
 ## Running
 
@@ -77,10 +80,19 @@ FIRECRAWL_API_KEY=...  # optional: better link and document reading
 
 Each mulch is a folder in `~/Documents/mlch`. Logs are in `~/Library/Logs/mlch`; Settings → Diagnostics saves a report for support.
 
+## Building the app from source
+
+Needs Node 24 and a Swift toolchain (Xcode, or swift.org's toolchain in `~/Library/Developer/Toolchains`) for the audio helper.
+
+```sh
+npm install
+npm run check            # typecheck, lint, tests
+npm run dist:unsigned    # dist/mac-arm64/mlch dev.app
+```
+
+A build from source is called "mlch dev", keeps its own settings and saved keys, and never updates itself (official builds update from mlch.app; a fork can set its own feed with `MLCH_UPDATE_URL`). macOS asks you to allow it the first time, as with any unsigned app. Official releases are made with `npm run release` (signing and notarizing need move38's Developer ID).
+
 ## Not built yet
 
-- Sharing snapshots as links.
-- A packaged, signed Mac app (today it runs from this repo).
 - Using your own Claude Code / Codex connectors (MCP) inside mlch.
-- Local transcription (Parakeet).
-- Live collaboration.
+- Live collaboration on a shared canvas.
