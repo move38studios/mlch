@@ -35,4 +35,12 @@ for (const name of ["privacy", "terms", "refunds", "company"]) {
 }
 fs.cpSync(path.join(cloud, "landing", "admin"), path.join(dist, "admin"), { recursive: true });
 fs.cpSync(path.join(root, "public", "brand"), path.join(dist, "brand"), { recursive: true });
+// The other site pages (legal, own-server guide) count too; never the admin page or shared things.
+if (analytics) {
+  for (const page of ["privacy", "terms", "refunds", "company", "server"]) {
+    const file = path.join(dist, page, "index.html");
+    const html = fs.readFileSync(file, "utf8");
+    if (!html.includes("cloudflareinsights")) fs.writeFileSync(file, html.replace("</body>", `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: analytics })}'></script>\n</body>`));
+  }
+}
 console.log("Built", path.relative(root, dist));
