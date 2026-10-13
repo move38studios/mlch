@@ -39,8 +39,7 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   identity: "move38 B.V. (FP3X7G6BU7)"
-  # Set APPLE_KEYCHAIN_PROFILE=mlch (xcrun notarytool store-credentials mlch) to notarize.
-  notarize: false
+  # Notarized when APPLE_KEYCHAIN_PROFILE is set (xcrun notarytool store-credentials mlch; npm run release requires it), skipped otherwise.
   extendInfo:
     # Placeholder wording (George): shown in macOS's permission prompts.
     NSMicrophoneUsageDescription: Speech to text.
