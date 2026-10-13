@@ -94,15 +94,8 @@ export function Landing() {
     <main className="landing h-full flex">
       <div className="relative flex-1 min-w-0">
         {mulch && <Canvas mulch={mulch} />}
-        <header className="absolute inset-x-0 top-0 px-4 pt-4 flex items-start gap-3 z-10 pointer-events-none">
-          <div className="pointer-events-auto float rounded-2xl h-12 px-3.5 sm:px-4 flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <img src="/brand/wordmark.svg" alt="mlch" className="h-5 sm:h-6 w-auto shrink-0" />
-            {VERSION && <span className="text-[12px] sm:text-[12.5px] leading-tight text-ink-3 tabular-nums">Early release {VERSION}</span>}
-          </div>
-          <div className="flex-1" />
-          <a href="/download" className="hidden sm:flex pointer-events-auto h-12 px-5 rounded-2xl bg-amber text-ink text-[16px] font-semibold items-center gap-2 whitespace-nowrap shadow-[var(--float-shadow)] hover:brightness-[1.03]">
-            <Download size={18} strokeWidth={2.25} /> Download for Mac
-          </a>
+        <header className="absolute inset-x-0 top-0 pt-5 flex justify-center z-10 pointer-events-none">
+          <img src="/brand/icon.svg" alt="mlch" className="h-16 w-16 sm:h-20 sm:w-20 -rotate-3 drop-shadow-[0_10px_22px_rgba(0,0,0,0.16)]" />
         </header>
         {/* Where the app has its input bar: the download, what it needs, and the site's links. */}
         <footer className="absolute inset-x-0 bottom-0 px-3 sm:px-4 pb-3 sm:pb-4 flex justify-center z-10 pointer-events-none">
@@ -110,7 +103,7 @@ export function Landing() {
             <a href="/download" className="h-14 rounded-xl bg-amber text-ink text-[17px] font-semibold flex items-center justify-center gap-2.5 whitespace-nowrap hover:brightness-[1.03]">
               <Download size={20} strokeWidth={2.25} /> Download for Mac
             </a>
-            <p className="mt-1.5 text-center text-[12.5px] text-ink-3">macOS 14.4 or later, Apple silicon</p>
+            <p className="mt-1.5 text-center text-[12.5px] text-ink-3 tabular-nums">{VERSION ? `Early release ${VERSION}, ` : ""}macOS 14.4 or later, Apple silicon</p>
             <nav className="mt-1 flex flex-wrap justify-center gap-x-0.5 text-[12.5px] text-ink-2">
               {LINKS.map(([label, href]) => (
                 <a key={href} href={href} className="px-2 py-1 rounded-lg hover:bg-paper-2 hover:text-ink">
