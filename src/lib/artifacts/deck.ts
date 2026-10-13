@@ -65,6 +65,7 @@ const PLAYER_JS = `(function () {
   var expected = Number(stage.getAttribute("data-count")) || slides.length;
   var still = /[?&]still(=|&|$)/.test(location.search);
   var index = 0;
+  var ownBars = window.getComputedStyle(document.documentElement).backgroundColor === "rgb(0, 0, 0)";
   function fix(el, prop, value) { el.style.setProperty(prop, value, "important"); }
   [["position", "fixed"], ["left", "0"], ["top", "0"], ["width", W + "px"], ["height", H + "px"], ["margin", "0"], ["padding", "0"], ["overflow", "hidden"], ["transform-origin", "0 0"], ["display", "block"]].forEach(function (p) { fix(stage, p[0], p[1]); });
   slides.forEach(function (s) {
@@ -91,6 +92,8 @@ const PLAYER_JS = `(function () {
     var style = window.getComputedStyle(current);
     if (style.display === "none") fix(current, "display", "block");
     if (style.visibility === "hidden") fix(current, "visibility", "visible");
+    // The bars around the slide take its colour, unless the deck coloured the page itself.
+    if (ownBars) document.documentElement.style.background = style.backgroundColor === "rgba(0, 0, 0, 0)" ? "" : style.backgroundColor;
     if (style.opacity === "0") fix(current, "opacity", "1");
     if (counter) {
       counter.textContent = n + 1 + " / " + slides.length;
