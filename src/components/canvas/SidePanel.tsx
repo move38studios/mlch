@@ -189,7 +189,7 @@ export function SidePanel() {
       body: JSON.stringify(node.docPath ? { docPath: node.docPath } : { assetId: node.assetId }),
     });
   const label = KIND_STYLES[node.kind].label;
-  const editable = !readOnly && !textAsset && !["artifact", "image", "media", "ref"].includes(node.kind);
+  const editable = !readOnly && !textAsset && !["artifact", "media", "ref"].includes(node.kind);
   const save = () => {
     if (draft !== undefined && draft !== node.text && draft.trim()) apply([{ op: "updateNode", id: node.id, patch: { text: draft, userTouched: true, updatedAt: Date.now() } }]);
     setDraft(undefined);
@@ -226,6 +226,10 @@ export function SidePanel() {
       </div>
       <style>{HIGHLIGHT_STYLE}</style>
       <div ref={contentRef} className="flex-1 overflow-auto px-6 pt-1 pb-8">
+        {node.kind === "image" && node.assetId && mulchId && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={`/api/mulches/${mulchId}/assets/${node.assetId}`} alt={node.text || node.fileName || ""} className="-mx-6 mb-4 block w-[calc(100%+3rem)] max-w-none bg-paper-2" draggable={false} />
+        )}
         {node.kind === "media" && mulchId && (
           <div className="-mx-6 mb-4 bg-paper-2">
             <MediaPlayer node={node} mulchId={mulchId} large />

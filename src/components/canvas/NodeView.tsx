@@ -244,7 +244,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const setViewer = useCanvasUi((s) => s.setViewer);
   const apply = useMulch((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
-  const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || (node.kind === "link" && !!node.assetId);
+  const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || node.kind === "image" || (node.kind === "link" && !!node.assetId);
 
   return (
     <div
@@ -259,7 +259,8 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
         else if (node.kind === "artifact" && node.docPath) {
           if (/\.(html|svg)$/.test(node.docPath)) setViewer(node.id);
           else if (!readOnly) openFile(mulchId, node.docPath, "open");
-        } else if (node.kind !== "image" && node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
+        } else if (node.kind === "image") setOpen(node.id);
+        else if (node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
       }}
     >
       {editing ? (
@@ -284,17 +285,23 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
         <Handle key={id} id={id} type="source" position={position} className="mlch-handle" />
       ))}
       {selected && !editing && !readOnly && (
-        <NodeResizeControl
-          position="right"
-          variant={ResizeControlVariant.Line}
-          resizeDirection="horizontal"
-          minWidth={140}
-          maxWidth={900}
-          className="mlch-resize"
-          onResizeEnd={(_event, params) =>
-            apply([{ op: "updateNode", id: node.id, patch: { w: Math.round(params.width), x: Math.round(params.x), userTouched: true } }])
-          }
-        />
+        <>
+          {/* Width only (height follows the content): the right edge, and a visible corner handle. */}
+          {(["right", "bottom-right"] as const).map((position) => (
+            <NodeResizeControl
+              key={position}
+              position={position}
+              variant={position === "right" ? ResizeControlVariant.Line : ResizeControlVariant.Handle}
+              resizeDirection="horizontal"
+              minWidth={140}
+              maxWidth={1400}
+              className={position === "right" ? "mlch-resize" : "mlch-resize-corner"}
+              onResizeEnd={(_event, params) =>
+                apply([{ op: "updateNode", id: node.id, patch: { w: Math.round(params.width), x: Math.round(params.x), userTouched: true } }])
+              }
+            />
+          ))}
+        </>
       )}
     </div>
   );

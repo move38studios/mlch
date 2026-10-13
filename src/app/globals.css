@@ -132,6 +132,14 @@ select:focus-visible {
   background: var(--ink);
   scale: 1.35;
 }
+/* The corner handle of a selected card: a small amber square. */
+.mlch-resize-corner.react-flow__resize-control.handle {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--amber);
+  border: 1.5px solid var(--ink);
+}
 .mlch-resize.react-flow__resize-control.line.right {
   border-right-width: 3px;
   border-color: transparent;
