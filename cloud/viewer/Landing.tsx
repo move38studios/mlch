@@ -57,7 +57,8 @@ function seed(phone: boolean): Mulch {
     createdAt: at,
     updatedAt: at,
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-    edges: Object.fromEntries(EDGES.map((edge) => [edge.id, edge])),
+    // In one column the lines would only cross each other.
+    edges: phone ? {} : Object.fromEntries(EDGES.map((edge) => [edge.id, edge])),
     groups: {},
   };
 }
@@ -79,8 +80,13 @@ export function Landing() {
     useCanvasUi.setState({ readOnly: false });
     // A phone opens on the first card, readable; the rest is below.
     if (phone) {
-      const timer = setTimeout(() => useMulch.getState().setFocus({ ids: ["about"] }), 500);
-      return () => clearTimeout(timer);
+      const focus = setTimeout(() => useMulch.getState().setFocus({ ids: ["about"] }), 500);
+      // Focusing selects the card; a click on the empty canvas lets it go again.
+      const release = setTimeout(() => document.querySelector(".react-flow__pane")?.dispatchEvent(new MouseEvent("click", { bubbles: true })), 1300);
+      return () => {
+        clearTimeout(focus);
+        clearTimeout(release);
+      };
     }
   }, []);
 
@@ -94,24 +100,25 @@ export function Landing() {
             {VERSION && <span className="text-[12px] sm:text-[12.5px] leading-tight text-ink-3 tabular-nums">Early release {VERSION}</span>}
           </div>
           <div className="flex-1" />
-          <div className="pointer-events-auto flex flex-col items-end gap-1">
-            <a href="/download" className="h-12 px-4 sm:px-5 rounded-2xl bg-amber text-ink text-[15px] sm:text-[16px] font-semibold flex items-center gap-2 whitespace-nowrap shadow-[var(--float-shadow)] hover:brightness-[1.03]">
-              <Download size={18} strokeWidth={2.25} />
-              <span>
-                Download<span className="hidden sm:inline"> for Mac</span>
-              </span>
-            </a>
-            <span className="text-[12px] text-ink-3 pr-1 text-right">macOS 14.4 or later, Apple silicon</span>
-          </div>
+          <a href="/download" className="hidden sm:flex pointer-events-auto h-12 px-5 rounded-2xl bg-amber text-ink text-[16px] font-semibold items-center gap-2 whitespace-nowrap shadow-[var(--float-shadow)] hover:brightness-[1.03]">
+            <Download size={18} strokeWidth={2.25} /> Download for Mac
+          </a>
         </header>
-        <footer className="absolute inset-x-0 bottom-0 px-4 pb-4 flex z-10 pointer-events-none">
-          <nav className="pointer-events-auto float rounded-xl px-2 py-1 flex flex-wrap items-center gap-x-1 text-[13px] text-ink-2 max-w-full">
-            {LINKS.map(([label, href]) => (
-              <a key={href} href={href} className="px-2 py-1 rounded-lg hover:bg-paper-2 hover:text-ink">
-                {label}
-              </a>
-            ))}
-          </nav>
+        {/* Where the app has its input bar: the download, what it needs, and the site's links. */}
+        <footer className="absolute inset-x-0 bottom-0 px-3 sm:px-4 pb-3 sm:pb-4 flex justify-center z-10 pointer-events-none">
+          <div className="pointer-events-auto float rounded-2xl p-2 w-full sm:w-auto sm:min-w-[420px] max-w-[560px]">
+            <a href="/download" className="h-14 rounded-xl bg-amber text-ink text-[17px] font-semibold flex items-center justify-center gap-2.5 whitespace-nowrap hover:brightness-[1.03]">
+              <Download size={20} strokeWidth={2.25} /> Download for Mac
+            </a>
+            <p className="mt-1.5 text-center text-[12.5px] text-ink-3">macOS 14.4 or later, Apple silicon</p>
+            <nav className="mt-1 flex flex-wrap justify-center gap-x-0.5 text-[12.5px] text-ink-2">
+              {LINKS.map(([label, href]) => (
+                <a key={href} href={href} className="px-2 py-1 rounded-lg hover:bg-paper-2 hover:text-ink">
+                  {label}
+                </a>
+              ))}
+            </nav>
+          </div>
         </footer>
       </div>
       <SidePanel />
