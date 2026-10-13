@@ -232,8 +232,9 @@ describe("Codex harness runTurn", () => {
     const { harness, child } = setup();
     await collect(harness.runTurn(params({ model: "gpt-9-imaginary" })));
     const [turn] = child().requests("turn/start");
-    expect(turn.params.model).not.toBe("gpt-9-imaginary");
-    expect(["gpt-6-astra", "gpt-5.6-luna"]).toContain(turn.params.model);
+    const model = (turn.params as { model?: string }).model;
+    expect(model).not.toBe("gpt-9-imaginary");
+    expect(["gpt-6-astra", "gpt-5.6-luna"]).toContain(model);
   });
 
   it("continues a known thread without re-sending the history", async () => {

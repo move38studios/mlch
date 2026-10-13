@@ -168,6 +168,20 @@ const newNodeShape = z.object({
   group: z.string().optional().describe("Id of an existing group to put it in."),
 });
 
+/** Markdown markers out of a short card's text (bold, headings, code, bullets); the words stay. */
+export function plainText(text: string): string {
+  return text
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/(^|\s)[*_](\S[^*_]*?)[*_](?=\s|$|[.,;:!?])/g, "$1$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}\s+|[-*+]\s+|>\s?)/gm, "")
+    .trim();
+}
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
 const edgeShape = z.object({
   from: z.string().describe("Item id or ref"),
   to: z.string().describe("Item id or ref"),
@@ -709,8 +723,19 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const ops: MulchOp[] = [];
       const pending: Rect[] = [];
       const created: MulchNode[] = [];
-      for (const item of input.nodes) {
+      /** Per input item, the id it got (none when refused). */
+      const addedIds: Array<string | undefined> = [];
+      for (const raw of input.nodes) {
+        // Ideas and questions are short plain text: Markdown is dropped, long ones are refused.
+        const short = raw.kind === "idea" || raw.kind === "question";
+        const item = short ? { ...raw, text: plainText(raw.text), ...(raw.title ? { title: plainText(raw.title) } : {}) } : raw;
+        addedIds.push(undefined);
+        if (short && wordCount(item.text) > 60) {
+          problems.push(`${raw.ref ?? item.text.slice(0, 40)}: not added. An idea or question is plain text under 30 words; put longer material in write_doc, or split it into several items.`);
+          continue;
+        }
         const id = newClientId("n");
+        addedIds[addedIds.length - 1] = id;
         if (item.ref) refs.set(item.ref, id);
         const resolve = resolver(mulch, refs);
         const anchors = (item.near ?? []).map(resolve).filter((x): x is string => !!x);
@@ -742,7 +767,10 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       ops.push(...edgeOps(mulch, input.edges ?? [], resolver(mulch, refs), problems));
       await commit(ops);
       ctx.added.push(...created.map((node) => node.id));
-      const mapping = input.nodes.map((item, i) => `${item.ref ?? `#${i + 1}`} = ${created[i].id}`).join(", ");
+      const mapping = input.nodes
+        .map((item, i) => (addedIds[i] ? `${item.ref ?? `#${i + 1}`} = ${addedIds[i]}` : ""))
+        .filter(Boolean)
+        .join(", ");
       const edgeCount = ops.filter((op) => op.op === "addEdge").length;
       return ok(
         `Added ${created.length} items (${mapping})${edgeCount ? ` and ${edgeCount} connections` : ""}.${problems.length ? ` Notes: ${problems.join(" ")}` : ""}`,
@@ -935,7 +963,7 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
         const mulch = await getMulch(ctx.mulchId);
         const node = Object.values(mulch.nodes).find((n) => n.kind === "artifact" && n.docPath === replace);
         if (!node || !ARTIFACT_PATH.test(replace) || !replace.endsWith(`.${extension}`)) return fail(`No artifact ${replace} with extension ${extension} on the canvas.`);
-        if (isUserOwned(node) && !ctx.allowUserEdits) return fail(`${replace} belongs to the person.`);
+        if (isUserOwned(node) && !ctx.allowUserEdits) return fail(`${replace} belongs to the person; save a new file instead (leave out \`replace\`).`);
         await atomicWriteFile(artifactFile(ctx.mulchId, replace), content);
         await commit([{ op: "updateNode", id: node.id, patch: { title, text: description, updatedAt: Date.now() } }]);
         return ok(`Replaced ${replace}.`, `Revised ${title}`);

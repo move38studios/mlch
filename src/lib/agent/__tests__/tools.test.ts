@@ -54,6 +54,24 @@ describe("mulch tools", () => {
     expect(after.nodes[ctx.added[0]].origin).toBe("agent:j1");
   });
 
+  it("add_nodes keeps ideas and questions plain and short", async () => {
+    const { store, mulch, ctx, runtime } = await setup(["add_nodes"]);
+    const long = Array.from({ length: 70 }, (_, i) => `word${i}`).join(" ");
+    const result = await runtime.execute("add_nodes", {
+      nodes: [
+        { kind: "idea", text: "**Tools for conviviality**: keep `autonomy` in reach" },
+        { ref: "long", kind: "question", text: long },
+        { kind: "definition", title: "Term", text: "**markdown** stays here" },
+      ],
+    });
+    expect(result.text).toContain("not added");
+    expect(result.text).toContain("write_doc");
+    const after = await store.getMulch(mulch.id);
+    expect(ctx.added).toHaveLength(2);
+    expect(after.nodes[ctx.added[0]].text).toBe("Tools for conviviality: keep autonomy in reach");
+    expect(after.nodes[ctx.added[1]].text).toBe("**markdown** stays here");
+  });
+
   it("protects what the person made or said unless allowed", async () => {
     const { store, mulch, runtime } = await setup(["update_node", "remove_nodes"]);
     expect((await runtime.execute("update_node", { id: "mine", text: "x" })).ok).toBe(false);

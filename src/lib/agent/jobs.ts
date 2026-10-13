@@ -20,6 +20,7 @@ import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
 import { applyToMulch, emit, getJobs, getMulch, keepWhile, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
 import { desktopRequest } from "@/lib/desktop/server";
+import type { MulchNode } from "@/lib/mulch/types";
 import { modelFor, readSettings, type Lane, type Settings } from "@/lib/settings";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -805,7 +806,8 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
         lane: "slow",
         systemPrompt: (s) => slowPrompt(s, web),
         prompt:
-          `<mulch>\n${await mulchContext(mulchId, about, 160)}\n</mulch>\n\n<new_items>\n${items.map((n) => `${n.id}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>` +
+          `<mulch>\n${await mulchContext(mulchId, about, 160)}\n</mulch>\n\n<new_items>\n${items.map((n) => `${n.id} ${saidByPerson(n) ? "(said)" : "(source)"}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>` +
+          (inCall(mulchId) ? "\n\nThis is a live call: at most 2 items; prefer facts that settle a claim made, or a question [me] could ask next." : "") +
           (settings.enrich.includes("mulches") ? await relatedElsewhere(mulchId, about) : ""),
         tools: [
           "add_nodes", "connect", "say",
@@ -817,6 +819,11 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
     },
   });
   pump(mulchId, "slow");
+}
+
+/** The person's own words (typed, said, or touched since), as opposed to material from a document or link. */
+function saidByPerson(node: MulchNode): boolean {
+  return node.origin === "user" || node.origin.startsWith("speech:") || !!node.userTouched;
 }
 
 const COMMAND_TOOLS: ToolName[] = [
@@ -868,7 +875,8 @@ export function submitResearch(mulchId: string, brief: string, options: LongOpti
       const outcome = await made();
       if ((outcome.table && outcome.writeup && outcome.sources >= 5) || signal.aborted || !first.sessionId) return;
       const missing = [
-        outcome.sources < 5 ? `more sources (${outcome.sources} so far; aim for 8-15 real ones, read their pages)` : "",
+        // Any sources at all: the brief decides how many (a literature question wants fewer, deeper ones).
+        outcome.sources < 1 ? "sources (search items for what you found, read their pages)" : "",
         outcome.table ? "" : "the comparison table (write_artifact, html)",
         outcome.writeup ? "" : "the write-up (write_doc)",
       ].filter(Boolean);
@@ -1111,7 +1119,7 @@ export function submitIngest(mulchId: string, sourceId: string, label: string, c
           `<source id="${sourceId}">\n${content.slice(0, LONG_SOURCE)}\n</source>`,
         tools: ["add_nodes", "connect", "search_mulch", "read_source"],
       });
-      if (added.length) requestEnrichment(mulchId, added.slice(0, 6));
+      if (added.length) requestEnrichment(mulchId, added.slice(0, 3));
     },
   });
 }
