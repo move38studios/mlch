@@ -47,11 +47,11 @@ const NODES: MulchNode[] = [
 const EDGES: MulchEdge[] = ["talk", "lookup", "connect", "make", "calls"].map((target) => ({ id: `e-${target}`, source: "about", target, origin: "agent:landing", createdAt: at }));
 
 /** On a phone the same cards go in one column, so the canvas can open zoomed in at the top and be scrolled. */
-const PHONE_ORDER = ["logo", "about", "note", "talk", "lookup", "connect", "make", "calls"];
-const PHONE_Y: Record<string, number> = { logo: -230, about: 0, note: 300, talk: 520, lookup: 700, connect: 900, make: 1120, calls: 1300 };
+const PHONE_ORDER = ["logo", "note", "about", "talk", "lookup", "connect", "make", "calls"];
+const PHONE_Y: Record<string, number> = { logo: -230, note: 0, about: 220, talk: 540, lookup: 720, connect: 920, make: 1140, calls: 1320 };
 
 function seed(phone: boolean): Mulch {
-  const nodes = phone ? NODES.map((node) => ({ ...node, x: node.kind === "note" ? 40 : node.id === "logo" ? 95 : 0, y: PHONE_Y[node.id] ?? PHONE_ORDER.indexOf(node.id) * 200, w: node.id === "logo" ? 110 : 300 })) : NODES;
+  const nodes = phone ? NODES.map((node) => ({ ...node, x: node.kind === "note" ? 20 : node.id === "logo" ? 95 : 0, y: PHONE_Y[node.id] ?? PHONE_ORDER.indexOf(node.id) * 200, w: node.id === "logo" ? 110 : 300 })) : NODES;
   return {
     version: 1,
     id: LANDING_ID,
@@ -82,7 +82,7 @@ export function Landing() {
     useCanvasUi.setState({ readOnly: false });
     // A phone opens on the first card, readable; the rest is below.
     if (phone) {
-      const focus = setTimeout(() => useMulch.getState().setFocus({ ids: ["logo", "about"] }), 500);
+      const focus = setTimeout(() => useMulch.getState().setFocus({ ids: ["logo", "note"] }), 500);
       // Focusing selects the card; a click on the empty canvas lets it go again.
       const release = setTimeout(() => document.querySelector(".react-flow__pane")?.dispatchEvent(new MouseEvent("click", { bubbles: true })), 1300);
       return () => {
