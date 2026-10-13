@@ -349,9 +349,9 @@ export async function setJob(id: string, job: JobStatus): Promise<void> {
   const before = entry.jobs.get(job.id)?.message;
   if (before?.dismissed && job.message && job.message.at === before.at && !job.message.dismissed) job = { ...job, message: { ...job.message, dismissed: true } };
   entry.jobs.set(job.id, job);
-  // Keep the list short: the last 30 finished kept jobs, the last 10 others.
+  // Keep the list short: the last 30 finished kept jobs, the last 60 others (the conversation shows what became of recent speech).
   const finished = [...entry.jobs.values()].filter((j) => j.state !== "queued" && j.state !== "running");
-  for (const [list, keep] of [[finished.filter((j) => j.retry), 30], [finished.filter((j) => !j.retry), 10]] as const) {
+  for (const [list, keep] of [[finished.filter((j) => j.retry), 30], [finished.filter((j) => !j.retry), 60]] as const) {
     for (const old of list.slice(0, Math.max(0, list.length - keep))) entry.jobs.delete(old.id);
   }
   broadcast(entry, { type: "job", job });

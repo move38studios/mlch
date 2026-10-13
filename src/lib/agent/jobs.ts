@@ -59,6 +59,8 @@ interface Work {
   retry?: JobRetry;
   /** Long work: the items its result belongs near. */
   near?: string[];
+  /** The speech or typing it came from. */
+  inputIds?: string[];
   run(job: JobStatus, signal: AbortSignal): Promise<void>;
 }
 
@@ -78,7 +80,7 @@ interface MulchJobs {
   /** Fast lane: segments not yet captured. */
   pendingSegments: TranscriptSegment[];
   /** A spoken instruction waiting for the person to finish (speech cut at a pause can end mid-sentence). */
-  spoken?: { instruction: string; after: TranscriptSegment[]; startedAt: number; timer?: ReturnType<typeof setTimeout> };
+  spoken?: { instruction: string; from: string[]; after: TranscriptSegment[]; startedAt: number; timer?: ReturnType<typeof setTimeout> };
   /** Slow lane: new item ids not yet enriched. */
   pendingEnrich: string[];
   paused: boolean;
@@ -422,7 +424,7 @@ function start(mulchId: string, { work, job }: Queued): void {
 
 /** Queue work without starting it; returns its job. */
 function queue(mulchId: string, work: Work): JobStatus {
-  const job: JobStatus = { id: newClientId("j"), lane: work.lane, state: "queued", label: work.label, queuedAt: Date.now(), ...(work.retry ? { retry: work.retry } : {}) };
+  const job: JobStatus = { id: newClientId("j"), lane: work.lane, state: "queued", label: work.label, queuedAt: Date.now(), ...(work.retry ? { retry: work.retry } : {}), ...(work.inputIds?.length ? { inputIds: work.inputIds } : {}) };
   jobsFor(mulchId).queues[work.lane].push({ work, job });
   // Only the person's own requests are worth showing while they wait.
   if (work.retry) void setJob(mulchId, { ...job }).catch(() => {});
@@ -640,6 +642,7 @@ function captureCall(mulchId: string, raw: TranscriptSegment[]): void {
   enqueue(mulchId, {
     lane: "fast",
     label: "Capturing",
+    inputIds: segments.map((segment) => segment.id),
     async run(job, signal) {
       const mulch = await getMulch(mulchId);
       const added = await runTurn({
@@ -651,7 +654,7 @@ function captureCall(mulchId: string, raw: TranscriptSegment[]): void {
         prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<call_so_far>\n${await callTranscript(mulchId, { minutes: 6, before: segments[0]?.at })}\n</call_so_far>\n\n<new_conversation>\n${text}\n</new_conversation>`,
         tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
         origin: `speech:${job.id}`,
-        onHandOff: (instruction) => submitCommand(mulchId, instruction),
+        onHandOff: (instruction) => submitCommand(mulchId, instruction, segments.map((segment) => segment.id)),
       });
       if (added.length) requestEnrichment(mulchId, added);
     },
@@ -720,6 +723,7 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
       const segments = entry.pendingSegments.splice(0);
       const text = inputBlock(segments);
       if (!text) return;
+      job.inputIds = segments.map((segment) => segment.id);
       const mulch = await getMulch(mulchId);
       const added = await runTurn({
         mulchId,
@@ -730,7 +734,8 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
         prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<new_input source="${segments[0]?.source ?? "speech"}">\n${text}\n</new_input>`,
         tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
         origin: `speech:${job.id}`,
-        onHandOff: (instruction) => (segments.some((segment) => segment.source === "speech") ? submitSpokenCommand(mulchId, instruction) : submitCommand(mulchId, instruction)),
+        onHandOff: (instruction) =>
+          segments.some((segment) => segment.source === "speech") ? submitSpokenCommand(mulchId, instruction, segments) : submitCommand(mulchId, instruction, segments.map((segment) => segment.id)),
       });
       if (added.length) requestEnrichment(mulchId, added);
     },
@@ -746,10 +751,11 @@ const SPOKEN_MAX_MS = 20_000;
  * the meantime (the rest of a sentence cut at a pause, or more detail) goes
  * with it instead of being captured on its own.
  */
-function submitSpokenCommand(mulchId: string, instruction: string): void {
+function submitSpokenCommand(mulchId: string, instruction: string, from: TranscriptSegment[]): void {
   const entry = jobsFor(mulchId);
   if (entry.spoken) entry.spoken.instruction += `\n${instruction}`;
-  else entry.spoken = { instruction, after: [], startedAt: Date.now() };
+  else entry.spoken = { instruction, from: [], after: [], startedAt: Date.now() };
+  entry.spoken.from.push(...from.map((segment) => segment.id));
   // Speech already waiting for capture came after the instruction: it belongs to it.
   entry.spoken.after.push(...entry.pendingSegments.splice(0).filter((segment) => segment.source === "speech"));
   armSpoken(mulchId);
@@ -772,6 +778,7 @@ function releaseSpoken(mulchId: string): void {
   submitCommand(
     mulchId,
     said ? `${spoken.instruction}\n\nThey went on (this may finish or change the instruction; anything else is thinking to capture as items): "${said}"` : spoken.instruction,
+    [...spoken.from, ...spoken.after.map((segment) => segment.id)],
   );
 }
 
@@ -1051,10 +1058,11 @@ onFinished((record) => {
   if (record.review && record.status !== "cancelled") submitReview(record.mulchId, record);
 });
 
-export function submitCommand(mulchId: string, instruction: string): JobStatus {
+export function submitCommand(mulchId: string, instruction: string, inputIds?: string[]): JobStatus {
   return enqueue(mulchId, {
     lane: "command",
     label: shorten(instruction, 60),
+    inputIds,
     retry: { kind: "command", input: instruction },
     async run(job, signal) {
       await getMulch(mulchId); // a missing mulch fails the job here

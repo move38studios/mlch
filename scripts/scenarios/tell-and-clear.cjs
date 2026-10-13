@@ -1,4 +1,4 @@
-// Connection points, the AI's message bubble and clearing a canvas, in the app with real AI:
+// Connection points, the AI's message in the conversation panel and clearing a canvas, in the app with real AI:
 // dragging from a card's top point to another card connects them; a question gets its answer in a
 // bubble that stays until closed (and can become a card); "erase everything" leaves no card or box.
 const assert = require('node:assert/strict');
@@ -37,15 +37,17 @@ module.exports = async ({ page, base, shot }) => {
   assert.equal(edges.length, 1, 'the cards are connected');
   await shot('connected');
 
-  // A question: answered in a bubble.
+  // A question: the conversation opens by itself with the answer.
+  assert.equal(await page.locator('aside[aria-label="Conversation"]').count(), 0, 'closed by default');
   await page.fill('textarea[aria-label="Input"]', '/what do these two notes have in common? answer briefly');
   await page.keyboard.press('Enter');
-  await page.waitForSelector('[role="status"] .mlch-md', { timeout: 180_000 });
-  const answer = await page.locator('[role="status"] .mlch-md').innerText();
+  await page.waitForSelector('aside[aria-label="Conversation"] .mlch-md', { timeout: 180_000 });
+  const answer = await page.locator('aside[aria-label="Conversation"] .mlch-md').last().innerText();
   console.log(`answer: ${answer}`);
+  await page.waitForTimeout(500);
   await shot('message');
-  await page.click('[role="status"] button:has-text("Add to canvas")');
-  await page.waitForSelector('[role="status"]', { state: 'detached' });
+  await page.click('aside[aria-label="Conversation"] button:has-text("Add to canvas")');
+  await page.waitForTimeout(1500);
   const kept = Object.values((await api(`/api/mulches/${mulch.id}`)).mulch.nodes).find((n) => n.kind === 'writeup');
   assert.ok(kept, 'the answer became a card');
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, FolderPlus, History, Link2, Share, X } from "lucide-react";
+import { ArrowLeft, FolderPlus, History, Link2, MessageSquare, Share, X } from "lucide-react";
 import type { ShareView } from "@/lib/share/shares";
 import { copyLink, requestShare } from "./share";
 import { startCall, startMic } from "./Mic";
@@ -19,6 +19,7 @@ import { Canvas } from "./Canvas";
 import { InputBar } from "./InputBar";
 import { JobStatus } from "./JobStatus";
 import { SidePanel } from "./SidePanel";
+import { Conversation, unreadMessages, useConversation, useConversationOpener } from "./Conversation";
 
 function Title() {
   const mulch = useMulch((s) => s.mulch);
@@ -174,6 +175,36 @@ function ShareMenu({ mulchId }: { mulchId: string }) {
   );
 }
 
+/** Opens and closes the conversation; a dot while a message from the AI is unread. */
+function ConversationButton() {
+  const open = useConversation((s) => s.open);
+  const setOpen = useConversation((s) => s.setOpen);
+  const unread = useMulch((s) => unreadMessages(s.jobs).length > 0);
+  useConversationOpener();
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        useConversation.getState().setOpen(!useConversation.getState().open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <button
+      onClick={() => setOpen(!open)}
+      className={`relative p-1.5 rounded-lg hover:bg-paper-2 ${open ? "bg-paper-2 text-ink" : "text-ink-2 hover:text-ink"}`}
+      title="Conversation (⌘J)"
+      aria-label="Conversation"
+      aria-pressed={open}
+    >
+      <MessageSquare size={16} strokeWidth={1.75} />
+      {unread && !open && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-amber ring-2 ring-chrome" />}
+    </button>
+  );
+}
+
 function Notice() {
   const notice = useMulch((s) => s.notice);
   const dismiss = useMulch((s) => s.dismissNotice);
@@ -239,6 +270,7 @@ export function MulchView({ id }: { id: string }) {
 
   return (
     <main className="h-full flex">
+      <SidePanel />
       <div className="relative flex-1 min-w-0">
         {error ? (
           <p className="pt-24 px-8 text-sm text-ink-2">{error}</p>
@@ -266,6 +298,7 @@ export function MulchView({ id }: { id: string }) {
               <LinkedFromMenu mulchId={id} />
               <ShareMenu mulchId={id} />
               <AddFolder mulchId={id} />
+              <ConversationButton />
               <button
                 onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
                 className={`p-1.5 rounded-lg hover:bg-paper-2 ${historyOpen ? "bg-amber text-ink hover:bg-amber" : "text-ink-2 hover:text-ink"}`}
@@ -280,7 +313,7 @@ export function MulchView({ id }: { id: string }) {
         {historyOpen && <HistoryBar mulchId={id} onPreview={onPreview} onClose={closeHistory} />}
         <Notice />
       </div>
-      <SidePanel />
+      <Conversation />
     </main>
   );
 }

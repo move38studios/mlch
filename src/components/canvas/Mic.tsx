@@ -190,38 +190,23 @@ export function CallButton({ mulchId }: { mulchId: string }) {
 }
 
 /** The last few things said, above the input bar, while speaking. */
+/** While listening: the scribble above the input, drawn as you speak. The words go to the conversation panel. */
 export function TranscriptStrip() {
-  const transcript = useMulch((s) => s.transcript);
   const recording = useVoice((s) => s.recording);
   const speaking = useVoice((s) => s.speaking);
   const pending = useVoice((s) => s.pending);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 2000);
-    return () => clearInterval(timer);
-  }, []);
-  const recent = transcript.filter((s) => s.source === "speech").slice(-3);
-  const lastAt = recent[recent.length - 1]?.at ?? 0;
-  if (!recording && !pending && now - lastAt > 20_000) return null;
+  if (!recording && !pending) return null;
   return (
-    <div className="mb-2.5 px-4 text-[13.5px] leading-snug text-ink-2 space-y-0.5" aria-live="polite">
-      {recent.map((segment, i) => (
-        <p key={segment.id} style={{ opacity: 0.4 + (i + 1) / (recent.length * 1.7) }}>
-          {segment.speaker && <span className="text-ink-3">{segment.speaker === "me" ? "Me" : "Them"}: </span>}
-          {segment.text}
-        </p>
-      ))}
-      {(recording || pending > 0) && (
-        <Scribble
-          which="top"
-          mode="live"
-          active={speaking || pending > 0}
-          duration={2.2}
-          strokeWidth={9}
-          className="h-5 w-auto mt-1.5 text-ink"
-          style={{ opacity: speaking || pending > 0 ? 0.85 : 0.35 }}
-        />
-      )}
+    <div className="mb-2.5 px-4" aria-hidden="true">
+      <Scribble
+        which="top"
+        mode="live"
+        active={speaking || pending > 0}
+        duration={2.2}
+        strokeWidth={9}
+        className="h-5 w-auto text-ink"
+        style={{ opacity: speaking || pending > 0 ? 0.85 : 0.35 }}
+      />
     </div>
   );
 }

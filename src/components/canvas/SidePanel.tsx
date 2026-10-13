@@ -53,7 +53,7 @@ function RefPanel({ node, mulchId, onClose }: { node: MulchNode; mulchId: string
     if (response.ok) onClose();
   };
   return (
-    <aside className="float w-[min(560px,45%)] shrink-0 my-3 mr-3 rounded-2xl flex flex-col overflow-hidden">
+    <aside className="float w-[min(560px,45%)] shrink-0 mt-[52px] mb-3 ml-3 rounded-2xl flex flex-col overflow-hidden">
       <div className="h-12 shrink-0 flex items-center gap-2 pl-6 pr-3 text-[12.5px] text-ink-3 min-w-0">
         <Link2 size={13} strokeWidth={1.75} className="shrink-0" />
         <span className="truncate">{target?.place}</span>
@@ -195,7 +195,7 @@ export function SidePanel() {
     setDraft(undefined);
   };
   return (
-    <aside className="float w-[min(560px,45%)] shrink-0 my-3 mr-3 rounded-2xl flex flex-col overflow-hidden">
+    <aside className="float w-[min(560px,45%)] shrink-0 mt-[52px] mb-3 ml-3 rounded-2xl flex flex-col overflow-hidden">
       <div className="h-12 shrink-0 flex items-center gap-2 pl-6 pr-3 text-[12.5px] text-ink-3">
         {label && <span>{label}</span>}
         {node.fileName && <span className="truncate">{node.fileName}</span>}

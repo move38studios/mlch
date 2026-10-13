@@ -38,6 +38,8 @@ export interface JobStatus {
   activity?: string;
   /** Items it added. */
   resultIds?: string[];
+  /** The speech or typing it came from (transcript segment ids): the conversation shows what became of each. */
+  inputIds?: string[];
   /** Finished (done or failed) and not yet seen by the person. */
   unseen?: boolean;
   /** Set for the person's instructions and long work: these are kept in jobs.json and can be retried. */
