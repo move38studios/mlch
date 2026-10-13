@@ -16,6 +16,7 @@
  * upload them under the same paths as in the mulch folder (assets/…,
  * artifacts/…, docs/…), and deck previews under thumbnailPath(docPath).
  */
+import packageJson from "../../../package.json";
 
 import type { Mulch, OpBatch } from "@/lib/mulch/types";
 
@@ -82,6 +83,9 @@ export interface LiveSender {
 
 const encodePath = (path: string) => path.split("/").map(encodeURIComponent).join("/");
 
+/** This app's version, sent with every request. */
+const APP_VERSION = packageJson.version;
+
 export function shareClient(options: ShareClientOptions = {}) {
   const base = (options.base ?? process.env.MLCH_SHARE_URL ?? DEFAULT_SHARE_URL).replace(/\/+$/, "");
   const doFetch = options.fetch ?? fetch;
@@ -91,6 +95,8 @@ export function shareClient(options: ShareClientOptions = {}) {
     const headers = new Headers(rest.headers);
     if (token) headers.set("Authorization", `Bearer ${token}`);
     if (options.install) headers.set("X-Mlch-Install", options.install);
+    // The server can tell an app too old for a change it made (it answers 426 with what to do).
+    headers.set("X-Mlch-Version", APP_VERSION);
     const response = await doFetch(`${base}${path}`, { ...rest, headers });
     const body = (await response.json().catch(() => ({}))) as T & { error?: string };
     if (!response.ok) throw new ShareError(response.status, body.error || `Sharing failed (${response.status}).`);

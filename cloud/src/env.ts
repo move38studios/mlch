@@ -9,6 +9,8 @@ export interface Env {
   SHARES: R2Bucket;
   ROOMS: DurableObjectNamespace<ShareRoom>;
   LIMITER: DurableObjectNamespace<CreateLimiter>;
+  /** Apps older than this (X-Mlch-Version) are asked to update before changing shares. Unset: every version. */
+  MIN_APP_VERSION?: string;
   /** A self-hosted server: new shares need this key (X-Mlch-Auth). */
   SERVER_KEY?: string;
   /** mlch.app: "on" means new shares need a signed-in, subscribed person (accounts.ts). */

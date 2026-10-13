@@ -33,6 +33,7 @@ interface SettingsView {
   defaults: Record<AgentHarnessId, Partial<Record<Lane, string>>>;
   promptDefaults: Record<string, string>;
   styleDefault: string;
+  build: { version: string; commit: string; official: boolean };
 }
 
 const LANES: Array<{ id: Lane; label: string }> = [
@@ -445,6 +446,9 @@ export function Settings() {
         )}
         <OpenAtLogin />
         <Section title="Diagnostics">
+          <p className="text-[13px] text-ink-3 mb-3 tabular-nums">
+            {view ? `Version ${view.build.version}${view.build.commit ? ` (${view.build.commit})` : ""}${view.build.official ? "" : view.desktop ? ", built from source" : ""}` : ""}
+          </p>
           <div className="flex items-center gap-2">
             <button
               onClick={async () => {

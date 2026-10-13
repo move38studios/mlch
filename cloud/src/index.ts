@@ -388,7 +388,11 @@ export async function handle(request: Request, givenEnv: Env): Promise<Response>
   const parts = url.pathname.split("/").filter(Boolean);
   const onShareHost = url.host === share.host;
 
-  if (parts[0] === "api" && parts[1] === "shares") return api(request, env, parts);
+  if (parts[0] === "api" && parts[1] === "shares") {
+    const tooOld = outdatedApp(request, env);
+    if (tooOld) return tooOld;
+    return api(request, env, parts);
+  }
   if (parts[0] === "api" && parts[1] === "server" && parts.length === 2) return json(200, serverInfo(env));
   const account = await accountRoutes(request, env, url, parts);
   if (account) return account;
@@ -407,9 +411,21 @@ export async function handle(request: Request, givenEnv: Env): Promise<Response>
   if (parts[0] === "releases" && parts[1] === "mac" && parts.length === 3 && request.method === "GET" && /^[\w.-]+$/.test(parts[2])) {
     const object = await env.SHARES.get(`releases/mac/${parts[2]}`);
     if (!object) return notFound();
-    const type = parts[2].endsWith(".yml") ? "text/yaml; charset=utf-8" : "application/octet-stream";
-    return new Response(object.body, { headers: { "Content-Type": type, "Content-Length": String(object.size), "Cache-Control": parts[2].endsWith(".yml") ? "no-cache" : "public, max-age=31536000, immutable" } });
+    const name = parts[2];
+    const type = name.endsWith(".yml") ? "text/yaml; charset=utf-8" : name.endsWith(".dmg") ? "application/x-apple-diskimage" : "application/octet-stream";
+    // The feeds and mlch.dmg (the current download) change; versioned files never do.
+    const changing = name.endsWith(".yml") || name === "mlch.dmg";
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": type,
+        "Content-Length": String(object.size),
+        "Cache-Control": changing ? "no-cache" : "public, max-age=31536000, immutable",
+        ...(name.endsWith(".dmg") ? { "Content-Disposition": `attachment; filename="${name === "mlch.dmg" ? "mlch.dmg" : name}"` } : {}),
+      },
+    });
   }
+  // The landing page's Download: the current release's disk image.
+  if (url.pathname === "/download" && !onShareHost) return Response.redirect(`${url.origin}/releases/mac/mlch.dmg`, 302);
   if (parts[0] === "viewer" || parts[0] === "brand") return env.ASSETS.fetch(request);
   // How to run your own server (linked from the app's Settings, Sharing).
   if (url.pathname === "/server" || url.pathname === "/server/") return asset(env, request, "/server/", { "Cache-Control": "public, max-age=300" });
@@ -434,3 +450,17 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>;
+
+/** Compares dotted versions (1.10.0 > 1.9.2). */
+export function olderVersion(a: string, b: string): boolean {
+  const [x, y] = [a, b].map((v) => v.split(/[.-]/).slice(0, 3).map((n) => Number.parseInt(n, 10) || 0));
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i];
+  return false;
+}
+
+/** A change to shares from an app older than MIN_APP_VERSION: 426 with what to do. Reading is never refused. */
+function outdatedApp(request: Request, env: Env): Response | undefined {
+  const version = request.headers.get("X-Mlch-Version");
+  if (!env.MIN_APP_VERSION || !version || request.method === "GET") return undefined;
+  return olderVersion(version, env.MIN_APP_VERSION) ? json(426, { error: "Update mlch to keep sharing (mlch menu, Check for Updates)." }) : undefined;
+}

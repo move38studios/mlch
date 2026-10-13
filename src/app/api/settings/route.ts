@@ -5,7 +5,19 @@ import { usageToday } from "@/lib/agent/usage";
 import { spentToday } from "@/lib/media/spend";
 import { DEFAULT_HOUSE_STYLE, PROMPT_DEFAULTS } from "@/lib/agent/prompts";
 
+import packageJson from "../../../../package.json";
+
 export const dynamic = "force-dynamic";
+
+/** The app's version and build (main passes MLCH_BUILD: the commit, and whether it is an official build). */
+function build(): { version: string; commit: string; official: boolean } {
+  try {
+    const info = JSON.parse(process.env.MLCH_BUILD ?? "{}") as { commit?: string; official?: boolean };
+    return { version: packageJson.version, commit: info.commit ?? "", official: !!info.official };
+  } catch {
+    return { version: packageJson.version, commit: "", official: false };
+  }
+}
 
 async function view() {
   return {
@@ -18,6 +30,7 @@ async function view() {
     defaults: DEFAULT_MODELS,
     promptDefaults: PROMPT_DEFAULTS,
     styleDefault: DEFAULT_HOUSE_STYLE,
+    build: build(),
   };
 }
 

@@ -28,8 +28,14 @@ const token = randomBytes(32).toString('hex');
 const redactor = createRedactor();
 redactor.add([token]);
 
-app.setName('mlch');
-app.setPath('userData', process.env.MLCH_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'mlch'));
+/** build.json (scripts/package-app.mjs): the version, the commit, and whether this is an official build. Absent in dev. */
+const buildInfo = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(root, 'build.json'), 'utf8')); } catch { return { version: app.getVersion(), commit: '', official: false }; }
+})();
+// A packaged build from source keeps its own name and profile (preferences, saved keys), so it can sit beside the official app.
+const appName = app.isPackaged && !buildInfo.official ? 'mlch dev' : 'mlch';
+app.setName(appName);
+app.setPath('userData', process.env.MLCH_ELECTRON_USER_DATA || path.join(app.getPath('appData'), appName));
 // Test profiles keep their logs to themselves.
 if (process.env.MLCH_ELECTRON_USER_DATA) app.setAppLogsPath(path.join(app.getPath('userData'), 'logs'));
 // Crash dumps stay on this machine (in the app's crashDumps folder); nothing is uploaded.
@@ -236,14 +242,34 @@ function setupScreenshots() {
 // once one is ready the menus offer "Restart to Update" (a menu bar app is rarely quit).
 let updater;
 let updateReady = false;
-/** Official builds only: a build from source has no feed (MLCH_UPDATE_URL sets one). */
+/**
+ * Official builds update from mlch.app. A build from source has no feed, so it never
+ * updates itself into ours (its own feed: MLCH_UPDATE_URL).
+ */
 function updatesOn() {
-  return app.isPackaged && !process.env.MLCH_NO_UPDATES;
+  return app.isPackaged && !process.env.MLCH_NO_UPDATES && (buildInfo.official || !!process.env.MLCH_UPDATE_URL);
+}
+/** "beta" or "latest" (the default), kept beside the app's other preferences. */
+function updateChannelFile() { return path.join(app.getPath('userData'), 'update-channel'); }
+function updateChannel() {
+  try { return fs.readFileSync(updateChannelFile(), 'utf8').trim() === 'beta' ? 'beta' : 'latest'; } catch { return 'latest'; }
+}
+function setUpdateChannel(channel) {
+  fs.writeFileSync(updateChannelFile(), channel);
+  if (updater) {
+    updater.channel = channel;
+    void updater.checkForUpdates().catch(() => {});
+  }
+  Menu.setApplicationMenu(buildMenu());
 }
 function startUpdates() {
   if (!updatesOn()) return;
   const { autoUpdater } = require('electron-updater');
   updater = autoUpdater;
+  if (process.env.MLCH_UPDATE_URL) autoUpdater.setFeedURL({ provider: 'generic', url: process.env.MLCH_UPDATE_URL });
+  // Each channel has its own feed file (beta-mac.yml, latest-mac.yml); never down to an older version.
+  autoUpdater.channel = updateChannel();
+  autoUpdater.allowDowngrade = false;
   // One line per problem: the updater's own errors carry whole HTTP responses.
   const firstLine = (value) => String(value?.message ?? value).split('\n')[0];
   autoUpdater.logger = { info: log, warn: (value) => log(firstLine(value)), error: (value) => log(firstLine(value)), debug: () => {} };
@@ -567,6 +593,7 @@ function buildMenu() {
     { label: app.name, submenu: [
       { role: 'about' },
       { label: 'Check for Updates…', enabled: updatesOn(), click: () => void checkForUpdatesNow() },
+      ...(updatesOn() ? [{ label: 'Beta Updates', type: 'checkbox', checked: updateChannel() === 'beta', click: (item) => setUpdateChannel(item.checked ? 'beta' : 'latest') }] : []),
       ...(updateReady ? [{ label: 'Restart to Update', click: restartToUpdate }] : []),
       { type: 'separator' },
       { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => void openPage('/settings') },
@@ -695,6 +722,7 @@ else {
         NODE_ENV: dev ? 'development' : 'production', MLCH_ELECTRON: '1',
         MLCH_ELECTRON_PORT: String(port), MLCH_ELECTRON_TOKEN: token,
         MLCH_LIBRARY: libraryDir(),
+        MLCH_BUILD: JSON.stringify({ commit: buildInfo.commit ?? '', official: !!buildInfo.official }),
         MLCH_LOGS_DIR: app.getPath('logs'),
       } }),
       onMessage: async (msg, child) => {
@@ -710,6 +738,8 @@ else {
     session.defaultSession.setPermissionCheckHandler(allowedPermission);
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowedPermission(contents, permission, details.requestingUrl)));
     Menu.setApplicationMenu(buildMenu());
+    // About: the version, and which commit it was built from (and whether officially).
+    app.setAboutPanelOptions({ applicationVersion: buildInfo.version, version: [buildInfo.commit, buildInfo.official ? '' : app.isPackaged ? 'built from source' : 'development'].filter(Boolean).join(', '), copyright: '© 2026 move38 B.V.' });
     setupScreenshots();
     if (await startWithRetry()) await createWindow();
     createTray();

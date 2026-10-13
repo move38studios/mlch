@@ -106,3 +106,13 @@ describe("shared canvases", () => {
     expect((await call(`${SHARE}/s/short/`)).status).toBe(404);
   });
 });
+
+describe("app versions", () => {
+  it("compares dotted versions", async () => {
+    const { olderVersion } = await import("../src/index");
+    expect(olderVersion("0.2.0", "0.2.1")).toBe(true);
+    expect(olderVersion("0.10.0", "0.9.9")).toBe(false);
+    expect(olderVersion("1.0.0", "1.0.0")).toBe(false);
+    expect(olderVersion("0.2.1-beta.1", "0.2.1")).toBe(false);
+  });
+});

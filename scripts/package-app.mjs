@@ -89,5 +89,15 @@ fs.writeFileSync(path.join(stage, "cli.json"), JSON.stringify(manifest, null, 2)
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 fs.writeFileSync(path.join(stage, "package.json"), JSON.stringify({ name: pkg.name, version: pkg.version, description: pkg.description, author: pkg.author, main: pkg.main }, null, 2));
 
+// 5. Which build this is: official (made by scripts/release.mjs, MLCH_OFFICIAL=1: updates from mlch.app) or from source (no updates).
+const commit = (() => {
+  try {
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  } catch {
+    return "";
+  }
+})();
+fs.writeFileSync(path.join(stage, "build.json"), JSON.stringify({ version: pkg.version, commit, official: process.env.MLCH_OFFICIAL === "1", builtAt: new Date().toISOString() }, null, 2));
+
 const size = execFileSync("du", ["-sh", stage], { encoding: "utf8" }).split("\t")[0];
 console.log(`build/app: ${size} (${copied} files traced beside the Next server)`);
