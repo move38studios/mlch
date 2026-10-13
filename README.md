@@ -4,7 +4,7 @@
 
 An app for non-linear thinkers.
 
-**Early release (0.2.0).** Expect rough edges. Download for Mac: [mlch.app](https://mlch.app).
+**Early release (0.2.0).** Expect rough edges. Download for Mac: [mlch.app](https://mlch.app). MIT licensed (LICENSE).
 
 Speak your stream of consciousness and have the ideas visually organized on an endless 2D canvas, with search results, associations and connections appearing as you go. Drop in documents, links and folders and they get incorporated.
 

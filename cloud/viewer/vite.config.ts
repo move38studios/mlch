@@ -18,7 +18,11 @@ export default defineConfig({
   css: { postcss: { plugins: [tailwind({ base: root })] } },
   resolve: { alias: { "@": path.join(root, "src") } },
   // The landing page shows the current release.
-  define: { "import.meta.env.VITE_MLCH_VERSION": JSON.stringify(version) },
+  define: {
+    "import.meta.env.VITE_MLCH_VERSION": JSON.stringify(version),
+    // Where the source lives (a fork sets its own with MLCH_SOURCE_URL).
+    "import.meta.env.VITE_MLCH_SOURCE_URL": JSON.stringify(process.env.MLCH_SOURCE_URL ?? "https://github.com/move38studios/mlch"),
+  },
   build: {
     outDir: path.resolve(__dirname, "../dist/viewer"),
     emptyOutDir: true,

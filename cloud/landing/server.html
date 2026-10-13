@@ -79,14 +79,16 @@
       <ol>
         <li>A Cloudflare account. The free plan works; turn on R2 (storage) in the dashboard once.</li>
         <li>Node.js 22 or later, and git.</li>
-        <li>The mlch source code.</li>
+        <li>The mlch source code: <a href="https://github.com/move38studios/mlch">github.com/move38studios/mlch</a>.</li>
       </ol>
 
       <h2>Steps</h2>
       <ol>
         <li>
-          In the mlch source folder:
-          <pre><code>npm install
+          Get the source and install:
+          <pre><code>git clone https://github.com/move38studios/mlch.git
+cd mlch
+npm install
 cd cloud
 npm install --legacy-peer-deps
 npx wrangler login</code></pre>
