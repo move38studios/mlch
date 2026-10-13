@@ -1,6 +1,6 @@
 // Launch the desktop app (dev mode) with a throwaway profile and run a test
 // script against it. The script exports `async ({ app, page, base, shot }) => {}`.
-//   node scripts/electron-run.cjs <script.cjs> [--library <dir>] [--shots <dir>]
+//   node scripts/electron-run.cjs <script.cjs> [--library <dir>] [--shots <dir>] [--free-library (the app picks its library, as Settings > Library does)]
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -31,7 +31,7 @@ const crashReports = () => new Set((fs.existsSync(reports) ? fs.readdirSync(repo
     args: [
       appDir ? path.resolve(appDir) : path.resolve(__dirname, '..'), ...(production ? [] : ['--dev']),
     ],
-    env: { ...process.env, ...(fakeMic ? { MLCH_FAKE_MIC: '1' } : {}), MLCH_ELECTRON_USER_DATA: profile, MLCH_NO_QUIT_PROMPT: '1', MLCH_LIBRARY: library || path.join(profile, 'mulches'), MLCH_ELECTRON_PORT: process.env.MLCH_RUN_PORT || '47851' },
+    env: { ...process.env, ...(fakeMic ? { MLCH_FAKE_MIC: '1' } : {}), MLCH_ELECTRON_USER_DATA: profile, MLCH_NO_QUIT_PROMPT: '1', ...(args.includes('--free-library') ? {} : { MLCH_LIBRARY: library || path.join(profile, 'mulches') }), MLCH_ELECTRON_PORT: process.env.MLCH_RUN_PORT || '47851' },
     timeout: 180_000,
   });
   let failed = false;

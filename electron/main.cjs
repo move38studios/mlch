@@ -56,10 +56,59 @@ async function fail(error) {
   app.quit();
 }
 function documentsDir() { try { return app.getPath('documents'); } catch { return path.join(os.homedir(), 'Documents'); } }
+/** The person's choice of library folder (Settings, Library), kept with the app's preferences. */
+function libraryChoiceFile() { return path.join(app.getPath('userData'), 'library.json'); }
+function chosenLibrary() {
+  try {
+    const chosen = JSON.parse(fs.readFileSync(libraryChoiceFile(), 'utf8')).path;
+    return typeof chosen === 'string' && path.isAbsolute(chosen) && fs.existsSync(chosen) ? chosen : undefined;
+  } catch { return undefined; }
+}
 function libraryDir() {
   if (process.env.MLCH_LIBRARY) return path.resolve(process.env.MLCH_LIBRARY);
+  const chosen = chosenLibrary();
+  if (chosen) return chosen;
   if (process.env.MLCH_ELECTRON_USER_DATA) return path.join(app.getPath('userData'), 'mulches');
   return path.join(documentsDir(), 'mlch');
+}
+/** The search index lives with the app, not in the library: a synced folder (Dropbox, iCloud) must not sync a database. */
+function indexDir() {
+  return path.join(app.getPath('userData'), 'index');
+}
+
+/** What a library folder holds: mulch folders (and the library's own dot files). */
+const MULCH_FOLDER = /^[a-z0-9][a-z0-9-]{2,63}$/;
+function mulchFolders(dir) {
+  try { return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && MULCH_FOLDER.test(e.name)).map((e) => e.name); } catch { return []; }
+}
+
+/**
+ * Settings, Library, Change: another folder for the library. A folder that already holds mulches is used as it is;
+ * otherwise the mulches move there (copied, then removed here). The server restarts on the new folder.
+ */
+async function chooseLibrary() {
+  const current = libraryDir();
+  const options = { title: 'Choose a folder for your mlch library', properties: ['openDirectory', 'createDirectory'] };
+  const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+  const target = picked.filePaths?.[0];
+  if (picked.canceled || !target || path.resolve(target) === path.resolve(current)) return { ok: true, value: current };
+  if (path.resolve(target).startsWith(path.resolve(current) + path.sep)) return { ok: false, error: 'Choose a folder outside the current library.' };
+  const here = mulchFolders(current);
+  if (!mulchFolders(target).length && here.length) {
+    const { response } = await message({ type: 'question', message: `Move your ${here.length === 1 ? 'mulch' : `${here.length} mulches`} to ${target}?`, buttons: ['Move', 'Cancel'], defaultId: 0, cancelId: 1 });
+    if (response !== 0) return { ok: true, value: current };
+    // Nothing may write to the library while it moves.
+    await backend.stop();
+    const entries = fs.readdirSync(current).filter((name) => !name.startsWith('.index.sqlite') && name !== '.DS_Store');
+    // Copy everything first; remove the originals only once all of it is there.
+    for (const name of entries) fs.cpSync(path.join(current, name), path.join(target, name), { recursive: true, errorOnExist: false, force: false });
+    for (const name of entries) fs.rmSync(path.join(current, name), { recursive: true, force: true });
+  }
+  fs.writeFileSync(libraryChoiceFile(), JSON.stringify({ path: target }));
+  log(`Library moved to ${target}`);
+  await startWithRetry();
+  if (window) await window.loadURL(new URL('/settings', origin).href);
+  return { ok: true, value: target };
 }
 function openExternal(url) { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(log); }
 // Video players a card may load in a frame (src/lib/ingest/video.ts PLAYER_ORIGINS).
@@ -605,6 +654,9 @@ function registerBridge() {
   ipcMain.handle('desktop:backend-state', guarded(() => backend.online()));
   ipcMain.handle('desktop:restart-backend', guarded(() => startWithRetry()));
   ipcMain.handle('desktop:open-logs', guarded(() => openLogs()));
+  ipcMain.handle('desktop:library:choose', guarded(async () => {
+    try { return await chooseLibrary(); } catch (error) { log(error); return { ok: false, error: String(error?.message ?? error) }; }
+  }));
   ipcMain.handle('desktop:call-state', guarded((state) => {
     callState = state && typeof state.mulchId === 'string' ? { mulchId: state.mulchId } : undefined;
     void refreshTray();
@@ -767,6 +819,7 @@ else {
         NODE_ENV: dev ? 'development' : 'production', MLCH_ELECTRON: '1',
         MLCH_ELECTRON_PORT: String(port), MLCH_ELECTRON_TOKEN: token,
         MLCH_LIBRARY: libraryDir(),
+        MLCH_INDEX_DIR: process.env.MLCH_ELECTRON_USER_DATA ? '' : indexDir(),
         MLCH_BUILD: JSON.stringify({ commit: buildInfo.commit ?? '', official: !!buildInfo.official }),
         MLCH_LOGS_DIR: app.getPath('logs'),
       } }),

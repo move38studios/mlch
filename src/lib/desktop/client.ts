@@ -10,6 +10,8 @@ export interface MlchDesktop {
     onStatus(callback: (online: boolean) => void): () => void;
   };
   openLogs(): Promise<void>;
+  /** Pick another folder for the library (moves the mulches there, or uses the ones already in it); the server restarts. */
+  chooseLibrary?(): Promise<Result<string>>;
   microphoneAccess(): Promise<boolean>;
   /** Bring the window to the front (after a screenshot of another app). */
   showWindow?(): Promise<void>;

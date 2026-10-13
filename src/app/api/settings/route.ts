@@ -1,6 +1,6 @@
 import { handle, jsonError } from "@/lib/http";
 import { DEFAULT_MODELS, readSettings, writeSettings } from "@/lib/settings";
-import { getCredential, isDesktop } from "@/lib/desktop/server";
+import { getCredential, isDesktop, libraryDir } from "@/lib/desktop/server";
 import { usageToday } from "@/lib/agent/usage";
 import { spentToday } from "@/lib/media/spend";
 import { DEFAULT_HOUSE_STYLE, PROMPT_DEFAULTS } from "@/lib/agent/prompts";
@@ -31,6 +31,7 @@ async function view() {
     promptDefaults: PROMPT_DEFAULTS,
     styleDefault: DEFAULT_HOUSE_STYLE,
     build: build(),
+    library: libraryDir(),
   };
 }
 

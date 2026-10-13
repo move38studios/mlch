@@ -1,7 +1,8 @@
 /**
  * Search over mulches: one local SQLite index for the whole library. Server-only.
  *
- *   <library>/.index.sqlite
+ *   <library>/.index.sqlite, or in the app's own folder (MLCH_INDEX_DIR, one file per library) so a
+ *   library in a synced folder (Dropbox, iCloud Drive) never syncs a database
  *     chunks       one row per passage: mulch, item, kind, page, text, vector
  *     chunks_fts   FTS5 over chunks (keyword search, bm25)
  *     items        per item: a signature of what was indexed, to skip unchanged items
@@ -46,9 +47,17 @@ function state(): State {
   return (globalState.__mlchSearch ??= { dirty: new Map(), timers: new Map(), embedding: false, vectors: new Map(), indexed: new Set() });
 }
 
+/** The index for a library: in MLCH_INDEX_DIR when the app sets one, else in the library. */
+export function indexFile(library: string): string {
+  const dir = process.env.MLCH_INDEX_DIR;
+  if (!dir) return path.join(library, ".index.sqlite");
+  const key = createHash("sha256").update(path.resolve(library)).digest("hex").slice(0, 16);
+  return path.join(dir, `library-${key}.sqlite`);
+}
+
 function db(): DatabaseSync {
   const s = state();
-  const file = path.join(libraryDir(), ".index.sqlite");
+  const file = indexFile(libraryDir());
   if (s.db && s.dbPath === file) return s.db;
   // Loaded at run time: the bundler does not know node:sqlite.
   const { DatabaseSync } = process.getBuiltinModule("node:sqlite") as typeof import("node:sqlite");

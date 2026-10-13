@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('mlchDesktop', {
     },
   },
   openLogs: () => ipcRenderer.invoke('desktop:open-logs'),
+  chooseLibrary: () => ipcRenderer.invoke('desktop:library:choose'),
   microphoneAccess: () => ipcRenderer.invoke('desktop:microphone-access'),
   showWindow: () => ipcRenderer.invoke('desktop:show-window'),
   /** The call being listened to ({ mulchId }) or null, for the menu bar. */

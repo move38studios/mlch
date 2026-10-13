@@ -34,6 +34,7 @@ interface SettingsView {
   promptDefaults: Record<string, string>;
   styleDefault: string;
   build: { version: string; commit: string; official: boolean };
+  library: string;
 }
 
 const LANES: Array<{ id: Lane; label: string }> = [
@@ -189,6 +190,7 @@ export function Settings() {
   const [scrolled, setScrolled] = useState(false);
   // The desktop bridge exists only in the browser: decided after the first render so it matches the server's.
   const [inApp, setInApp] = useState(false);
+  const [libraryError, setLibraryError] = useState<string>();
   useEffect(() => setInApp(!!desktop()), []);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 4);
@@ -445,6 +447,27 @@ export function Settings() {
           </Section>
         )}
         <OpenAtLogin />
+        {view?.desktop && inApp && (
+          <Section title="Library">
+            <div className="flex items-center gap-3">
+              <span className="flex-1 min-w-0 truncate text-[14px] font-mono text-ink-2" title={view.library}>
+                {view.library}
+              </span>
+              <button
+                onClick={async () => {
+                  const result = await desktop()?.chooseLibrary?.();
+                  if (result && !result.ok) setLibraryError(result.error);
+                }}
+                className={SECONDARY}
+                aria-label="Change library folder"
+              >
+                Change
+              </button>
+            </div>
+            <p className="mt-1.5 text-[13px] text-ink-3">A synced folder (iCloud Drive, Dropbox, Google Drive) works when one Mac uses it at a time.</p>
+            {libraryError && <p className="mt-1.5 text-[13px] text-danger">{libraryError}</p>}
+          </Section>
+        )}
         <Section title="Diagnostics">
           <p className="text-[13px] text-ink-3 mb-3 tabular-nums">
             {view ? `Version ${view.build.version}${view.build.commit ? ` (${view.build.commit})` : ""}${view.build.official ? "" : view.desktop ? ", built from source" : ""}` : ""}
