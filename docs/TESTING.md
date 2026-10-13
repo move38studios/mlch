@@ -25,7 +25,7 @@ Onboarding goes one step at a time; Back works everywhere, and downloads show at
 - **Connect**: download Claude Code / Codex if it isn't on this Mac (progress shown); your subscription (Sign in if needed, then the box to tick) or an API key. Continue stays off until it works.
 - **Speech**: On this Mac (starts the 600 MB download) or Groq (key).
 - **Microphone and calls**: while the speech model downloads, Allow (the microphone prompt); once it is in, Try it shows the words you say. Allow under "The other side of calls" raises macOS's System Audio Recording prompt.
-- **Web and making**: Exa, Firecrawl, fal, each with Get a key. A saved key shows its last four characters, is checked with the service (Works, or why not), and can be changed or removed. Skip.
+- **Web and making**: Exa, Firecrawl, fal, Gemini (watches YouTube videos), each with Get a key. A saved key shows its last four characters, is checked with the service (Works, or why not), and can be changed or removed. Skip.
 - **Your context**: what to add and what not, what mlch reads. Your Obsidian vaults offered; Add folder as many times as you like; each shows its file count and how many were skipped. Adding your home folder, Documents or a whole disk asks first.
 - **Calls**: what a call does; Open at login.
 - **Ready**: Open mlch goes to the list, with "Start here" in it (not opened). Settings → App → Setup goes back through the steps.
@@ -45,6 +45,12 @@ Onboarding goes one step at a time; Back works everywhere, and downloads show at
 - Connections: hover a card for its four points; drag from any of them; the card under the pointer shows its points and the nearest fills in.
 - Ask a question with `/` ("/what do these have in common?"): the answer is a bubble above the input until you close it or type again; Add to canvas makes it a card. Ask for something it can't do: it says why in a bubble.
 - "/erase everything": cards, boxes, documents and made files all go.
+- Conversation (⌘J, the speech-bubble button): closed at first; what you say and type, "→ N cards" / "→ instruction" under it (click to see them), the AI's answers (it opens by itself for one), results with Show / Stop / Retry. Opened cards now show on the left.
+- Hold ⌥ (not in a text field) and speak: the amber pill; let go and it is one instruction. Thinking out loud continues around it.
+- Room noise, typing or music while the mic is on: nothing is sent until you speak.
+- Drop or paste: a YouTube or Vimeo link (plays in the card; with a Gemini key it gets a summary and transcript), a link straight to a picture or PDF (becomes the file), an audio or video file (plays, transcribed). Ask the AI for "the diagram from that page" or "this PDF": it adds the file.
+- Pictures: corner handle to resize (any card), double-click to see it full size, edit its description.
+- Home: hover a mulch for Archive (asks about share links if it has any); Archived (N) at the bottom: Restore, Delete (turns its links off).
 
 ## 4. What you already know
 
@@ -70,7 +76,8 @@ Onboarding goes one step at a time; Back works everywhere, and downloads show at
 - In a mulch: Share (header). The link is copied. Open it in a browser, and on your phone.
 - The page has the mlch tab icon and the canvas title; a mouse wheel zooms at the pointer, the trackpad pans.
 - Add a card or speak in the app: it appears in the browser within seconds. Stop sharing: the page says it's no longer live.
-- On a deck card: Share. The link opens the deck on its own.
+- On a deck card: Share (says Sharing, then Link copied). The link opens the deck in a frame with Full screen and Fill the window. Link cards to other canvases show only their title.
+- Paste a shared link into Slack or iMessage: a preview with the title and a picture (the canvas as shared, or the deck's first slide).
 - In the shared canvas page: Open in mlch. It should open mlch with a copy as a new mulch.
 - Delete link from the Share menu: the page stops working.
 

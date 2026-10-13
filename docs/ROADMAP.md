@@ -4,21 +4,16 @@ What we want to build or improve next, in priority order. One entry per item, wi
 
 Order agreed 2026-10-12: **docs/PLAN-2.md**, from a call to a shared link (links and sources, local transcription, call mode, menu bar, sharing, onboarding, signed release, then collaboration). Its milestones and checks are the work list; this file keeps what is outside it.
 
-## To decide after George's testing round (2026-10-13)
+## To decide (George)
 
-George is collecting findings; these wait for his decision, then go in or out.
-
-- **Hold-to-talk for instructions.** Proposal: always-listening stays the default; holding a key (⌥ suggested) while speaking makes that speech one instruction, sent on release (no cut-off, no thinking mistaken for an instruction). In the window first; from any app later (needs Accessibility permission). No speech-mode setting unless people ask. Meanwhile spoken instructions wait for 4 s of quiet (up to 20 s) before running.
-- **Voice detection instead of the loudness gate.** A small voice-activity model (WebAssembly) would skip typing and music and cut at sentence ends. In the first test, 3 of 9 chunks came back empty (about 0.2 s each locally, discarded). Do it if empty or noisy chunks matter in use.
+- **Share server for an open-source mlch.** Proposal (2026-10-13): open-source the app and `cloud/`; Settings → Sharing → Server: mlch.app (hosted, with limits and expiry of unopened shares) or your own (a "Deploy to Cloudflare" template of cloud/, address pasted in). Same documented protocol, links carry their server, collaboration follows. No Cloudflare credentials in the app. Licence: George's call (e.g. MIT app, AGPL server).
+- **Including linked items in a share.** Today link cards are shared as titles only. Proposal: the Share menu counts them and offers "Include what they link to" (a copy of each linked item at that moment).
 
 ## Outside plan 2
 
 1. **Home screen.** The full logo on the empty screen (centred, the scribbles and lettering), the small wordmark top-left once there is a list. The empty screen as one clear start (New, or straight into a new mulch with the mic ready, tied to onboarding). Whether mlch needs a tagline at all (in the app: probably not; on mlch.app: maybe). Wording from George.
 2. **Real landing page on mlch.app.** Plan 2 puts up a placeholder (the wordmark only). Wording and design from George.
-3. **Shares when a mulch goes away (open question, George 2026-10-12).** What happens to its share links when a mulch is deleted, and later to shared canvases others collaborate on. George's idea: no deletes, only archiving; turning off links (single made files or whole canvases) stays manual, with an option on archiving to turn off all of that mulch's links. Today deleting moves the mulch to the library's .trash folder with its owner tokens (shares.json); its links stay live and can no longer be stopped from the app.
-4. **Shared pages: titles and link previews.** Tab icon and the canvas title are in. Open Graph tags (title, description, a preview image of the canvas or the made file's first page) so links unfurl in Slack, iMessage and email; the Worker would add them to the page it serves.
-5. **Images, audio, video and links to them dropped on the canvas.** What each becomes (a card that shows or plays it, a transcript for audio and video, a caption for images, what the AI may do with it). Look first at how ~/dev/briefbuster handles them (George, 2026-10-12).
-6. **Connectors.** The person's own MCP servers, opt-in, read-only by default, approval cards for actions. Today the harness turns them off on purpose (`settingSources: []`; Codex MCP servers disabled).
+3. **Connectors.** The person's own MCP servers, opt-in, read-only by default, approval cards for actions. Today the harness turns them off on purpose (`settingSources: []`; Codex MCP servers disabled).
 
 ## Waiting for more testing
 
