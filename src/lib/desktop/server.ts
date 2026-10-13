@@ -9,7 +9,8 @@
 import os from "node:os";
 import path from "node:path";
 
-export type CredentialName = "groq" | "firecrawl" | "fal" | "exa" | "gemini" | "anthropic" | "openai";
+/** Service keys, plus sharing: `shareKey` (a self-hosted server's key) and `mlchAccount` (the mlch.app session, stored by main after sign-in). */
+export type CredentialName = "groq" | "firecrawl" | "fal" | "exa" | "gemini" | "anthropic" | "openai" | "shareKey" | "mlchAccount";
 
 const ENV_NAMES: Record<CredentialName, string> = {
   groq: "GROQ_API_KEY",
@@ -20,6 +21,8 @@ const ENV_NAMES: Record<CredentialName, string> = {
   gemini: "GEMINI_API_KEY",
   anthropic: "MLCH_ANTHROPIC_API_KEY",
   openai: "MLCH_OPENAI_API_KEY",
+  shareKey: "MLCH_SHARE_KEY",
+  mlchAccount: "MLCH_ACCOUNT_TOKEN",
 };
 
 type DesktopGlobals = typeof globalThis & {
@@ -42,7 +45,7 @@ export function isDesktop(): boolean {
 }
 
 export async function desktopRequest(
-  type: "reveal" | "open" | "choose-directory" | "render" | "notify" | "activity" | "thumbnail" | "open-url" | "audio",
+  type: "reveal" | "open" | "choose-directory" | "render" | "notify" | "activity" | "thumbnail" | "open-url" | "audio" | "account-token",
   payload?: Record<string, unknown>,
 ): Promise<BridgeResult> {
   const bridge = (globalThis as DesktopGlobals).__mlchDesktop;

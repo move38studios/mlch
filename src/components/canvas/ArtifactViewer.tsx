@@ -7,6 +7,7 @@ import { shareArtifact } from "./share";
 import { useMulch } from "@/lib/mulch/client";
 import { openFile } from "./NodeView";
 import { useCanvasUi } from "./ui";
+import { useSharingOn } from "@/components/settings/Sharing";
 
 const BUTTON = "no-drag h-8 px-2.5 rounded-lg text-[13px] text-white/80 hover:bg-white/10 hover:text-white inline-flex items-center gap-1.5";
 
@@ -25,6 +26,7 @@ export function ArtifactViewer() {
   const [fill, setFill] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [sharing, setSharing] = useState<"idle" | "busy" | "copied">("idle");
+  const sharingOn = useSharingOn();
 
   useEffect(() => {
     if (!viewerId) return;
@@ -78,10 +80,10 @@ export function ArtifactViewer() {
         </button>
         {desktop() && (
           <>
-            <button onClick={() => void share()} disabled={sharing === "busy"} className={BUTTON}>
+            {sharingOn && <button onClick={() => void share()} disabled={sharing === "busy"} className={BUTTON}>
               {sharing === "busy" ? <Loader2 size={14} className="animate-spin" /> : sharing === "copied" ? <Check size={14} strokeWidth={2.25} /> : <Link2 size={14} strokeWidth={1.75} />}
               {sharing === "busy" ? "Sharing" : sharing === "copied" ? "Link copied" : "Share"}
-            </button>
+            </button>}
             <button onClick={() => openFile(mulchId, node.docPath!, "reveal")} className="no-drag p-1.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white" title="Show in Finder" aria-label="Show in Finder">
               <FolderOpen size={16} strokeWidth={1.75} />
             </button>

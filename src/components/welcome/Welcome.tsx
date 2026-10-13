@@ -6,6 +6,7 @@ import { ArrowLeft, Check, Loader2, X } from "lucide-react";
 import type { AgentHarnessStatus } from "@/lib/agent/types";
 import { desktop } from "@/lib/desktop/client";
 import { Recorder } from "@/lib/voice/recorder";
+import { SharingChoice } from "@/components/settings/Sharing";
 import { Sources } from "@/components/settings/Sources";
 import { AiAccess, type AuthMode } from "@/components/settings/AiAccess";
 import { KeyField } from "@/components/settings/KeyField";
@@ -30,7 +31,7 @@ interface Status {
  * All text here is placeholder (George's wording replaces it), except the
  * welcome line and "Your context", which are his.
  */
-const STEPS = ["welcome", "about", "ai", "access", "speech", "permissions", "web", "context", "calls", "ready"] as const;
+const STEPS = ["welcome", "about", "ai", "access", "speech", "permissions", "web", "context", "calls", "sharing", "ready"] as const;
 type Step = (typeof STEPS)[number];
 
 const AI: Record<HarnessId, { name: string; app: string; plan: string }> = {
@@ -590,6 +591,17 @@ export function Welcome() {
             <input type="checkbox" checked={openAtLogin} onChange={(e) => void desktop()?.openAtLogin?.(e.target.checked).then(setOpenAtLogin)} className="h-4 w-4 accent-black" />
             Open mlch at login
           </label>
+        </>
+      );
+      break;
+
+    case "sharing":
+      body = (
+        <>
+          <Heading title="Sharing">
+            <p>Share a canvas or something mlch made as a link. A shared canvas stays live: people with the link watch it change as you work.</p>
+          </Heading>
+          <SharingChoice />
         </>
       );
       break;

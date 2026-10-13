@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Your own mlch server</title>
+    <link rel="icon" href="/brand/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/brand/icon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/brand/icon-180.png" />
+    <style>
+      body {
+        margin: 0;
+        background: #fcfcfa;
+        color: #000;
+        font: 16px/1.6 -apple-system, system-ui, sans-serif;
+      }
+      main {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 56px 16px 80px;
+      }
+      .mark {
+        width: 120px;
+        display: block;
+        margin-bottom: 40px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 12px;
+      }
+      h2 {
+        font-size: 17px;
+        margin: 32px 0 8px;
+      }
+      p,
+      li {
+        color: rgba(0, 0, 0, 0.72);
+      }
+      ol {
+        padding-left: 22px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      pre {
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 10px;
+        padding: 12px 14px;
+        overflow-x: auto;
+        font-size: 13.5px;
+        line-height: 1.5;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a href="/"><img class="mark" src="/brand/wordmark.svg" alt="mlch" /></a>
+      <h1>Your own mlch server</h1>
+      <p>
+        Shared links from mlch can live on your own Cloudflare account instead of mlch.app. You run the same server mlch.app runs, without accounts: only someone with
+        its key can make new links; anyone with a link can view it.
+      </p>
+
+      <h2>You need</h2>
+      <ol>
+        <li>A Cloudflare account. The free plan works; turn on R2 (storage) in the dashboard once.</li>
+        <li>Node.js 22 or later, and git.</li>
+        <li>The mlch source code.</li>
+      </ol>
+
+      <h2>Steps</h2>
+      <ol>
+        <li>
+          In the mlch source folder:
+          <pre><code>npm install
+cd cloud
+npm install --legacy-peer-deps
+npx wrangler login</code></pre>
+        </li>
+        <li>
+          Deploy:
+          <pre><code>npm run deploy:own</code></pre>
+          This creates the storage, deploys the server and makes its key. At the end it prints the server's address and key.
+        </li>
+        <li>In mlch: Settings, Sharing, Your own server. Enter the address and the key.</li>
+      </ol>
+
+      <h2>Later</h2>
+      <p>Run <code>npm run deploy:own</code> again to update the server. It shows the same key again; the key is kept in <code>cloud/.server-key</code>.</p>
+      <p>
+        To use your own domain, set <code>APEX_ORIGIN</code> and <code>SHARE_ORIGIN</code> in <code>cloud/wrangler.jsonc</code> and add routes for them. Shared things are best on a
+        separate host from the server's own pages.
+      </p>
+    </main>
+  </body>
+</html>

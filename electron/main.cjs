@@ -132,6 +132,33 @@ async function showMulch(mulchId, ids) {
   await window.loadURL(url.href);
 }
 
+// mlch: the mlch.app session (sign-in for sharing), from the server process. Kept like the keys.
+function storeAccount(token) {
+  credentialStore.write({ mlchAccount: token });
+  postCredentials();
+}
+
+function showWindow() {
+  if (!window) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+
+// mlch://signed-in?code=… (after Google sign-in on mlch.app): the server finishes it with the
+// verifier it kept; mlch://account (back from Stripe): the page refreshes the account.
+async function accountLink(parsed) {
+  showWindow();
+  const code = parsed.searchParams.get('code');
+  if (parsed.host === 'signed-in' && code && /^[\w-]{20,200}$/.test(code) && backend?.online()) {
+    try {
+      const response = await fetch(`${origin}/api/account`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Mlch-Desktop': token, Origin: origin }, body: JSON.stringify({ action: 'finish', code }) });
+      if (!response.ok) log(`Sign-in not finished: ${response.status}`);
+    } catch (error) { log(error); }
+  }
+  window?.webContents.send('desktop:menu', 'account');
+}
+
 // mlch: "Open in mlch" on a shared canvas (mlch://open?share=<manifest link>) copies it into a new mulch.
 let pendingShare;
 function openShareLink(link) {
@@ -139,6 +166,7 @@ function openShareLink(link) {
   try {
     const parsed = new URL(link);
     if (parsed.protocol !== 'mlch:') return;
+    if (parsed.host === 'signed-in' || parsed.host === 'account') { void accountLink(parsed); return; }
     manifest = parsed.searchParams.get('share');
   } catch { return; }
   if (!manifest || !/^https?:\/\//i.test(manifest)) return;
@@ -551,7 +579,7 @@ else {
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
       redactor.add(values); backend?.post({ type: 'secrets', values });
     });
-    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, notify: notifyJob, activity: setJobActivity, thumbnail: fileThumbnail, audio: audioRequest, log });
+    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, notify: notifyJob, activity: setJobActivity, thumbnail: fileThumbnail, audio: audioRequest, storeAccount, log });
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('MLCH_ELECTRON_PORT must be a port number between 1 and 65535.');
     backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
       entry: path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,

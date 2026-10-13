@@ -1,5 +1,6 @@
 "use client";
 
+import { useSharingOn } from "@/components/settings/Sharing";
 import { memo, useEffect, useRef, useState } from "react";
 import { Handle, NodeResizeControl, Position, ResizeControlVariant, type NodeProps, type Node } from "@xyflow/react";
 
@@ -79,6 +80,7 @@ export async function openFile(mulchId: string, docPath: string, action: "open" 
 /** Share a made file: says so while the link is made, then that it is copied. */
 function ShareButton({ mulchId, nodeId }: { mulchId: string; nodeId: string }) {
   const [state, setState] = useState<"idle" | "busy" | "copied">("idle");
+  if (!useSharingOn()) return null;
   return (
     <button
       onClick={async () => {

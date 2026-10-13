@@ -1,4 +1,5 @@
 import { guardAgent, handle, jsonError } from "@/lib/http";
+import { log } from "@/lib/log";
 import { ShareError } from "@/lib/share/client";
 import { readShares, shareArtifact, shareMulch, viewOf } from "@/lib/share/shares";
 import { getMulch } from "@/lib/mulch/store";
@@ -29,8 +30,13 @@ export async function POST(request: Request, { params }: Params) {
       if (!share) return jsonError(400, 'Give kind "mulch", or kind "artifact" with nodeId.');
       return { share, shares: (await readShares(id)).map(viewOf) };
     } catch (error) {
-      if (error instanceof ShareError) return jsonError(error.status === 429 ? 429 : 502, error.message);
-      if (error instanceof TypeError) return jsonError(502, "mlch.app could not be reached.");
+      // 401/402/409: what the person needs to do (sign in, subscribe, set up sharing); the page offers Settings.
+      if (error instanceof ShareError) return jsonError([401, 402, 409, 429].includes(error.status) ? error.status : 502, error.message);
+      // fetch's network failure (not any TypeError: a bug should show as one, in the log).
+      if (error instanceof TypeError && error.message === "fetch failed") {
+        log.warn("share", "server not reached", { mulchId: id, error });
+        return jsonError(502, "The sharing server could not be reached.");
+      }
       throw error;
     }
   });

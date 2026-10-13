@@ -6,8 +6,13 @@
  *
  * A shared canvas is live while sharing is on: every applied batch is sent
  * to the share (new files first), so people watching see it build up. What
- * goes: the items, their files, made things and write-ups. Links to the
- * person's linked folders go as their title only, never the file.
+ * goes: the items, their files, made things and write-ups. A link card goes
+ * as what it links to (the item from the other mulch, or the note's text
+ * from a linked folder) as an ordinary card, never as a link; what that item
+ * links to in turn does not go.
+ *
+ * Shares go to the server chosen in Settings, Sharing (account.ts); each
+ * share keeps the server it was made on.
  */
 
 import { randomBytes } from "node:crypto";
@@ -17,15 +22,18 @@ import { log } from "@/lib/log";
 import { resolveRef } from "@/lib/links/links";
 import { desktopRequest } from "@/lib/desktop/server";
 import { hasThumbnail } from "@/lib/artifacts/thumbnails";
-import { atomicWriteFile, createMulch, applyToMulch, getMulch, mulchDir, onAfterApply } from "@/lib/mulch/store";
+import { atomicWriteFile, createMulch, applyToMulch, getMulch, mulchDir, onAfterApply, peekMulch } from "@/lib/mulch/store";
 import { newClientId } from "@/lib/mulch/ids";
 import { applyOps } from "@/lib/mulch/ops";
 import type { Mulch, MulchNode, MulchOp, OpBatch } from "@/lib/mulch/types";
 import { readSettings, writeSettings } from "@/lib/settings";
 import { shareClient, ShareError, thumbnailPath, type LiveSender, type Manifest, type Share, type ShareKind } from "./client";
+import { mlchServer, serverAddress, shareTarget } from "./account";
 
 export interface ShareRecord extends Share {
   kind: ShareKind;
+  /** The server it lives on (origin). Absent: mlch.app (shares made before there was a choice). */
+  server?: string;
   /** Artifacts: the file shared. */
   docPath?: string;
   live?: boolean;
@@ -81,8 +89,18 @@ async function installId(): Promise<string> {
   return id;
 }
 
-async function client() {
-  return shareClient({ install: await installId() });
+/** The server a share lives on. */
+async function client(record?: ShareRecord) {
+  return shareClient({ base: record?.server ?? mlchServer(), install: await installId() });
+}
+
+/** The server new shares go to, with its key or the person's session; refused with what to do when there is none. */
+async function newShares(): Promise<{ api: Awaited<ReturnType<typeof client>>; server: string }> {
+  const target = await shareTarget();
+  if (target.mode === "off") throw new ShareError(409, "Sharing is off. Turn it on in Settings, Sharing.");
+  if (!target.base) throw new ShareError(409, "Enter your server's address in Settings, Sharing.");
+  if (target.mode === "mlch" && !target.auth) throw new ShareError(401, "Sign in to share: Settings, Sharing.");
+  return { api: shareClient({ base: target.base, install: await installId(), auth: target.auth }), server: target.base };
 }
 
 /* ── files ─────────────────────────────────────────────────────── */
@@ -109,45 +127,91 @@ async function htmlCompanions(mulchId: string, docPath: string): Promise<string[
   return [...out];
 }
 
-async function upload(share: ShareRecord, mulchId: string, files: string[]): Promise<void> {
+/** A file for a share: a path in the mulch folder, or one from where a linked item lives. */
+type ShareFile = string | { from: string; path: string };
+
+async function upload(share: ShareRecord, mulchId: string, files: ShareFile[]): Promise<void> {
   const done = state().uploaded.get(share.id) ?? new Set<string>();
   state().uploaded.set(share.id, done);
-  const api = await client();
-  for (const file of files) {
+  const api = await client(share);
+  for (const entry of files) {
+    const file = typeof entry === "string" ? entry : entry.path;
+    const source = typeof entry === "string" ? path.join(mulchDir(mulchId), file) : entry.from;
     if (done.has(file)) continue;
-    const bytes = await fs.readFile(path.join(mulchDir(mulchId), file)).catch(() => undefined);
+    const bytes = await fs.readFile(source).catch(() => undefined);
     if (!bytes) continue;
     await api.uploadFile(share, file, new Uint8Array(bytes));
     done.add(file);
     // Decks and documents: their preview image, where the shared card looks for it.
     if (hasThumbnail(file) && file.startsWith("artifacts/")) {
-      const result = await desktopRequest("thumbnail", { path: path.join(mulchDir(mulchId), file), size: 800 });
+      const result = await desktopRequest("thumbnail", { path: source, size: 800 });
       if (result.ok && typeof result.value === "string") await api.uploadFile(share, thumbnailPath(file), new Uint8Array(Buffer.from(result.value, "base64")));
     }
   }
 }
 
-type TitleOf = (ref: NonNullable<MulchNode["ref"]>) => Promise<string | undefined>;
-const resolvedTitle: TitleOf = async (ref) => (await resolveRef(ref).catch(() => undefined))?.title;
+/** What a link card goes as: the linked item's content as an ordinary card, and the files it needs. */
+export interface Linked {
+  node: MulchNode;
+  files: Array<{ from: string; path: string }>;
+}
+export type LinkedOf = (card: MulchNode) => Promise<Linked | undefined>;
 
 /**
- * The canvas as it is shared: a link card into the person's other mulches or
- * folders keeps only the linked item's title (taken now if the card has none);
- * where it lives and what it says stay private.
+ * The linked item itself in the card's place: an item from another mulch
+ * (with its files), or a note from a linked folder as a write-up. A link
+ * card's own target that is itself a link goes no further (one step).
  */
-export async function sharedMulch(mulch: Mulch, titleOf: TitleOf = resolvedTitle): Promise<Mulch> {
-  const nodes = Object.fromEntries(await Promise.all(Object.entries(mulch.nodes).map(async ([id, node]) => [id, await sharedNode(node, titleOf)] as const)));
-  return { ...mulch, nodes };
+export const linkedContent: LinkedOf = async (card) => {
+  const ref = card.ref!;
+  const place = { id: card.id, x: card.x, y: card.y, ...(card.w ? { w: card.w } : {}), ...(card.h ? { h: card.h } : {}), ...(card.groupId ? { groupId: card.groupId } : {}) };
+  if ("mulchId" in ref) {
+    const target = (await peekMulch(ref.mulchId).catch(() => undefined))?.nodes[ref.itemId];
+    if (!target || target.kind === "ref" || target.gen) return undefined;
+    const { ref: _ref, groupId: _group, w: _w, h: _h, ...content } = target;
+    void _ref, _group, _w, _h;
+    const dir = mulchDir(ref.mulchId);
+    return { node: { ...content, ...place }, files: filesOf(target).map((file) => ({ from: path.join(dir, file), path: file })) };
+  }
+  const resolved = await resolveRef(ref, true).catch(() => undefined);
+  if (!resolved?.exists || !resolved.text) return undefined;
+  return { node: { ...place, kind: "writeup", title: resolved.title ?? card.title, text: resolved.text, origin: card.origin, createdAt: card.createdAt }, files: [] };
+};
+
+/**
+ * The canvas as it is shared: link cards replaced by what they link to.
+ * Where a linked item lives never goes; a link that can't be read keeps only
+ * its title.
+ */
+export async function sharedMulch(mulch: Mulch, linkedOf: LinkedOf = linkedContent): Promise<{ mulch: Mulch; files: Linked["files"] }> {
+  const files: Linked["files"] = [];
+  const nodes = Object.fromEntries(await Promise.all(Object.entries(mulch.nodes).map(async ([id, node]) => [id, await sharedNode(node, linkedOf, files)] as const)));
+  return { mulch: { ...mulch, nodes }, files };
 }
 
-async function sharedNode(node: MulchNode, titleOf: TitleOf): Promise<MulchNode> {
+async function sharedNode(node: MulchNode, linkedOf: LinkedOf, files: Linked["files"]): Promise<MulchNode> {
   if (!node.ref) return node;
-  const title = node.title ?? (await titleOf(node.ref));
-  return { ...node, ...(title ? { title } : {}), ref: "sourceId" in node.ref ? { sourceId: "shared", path: "" } : { mulchId: "shared", itemId: "" } };
+  const linked = await linkedOf(node);
+  if (linked) {
+    files.push(...linked.files);
+    return linked.node;
+  }
+  return { ...node, ref: "sourceId" in node.ref ? { sourceId: "shared", path: "" } : { mulchId: "shared", itemId: "" } };
 }
 
-async function sharedOps(ops: MulchOp[]): Promise<MulchOp[]> {
-  return Promise.all(ops.map(async (op) => (op.op === "addNode" ? { ...op, node: await sharedNode(op.node, resolvedTitle) } : op)));
+async function sharedOps(ops: MulchOp[], files: Linked["files"]): Promise<MulchOp[]> {
+  return Promise.all(
+    ops.map(async (op) => {
+      if (op.op === "addNode") return { ...op, node: await sharedNode(op.node, linkedContent, files) };
+      // A link card's target stays private in its changes too.
+      if (op.op === "updateNode" && op.patch.ref) {
+        const { ref: _ref, ...patch } = op.patch;
+        void _ref;
+        return { ...op, patch };
+      }
+      return op;
+    }),
+  );
 }
 
 /* ── sharing ───────────────────────────────────────────────────── */
@@ -167,7 +231,7 @@ async function uploadPreview(record: ShareRecord, mulchId: string, docPath: stri
       const result = await desktopRequest("thumbnail", { path: path.join(mulchDir(mulchId), docPath), size: 1200 });
       if (result.ok && typeof result.value === "string") png = Buffer.from(result.value, "base64");
     }
-    if (png) await (await client()).uploadFile(record, PREVIEW_FILE, new Uint8Array(png));
+    if (png) await (await client(record)).uploadFile(record, PREVIEW_FILE, new Uint8Array(png));
   } catch (error) {
     log.warn("share", "preview not made", { mulchId, docPath, error });
   }
@@ -181,8 +245,9 @@ export async function shareArtifact(mulchId: string, nodeId: string): Promise<Sh
   const records = await readShares(mulchId);
   let record = records.find((r) => r.kind === "artifact" && r.docPath === node.docPath);
   if (!record) {
-    const share = await (await client()).create({ kind: "artifact", title: node.title || path.basename(node.docPath), entry: node.docPath });
-    record = { ...share, kind: "artifact", docPath: node.docPath, createdAt: Date.now() };
+    const { api, server } = await newShares();
+    const share = await api.create({ kind: "artifact", title: node.title || path.basename(node.docPath), entry: node.docPath });
+    record = { ...share, kind: "artifact", server, docPath: node.docPath, createdAt: Date.now() };
     await writeShares(mulchId, [...records, record]);
   }
   state().uploaded.delete(record.id);
@@ -197,18 +262,20 @@ export async function shareMulch(mulchId: string, preview?: Buffer): Promise<Sha
   const mulch = await getMulch(mulchId);
   const records = await readShares(mulchId);
   let record = records.find((r) => r.kind === "mulch");
-  const api = await client();
   if (!record) {
-    const share = await api.create({ kind: "mulch", title: mulch.title });
-    record = { ...share, kind: "mulch", createdAt: Date.now() };
+    const { api: fresh, server } = await newShares();
+    const share = await fresh.create({ kind: "mulch", title: mulch.title });
+    record = { ...share, kind: "mulch", server, createdAt: Date.now() };
   }
+  const api = await client(record);
   record.live = true;
   await writeShares(mulchId, [...records.filter((r) => r.id !== record!.id), record]);
   state().uploaded.delete(record.id);
   const files = Object.values(mulch.nodes).flatMap(filesOf);
   for (const node of Object.values(mulch.nodes)) if (node.docPath) files.push(...(await htmlCompanions(mulchId, node.docPath)));
-  await upload(record, mulchId, files);
-  await api.uploadSnapshot(record, await sharedMulch(mulch));
+  const shared = await sharedMulch(mulch);
+  await upload(record, mulchId, [...files, ...shared.files]);
+  await api.uploadSnapshot(record, shared.mulch);
   if (preview?.subarray(1, 4).toString() === "PNG") await api.uploadFile(record, PREVIEW_FILE, new Uint8Array(preview)).catch((error) => log.warn("share", "preview not uploaded", { mulchId, error }));
   await api.setLive(record, true).catch(() => undefined);
   state().senders.delete(record.id);
@@ -222,7 +289,7 @@ export async function stopLive(mulchId: string, shareId: string): Promise<ShareV
   const record = records.find((r) => r.id === shareId);
   if (record) {
     await state().senders.get(shareId)?.flush();
-    await (await client()).setLive(record, false).catch((error) => log.warn("share", "ending live failed", { mulchId, error }));
+    await (await client(record)).setLive(record, false).catch((error) => log.warn("share", "ending live failed", { mulchId, error }));
     record.live = false;
     state().senders.delete(shareId);
     await writeShares(mulchId, records);
@@ -235,7 +302,7 @@ export async function deleteShare(mulchId: string, shareId: string): Promise<Sha
   const records = await readShares(mulchId);
   const record = records.find((r) => r.id === shareId);
   if (record) {
-    await (await client()).remove(record).catch((error) => {
+    await (await client(record)).remove(record).catch((error) => {
       if (!(error instanceof ShareError && error.status === 404)) throw error;
     });
     state().senders.delete(shareId);
@@ -260,22 +327,27 @@ const chains = new Map<string, Promise<void>>();
 async function forward(mulchId: string, batch: OpBatch): Promise<void> {
   const record = await liveShare(mulchId);
   if (!record) return;
+  // Sharing turned off in Settings: live links stop following (they keep the last state).
+  if ((await shareTarget()).mode === "off") return;
   const s = state();
-  const api = await client();
+  const api = await client(record);
   let sender = s.senders.get(record.id);
   if (!sender) {
     // First change since the app started: the share may have missed some, so send the whole canvas first.
     if (!s.uploaded.has(record.id)) {
       const mulch = await getMulch(mulchId);
-      await upload(record, mulchId, Object.values(mulch.nodes).flatMap(filesOf));
-      await api.uploadSnapshot(record, await sharedMulch(mulch));
+      const shared = await sharedMulch(mulch);
+      await upload(record, mulchId, [...Object.values(mulch.nodes).flatMap(filesOf), ...shared.files]);
+      await api.uploadSnapshot(record, shared.mulch);
     }
     sender = api.liveSender(record);
     s.senders.set(record.id, sender);
   }
   const files = batch.ops.flatMap((op) => (op.op === "addNode" ? filesOf(op.node) : op.op === "updateNode" && (op.patch.assetId || op.patch.docPath) ? [op.patch.assetId ? `assets/${op.patch.assetId}` : "", op.patch.docPath ?? ""].filter(Boolean) : []));
-  if (files.length) await upload(record, mulchId, files);
-  sender.send({ ...batch, ops: await sharedOps(batch.ops) });
+  const linkedFiles: Linked["files"] = [];
+  const ops = await sharedOps(batch.ops, linkedFiles);
+  if (files.length || linkedFiles.length) await upload(record, mulchId, [...files, ...linkedFiles]);
+  sender.send({ ...batch, ops });
   if (sender.stopped) {
     log.warn("share", "live sharing stopped", { mulchId, shareId: record.id, error: sender.stopped.message });
     record.live = false;
@@ -291,12 +363,14 @@ onAfterApply((mulchId, batch) => {
 
 /* ── copies of shared canvases ─────────────────────────────────── */
 
-/** Hosts a manifest may come from: the share origin (and the API's own, in development). */
-export function allowedManifest(url: string): boolean {
+/** Hosts a manifest may come from: mlch.app's share origin (and the API's own, in development), and the person's own server. */
+export function allowedManifest(url: string, ownServer?: string): boolean {
   try {
     const parsed = new URL(url);
-    const base = new URL(process.env.MLCH_SHARE_URL ?? "https://mlch.app");
+    const base = new URL(mlchServer());
     const hosts = new Set([base.host, `share.${base.host}`]);
+    const own = ownServer ? serverAddress(ownServer) : undefined;
+    if (own) hosts.add(new URL(own).host);
     return (parsed.protocol === "https:" || parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") && hosts.has(parsed.host) && /^\/api\/shares\/[A-Za-z0-9]+\/manifest$/.test(parsed.pathname);
   } catch {
     return false;
@@ -349,7 +423,8 @@ async function pendingBatches(shareUrl: string): Promise<OpBatch[]> {
 
 /** "Open in mlch": a shared canvas (or file) becomes a new mulch of the person's own. */
 export async function importShare(manifestUrl: string): Promise<string> {
-  if (!allowedManifest(manifestUrl)) throw new ShareError(400, "Not an mlch share link.");
+  const settings = await readSettings();
+  if (!allowedManifest(manifestUrl, settings.sharing === "own" ? settings.shareServer : undefined)) throw new ShareError(400, "Not an mlch share link.");
   const api = await client();
   const manifest: Manifest = await api.manifest(manifestUrl);
   const mulch = await createMulch(manifest.title || "Shared");

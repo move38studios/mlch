@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const DEFAULT_PICKER_TITLE = 'Choose a folder';
 
-function createServerMessageHandler({ shell, dialog, fs, getWindow, render, notify, activity, thumbnail, audio, log = () => {}, platform = process.platform }) {
+function createServerMessageHandler({ shell, dialog, fs, getWindow, render, notify, activity, thumbnail, audio, storeAccount, log = () => {}, platform = process.platform }) {
   const bin = platform === 'win32' ? 'Recycle Bin' : 'Trash';
   const fail = error => ({ ok: false, error });
 
@@ -128,6 +128,14 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
         // The helper's own messages are plain sentences for the person; pass them on.
         try { return { ok: true, value: await audio(request) }; }
         catch (error) { log(error); return fail(error?.message || 'The audio helper could not complete that request.'); }
+      }
+      case 'account-token': {
+        // mlch: the mlch.app session after sign-in (or null on sign-out), kept in Keychain like the keys.
+        if (!storeAccount) return fail('Not available.');
+        const value = payload.token;
+        if (!(value === null || (typeof value === 'string' && /^[\w-]{20,200}$/.test(value)))) return fail('Not a session.');
+        storeAccount(value);
+        return { ok: true };
       }
       default:
         return fail('The desktop app does not handle that request.');

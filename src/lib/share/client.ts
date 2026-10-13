@@ -2,7 +2,8 @@
  * Talking to mlch.app's sharing API (cloud/, API in cloud/README.md).
  * Server-only: the owner token never reaches the page.
  *
- * A share is a long random link (no accounts). Creating one returns an owner
+ * A share is a long random link. Making one needs the server's say-so (auth:
+ * the mlch.app session or a self-hosted server's key); it returns an owner
  * token, the only way to change or delete it; keep it with the mulch.
  *
  *   const client = shareClient({ install });
@@ -65,6 +66,8 @@ export interface ShareClientOptions {
   base?: string;
   /** A stable id for this install (new shares are counted per install). */
   install?: string;
+  /** Who may make new shares (X-Mlch-Auth): the mlch.app session, or a self-hosted server's key. */
+  auth?: string;
   fetch?: typeof fetch;
 }
 
@@ -98,7 +101,7 @@ export function shareClient(options: ShareClientOptions = {}) {
     base,
 
     create(input: { kind: ShareKind; title: string; entry?: string }): Promise<Share> {
-      return request<Share>("/api/shares", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+      return request<Share>("/api/shares", { method: "POST", headers: { "Content-Type": "application/json", ...(options.auth ? { "X-Mlch-Auth": options.auth } : {}) }, body: JSON.stringify(input) });
     },
 
     uploadFile(share: Share, path: string, bytes: Uint8Array): Promise<{ path: string; size: number }> {

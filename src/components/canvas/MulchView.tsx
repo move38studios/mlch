@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, FolderPlus, History, Link2, MessageSquare, Share, X } from "lucide-react";
 import type { ShareView } from "@/lib/share/shares";
 import { copyLink, requestShare } from "./share";
+import { useSharing } from "@/components/settings/Sharing";
 import { startCall, startMic } from "./Mic";
 import { useBacklinks } from "./backlinks";
 import type { Mulch } from "@/lib/mulch/types";
@@ -107,16 +108,32 @@ function ShareMenu({ mulchId }: { mulchId: string }) {
   const [open, setOpen] = useState(false);
   const [shares, setShares] = useState<ShareView[]>();
   const [busy, setBusy] = useState(false);
+  const sharing = useSharing((s) => s.view);
+  useEffect(() => {
+    if (!sharing) void useSharing.getState().load();
+  }, [sharing]);
   useEffect(() => {
     if (!open) return;
+    // The account may have changed in the browser (signed in, subscribed) since the page loaded.
+    void useSharing.getState().load();
     void fetch(`/api/mulches/${mulchId}/shares`)
       .then((r) => r.json())
       .then((body: { shares?: ShareView[] }) => setShares(body.shares ?? []));
   }, [open, mulchId]);
-  if (!desktop() || !mulch) return null;
+  if (!desktop() || !mulch || sharing?.mode === "off") return null;
   const share = shares?.find((s) => s.kind === "mulch");
   const files = new Set(Object.values(mulch.nodes).flatMap((n) => [n.assetId, n.docPath].filter(Boolean))).size;
   const items = Object.keys(mulch.nodes).length;
+  const linked = Object.values(mulch.nodes).filter((n) => n.ref).length;
+  // What a new link needs first: signing in or subscribing (mlch.app), or the server's address (own server).
+  const needs =
+    sharing?.mode === "mlch" && sharing.account && !sharing.account.signedIn
+      ? "Sign in to share from mlch.app."
+      : sharing?.mode === "mlch" && sharing.account?.signedIn && sharing.account.canShare === false
+        ? "New links on mlch.app need a subscription."
+        : sharing?.mode === "own" && !sharing.server
+          ? "Enter your server's address."
+          : undefined;
   async function start() {
     setBusy(true);
     const result = await requestShare(mulchId, { kind: "mulch" });
@@ -145,6 +162,11 @@ function ShareMenu({ mulchId }: { mulchId: string }) {
           <div className="px-2.5 pt-1 pb-2 text-[12.5px] text-ink-3">
             {items} {items === 1 ? "item" : "items"}, {files} {files === 1 ? "file" : "files"}{share ? (share.live ? ", live" : ", not live") : ""}
           </div>
+          {linked > 0 && (
+            <div className="px-2.5 pb-2 -mt-1 text-[12.5px] text-ink-3">
+              Also shared: what {linked === 1 ? "1 link card links" : `${linked} link cards link`} to
+            </div>
+          )}
           {share ? (
             <>
               <div className="px-2.5 pb-1.5 text-[12.5px] text-ink-2 truncate">{share.url}</div>
@@ -164,6 +186,13 @@ function ShareMenu({ mulchId }: { mulchId: string }) {
                 Delete link
               </button>
             </>
+          ) : needs ? (
+            <div className="px-2.5 pb-1.5">
+              <p className="text-[13px] text-ink-2 mb-2">{needs}</p>
+              <Link href="/settings#sharing" className="flex w-full h-8 rounded-lg bg-ink text-white text-[13px] font-medium items-center justify-center">
+                Sharing settings
+              </Link>
+            </div>
           ) : (
             <button disabled={busy} onClick={() => void start()} className="w-full h-8 rounded-lg bg-ink text-white text-[13px] font-medium disabled:bg-paper-2 disabled:text-ink-3">
               {busy ? "Sharing" : "Share"}

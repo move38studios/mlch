@@ -17,5 +17,7 @@ const built = spawnSync(process.execPath, [vite, "build", "--config", path.join(
 if (built.status !== 0) process.exit(built.status ?? 1);
 
 fs.copyFileSync(path.join(cloud, "landing", "index.html"), path.join(dist, "index.html"));
+fs.mkdirSync(path.join(dist, "server"));
+fs.copyFileSync(path.join(cloud, "landing", "server.html"), path.join(dist, "server", "index.html"));
 fs.cpSync(path.join(root, "public", "brand"), path.join(dist, "brand"), { recursive: true });
 console.log("Built", path.relative(root, dist));

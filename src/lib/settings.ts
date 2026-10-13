@@ -70,6 +70,12 @@ export const settingsSchema = z.object({
   onboarded: z.boolean().default(false),
   /** The "Start here" mulch was made (once per library, even if deleted later). */
   startHere: z.boolean().default(false),
+  /**
+   * Where shared links live: mlch.app (sign in, subscription), nowhere (no Share buttons, nothing sent),
+   * or the person's own mlch server (`shareServer`; its key in Keychain as "shareKey").
+   */
+  sharing: z.enum(["mlch", "off", "own"]).default("mlch"),
+  shareServer: z.string().max(500).optional(),
   /** Random id for this install, sent when creating share links (they are counted per install). */
   installId: z.string().max(64).optional(),
   /** Speech to text: Groq Whisper (key) or Parakeet on this Mac (native helper). */

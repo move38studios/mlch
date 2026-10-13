@@ -172,14 +172,15 @@ async function serveFile(env: Env, request: Request, id: string, path: string): 
 // ---------------------------------------------------------------- API
 
 async function createShare(request: Request, env: Env): Promise<Response> {
+  // Who may, before what: the app checks a server's key with an empty request (400 once the key is right).
+  const allowed = await mayCreate(request, env);
+  if (!allowed.ok) return allowed.response;
   const body = (await request.json().catch(() => undefined)) as { kind?: string; title?: string; entry?: string } | undefined;
   const kind = body?.kind as ShareKind;
   if (kind !== "artifact" && kind !== "mulch") return error(400, 'kind must be "artifact" or "mulch".');
   const title = typeof body?.title === "string" ? body.title.trim().slice(0, LIMITS.titleChars) : "";
   const entry = body?.entry;
   if (kind === "artifact" && (typeof entry !== "string" || !validPath(entry))) return error(400, "An artifact share needs entry: the path of its main file, e.g. deck.html.");
-  const allowed = await mayCreate(request, env);
-  if (!allowed.ok) return allowed.response;
   const install = request.headers.get("X-Mlch-Install")?.slice(0, 200);
   const who = install ? `install:${await sha256(install)}` : `ip:${request.headers.get("CF-Connecting-IP") ?? "unknown"}`;
   const limiter = env.LIMITER.get(env.LIMITER.idFromName(who));
@@ -386,6 +387,8 @@ export async function handle(request: Request, givenEnv: Env): Promise<Response>
     return new Response(object.body, { headers: { "Content-Type": type, "Content-Length": String(object.size), "Cache-Control": parts[2].endsWith(".yml") ? "no-cache" : "public, max-age=31536000, immutable" } });
   }
   if (parts[0] === "viewer" || parts[0] === "brand") return env.ASSETS.fetch(request);
+  // How to run your own server (linked from the app's Settings, Sharing).
+  if (url.pathname === "/server" || url.pathname === "/server/") return asset(env, request, "/server/", { "Cache-Control": "public, max-age=300" });
   if (url.pathname === "/favicon.ico") return Response.redirect(`${url.origin}/brand/icon-32.png`, 301);
   if (url.pathname === "/") {
     if (onShareHost && share.host !== apex.host) return Response.redirect(`${env.APEX_ORIGIN}/`, 301);

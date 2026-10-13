@@ -47,6 +47,10 @@ describe("a self-hosted server", () => {
     expect((await createShare(own)).status).toBe(401);
     expect((await createShare(own, "wrong")).status).toBe(401);
     expect((await createShare(own, "the-key")).status).toBe(201);
+    // How the app checks a key: an empty request is refused for its content only with the right key.
+    const probe = (key: string) => req(own, "/api/shares", { method: "POST", headers: { "X-Mlch-Auth": key }, body: "{}" });
+    expect((await probe("wrong")).status).toBe(401);
+    expect((await probe("the-key")).status).toBe(400);
     expect(await (await req(own, "/api/server")).json()).toEqual({ mlch: 1, auth: "key" });
   });
 
@@ -148,5 +152,13 @@ describe("mlch.app accounts", () => {
     expect(html).toMatch(/mlch:\/\/signed-in\?code=/);
     // The state is used up.
     expect(await (await req(hosted, `/auth/google/callback?state=${state}&code=abc`)).text()).toMatch(/expired/);
+  });
+});
+
+describe("the own-server guide", () => {
+  it("is served at /server", async () => {
+    const response = await req(hosted, "/server");
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("npm run deploy:own");
   });
 });

@@ -9,6 +9,7 @@ import { Sources } from "./Sources";
 import { KeyField } from "./KeyField";
 import { AiAccess, type AuthMode } from "./AiAccess";
 import { TranscriptionChoice } from "./TranscriptionSection";
+import { SharingChoice } from "./Sharing";
 
 type Lane = "fast" | "slow" | "command";
 interface SettingsData {
@@ -126,9 +127,9 @@ function OpenAtLogin() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section className="py-7 border-t border-line first:border-t-0">
+    <section id={id} className="py-7 border-t border-line first:border-t-0 scroll-mt-4">
       <h2 className="text-[15px] font-semibold tracking-[-0.005em] mb-4">{title}</h2>
       {children}
     </section>
@@ -195,6 +196,11 @@ export function Settings() {
     void loadSettings();
     void loadStatus();
   }, [loadSettings, loadStatus]);
+  // Opened at a section (e.g. /settings#sharing from the Share menu): scroll to it once the page has its content.
+  const loaded = !!view;
+  useEffect(() => {
+    if (loaded && window.location.hash) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+  }, [loaded]);
 
   async function update(patch: Partial<SettingsData>) {
     const response = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
@@ -312,6 +318,9 @@ export function Settings() {
               ))}
             </div>
           )}
+        </Section>
+        <Section title="Sharing" id="sharing">
+          <SharingChoice />
         </Section>
         <Section title="Sources">
           <Sources />

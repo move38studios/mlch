@@ -5,7 +5,8 @@
 
 import { getCredential, type CredentialName } from "@/lib/desktop/server";
 
-export type KeyName = CredentialName;
+// Service keys only; sharing credentials are checked with their server (share/account.ts).
+export type KeyName = Exclude<CredentialName, "shareKey" | "mlchAccount">;
 export const KEY_NAMES: KeyName[] = ["groq", "exa", "fal", "firecrawl", "gemini", "anthropic", "openai"];
 
 export type KeyCheck = { ok: true } | { ok: false; error: string };
