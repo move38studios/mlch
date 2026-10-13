@@ -87,10 +87,10 @@ Needs Node 24 and a Swift toolchain (Xcode, or swift.org's toolchain in `~/Libra
 ```sh
 npm install
 npm run check            # typecheck, lint, tests
-npm run dist:unsigned    # dist/mac-arm64/mlch dev.app
+npm run dist:unsigned    # dist/mac-arm64/mlch.app
 ```
 
-A build from source is called "mlch dev", keeps its own settings and saved keys, and never updates itself (official builds update from mlch.app; a fork can set its own feed with `MLCH_UPDATE_URL`). macOS asks you to allow it the first time, as with any unsigned app. Official releases are made with `npm run release` (signing and notarizing need move38's Developer ID).
+A build from source shows as "mlch dev", keeps its own settings and saved keys, and never updates itself (official builds update from mlch.app; a fork can set its own feed with `MLCH_UPDATE_URL`). macOS asks you to allow it the first time, as with any unsigned app. Official releases are made with `npm run release` (signing and notarizing need move38's Developer ID).
 
 ## Not built yet
 
