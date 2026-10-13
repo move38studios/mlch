@@ -2,28 +2,20 @@
 
 Friends use it; nobody is advertised to; everything is ready for anyone who finds it. Collected from George's testing of the signed 0.1.0 build on 2026-10-13. PLAN-2's open items (wording, a second Mac) are folded in here. Collaboration (PLAN-2 M8) comes after this.
 
-## Status (2026-10-13, evening)
+## Status (2026-10-13, night): released
 
-Built, checked and committed: R1-R6 and R7's site, admin, friend codes, account deletion and legal pages. `npm run check` (572 tests), cloud checks (57) and the scenarios pass (r1-fixes, home-search, menus, menubar, decks-pages, artifact-viewer). mlch.app is deployed with the landing canvas, legal pages, /download and /admin (403 until Access is set up); the D1 migration is applied. Version 0.2.0; a signed build was made, not yet notarized or uploaded.
-
-Not done, and why:
-- **Notarizing and publishing 0.2.0:** no notarization credentials on this Mac (G2). After `xcrun notarytool store-credentials mlch`: `APPLE_KEYCHAIN_PROFILE=mlch npm run release -- --channel latest --notes "First early release."` (first release straight to latest so Download works; later ones to beta first).
-- **Stripe live:** the Stripe CLI's live key can read but not create (G3).
-- **/admin login:** Cloudflare Access needs the dashboard (G4).
-- **Web Analytics:** the API refuses wrangler's login; the beacon is wired (G5).
-- **Public repo:** waits for the licence (G1); no GitHub repo exists yet.
-- **R2 evals** on recorded inputs: not run (they need a live model and spend; next session).
+Everything in R1-R8 is built, checked and live.
+- **0.2.1** (notarized) is the current release: mlch.app/download and github.com/move38studios/mlch/releases. 0.2.0 and 0.2.1 are tagged. Releases: `APPLE_KEYCHAIN_PROFILE=mlch npm run release -- --channel beta|latest --notes "…"`.
+- **mlch.app:** the landing canvas, legal pages, own-server guide, Cloudflare Web Analytics (landing, legal and server pages), /admin behind the move38 team's Access application "mlch admin" (m38.ai).
+- **Stripe live:** product "mlch sharing", price `mlch_sharing_yearly` ($12/year, tax exclusive), webhook `we_1UQDPTATgFHGm7iw2tCg88kg` (customer.subscription.*), the Worker's secrets set; the customer portal is active.
+- **Google sign-in** is published (In production), with the home page, privacy and terms links. No logo, so no verification.
+- **The repo is public** (MIT), history kept.
+- Not in 0.2.1, in main: the side panel as a sheet on phones, see-through pictures in the panel (they matter on the website, which is deployed).
+- Not done: the R2 evals on recorded inputs (one real-AI scenario, `ai-partner.cjs`, passed).
 
 ## Needs George
 
-- **Resolved 2026-10-13:** distribution terms (George checked; revisit if issues come up); Stripe tax registration (done); a real call (done); the icon (a display glitch on George's external monitor, not ours).
-- **Agreed 2026-10-13:** legal pages written by me, "as is, at your own risk", with move38 B.V.'s details; data deletion by email to legal@m38.ai, carried out from /admin; the landing page is a canvas.
-- **G1. Licence** for the public repo (e.g. MIT for the app, AGPL for the server), and where it lives on GitHub (the landing shows a Source code link once `VITE_MLCH_SOURCE_URL` is set at build). Git history can stay: scanned, no keys in it; it does hold working notes (docs/research, the old drafts), which become public with it.
-- **G2. Notarization:** `xcrun notarytool store-credentials mlch` (Apple ID with an app-specific password, team FP3X7G6BU7), once.
-- **G3. Stripe live key:** in the Stripe dashboard (live), a restricted key with write access to Customers, Checkout Sessions, Subscriptions, Billing portal, Products, Prices, Coupons, Promotion codes, and read on Invoices. With it I create the live product and price, the webhook, and set the Worker secrets. legal@m38.ai must receive mail (deletion requests).
-- **G4. Cloudflare Access for /admin** (Zero Trust, move38 account): a self-hosted application "mlch admin" on mlch.app paths `admin` and `api/admin`, an Allow policy for emails ending in @m38.ai, login with Google or a one-time PIN; then `ACCESS_TEAM_DOMAIN` (`<team>.cloudflareaccess.com`) and `ACCESS_AUD` (the application's AUD tag) in `cloud/wrangler.mlch.jsonc` vars, and deploy.
-- **G5. Web Analytics:** Cloudflare dashboard, Analytics & Logs, Web Analytics, add mlch.app (manual JS snippet); put the token in `cloud/landing/analytics.txt` and deploy.
-- **G6. Tests only George can do:** install 0.2.0 on a second Mac and on a clean user account; update from 0.2.0 to the next; a friend code from sign-up to first share. Read the four legal pages (terms add commitments: liability capped at 12 months' payments, 30 days' notice and a pro-rata refund if the service ends).
+Nothing blocking. Later: the 100-user cap only applies to sensitive scopes (mlch uses none); a logo on Google's sign-in screen needs Google's verification.
 
 ## R1. Fixes from testing
 

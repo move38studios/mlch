@@ -6,11 +6,7 @@ Order agreed 2026-10-13: **docs/PLAN-3.md**, a small public release (fixes from 
 
 ## Where things stand (2026-10-13)
 
-- Everything up to and including sharing accounts is committed on main; `npm run check` and the scenarios pass. mlch.app runs the accounts Worker (Stripe test mode, Google sign-in in testing mode).
-- `dist/mlch-0.1.0-arm64.dmg` (signed, sharing choices included) is installed and was tested by George on 2026-10-13: Google sign-in and a test subscription worked; what came up is PLAN-3.
-- For a clean first run, this Mac's mlch data was moved to `~/mlch-before-reinstall-20261013/` (`library` was ~/Documents/mlch with 4 mulches, `app-support` was ~/Library/Application Support/mlch with saved keys, models and CLIs, `logs`, the preferences plist). Put `library` back to get the old mulches; delete the folder when no longer needed.
-- Open: roll the Stripe test-mode secret key (shown in a session transcript); PLAN-3 R7.
-- If sharing fails with "The sharing server could not be reached.", desktop.log / mulch.jsonl now have the cause (it used to hide other errors).
+- 0.2.1 is released (docs/PLAN-3.md, Status). George is doing a fresh install from mlch.app; his previous data is in `~/mlch-before-reinstall-20261013-2/` (and the older `~/mlch-before-reinstall-20261013/`).
 
 ## Outside the plans
 
