@@ -6,7 +6,7 @@
 import { getCredential, type CredentialName } from "@/lib/desktop/server";
 
 export type KeyName = CredentialName;
-export const KEY_NAMES: KeyName[] = ["groq", "exa", "fal", "firecrawl", "anthropic", "openai"];
+export const KEY_NAMES: KeyName[] = ["groq", "exa", "fal", "firecrawl", "gemini", "anthropic", "openai"];
 
 export type KeyCheck = { ok: true } | { ok: false; error: string };
 
@@ -16,6 +16,7 @@ const CHECKS: Record<KeyName, (key: string) => { url: string; headers: Record<st
   anthropic: (key) => ({ url: "https://api.anthropic.com/v1/models?limit=1", headers: { "x-api-key": key, "anthropic-version": "2023-06-01" } }),
   firecrawl: (key) => ({ url: "https://api.firecrawl.dev/v2/team/credit-usage", headers: { Authorization: `Bearer ${key}` } }),
   fal: (key) => ({ url: "https://api.fal.ai/v1/models?limit=1", headers: { Authorization: `Key ${key}` } }),
+  gemini: (key) => ({ url: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", headers: { "x-goog-api-key": key } }),
   // Websets answers a wrong key with "Invalid API key" and a good key without that plan with "does not have access": both free.
   exa: (key) => ({ url: "https://api.exa.ai/websets/v0/websets?limit=1", headers: { "x-api-key": key } }),
 };
@@ -37,6 +38,7 @@ export async function checkKey(name: KeyName, key: string, fetcher: typeof fetch
   if (response.ok) return { ok: true };
   const body = await response.text().catch(() => "");
   if (name === "exa" && response.status === 401 && !/invalid api key/i.test(body)) return { ok: true };
-  if (response.status === 401 || response.status === 403) return { ok: false, error: "The service does not accept this key." };
+  // Google answers a wrong key with 400 ("API key not valid").
+  if (response.status === 401 || response.status === 403 || (response.status === 400 && /api.?key/i.test(body))) return { ok: false, error: "The service does not accept this key." };
   return { ok: false, error: `The service answered ${response.status}; the key may still work.` };
 }

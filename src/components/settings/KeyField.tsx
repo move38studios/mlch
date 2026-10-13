@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { desktop } from "@/lib/desktop/client";
 
-export type KeyName = "groq" | "exa" | "fal" | "firecrawl" | "anthropic" | "openai";
+export type KeyName = "groq" | "exa" | "fal" | "firecrawl" | "gemini" | "anthropic" | "openai";
 
 const PRIMARY = "h-8 px-3 rounded-lg bg-ink text-white text-[13px] font-medium disabled:bg-paper-2 disabled:text-ink-3";
 const SECONDARY = "h-8 px-2.5 rounded-lg text-[13px] text-ink-2 hover:bg-paper-2 hover:text-ink inline-flex items-center shrink-0";

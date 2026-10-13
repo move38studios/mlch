@@ -92,6 +92,7 @@ export function filesOf(node: MulchNode): string[] {
   const files: string[] = [];
   if (node.assetId) files.push(`assets/${node.assetId}`, `assets/${node.assetId.split(".")[0]}.md`);
   if (node.docPath) files.push(node.docPath);
+  if (node.poster) files.push(`assets/${node.poster}`);
   return files;
 }
 

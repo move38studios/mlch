@@ -81,6 +81,8 @@ export interface MulchNode {
   groupId?: string;
   /** MIME type of the file in assetId (media items). */
   mime?: string;
+  /** Video links: the video's poster image (an asset), shown until it plays. */
+  poster?: string;
   /** A generation in progress or finished (media items). */
   gen?: GenerationState;
   origin: Origin;

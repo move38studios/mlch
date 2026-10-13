@@ -820,14 +820,14 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
 }
 
 const COMMAND_TOOLS: ToolName[] = [
-  "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say", "tell", "add_image",
+  "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say", "tell", "add_file",
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
   "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "link_to", "save_note", "research", "read_page",
 ];
 
 const RESEARCH_TOOLS: ToolName[] = [
-  "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "tell", "add_image", "get_mulch", "search_mulch",
+  "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "tell", "add_file", "get_mulch", "search_mulch",
   "search_all_mulches", "read_source", "link_to",
 ];
 

@@ -6,7 +6,8 @@ import { Handle, NodeResizeControl, Position, ResizeControlVariant, type NodePro
 const SIDES = [["t", Position.Top], ["r", Position.Right], ["b", Position.Bottom], ["l", Position.Left]] as const;
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, ExternalLink, FileText, Link2, Maximize2 } from "lucide-react";
+import { Check, ExternalLink, FileText, Link2, Maximize2, Play } from "lucide-react";
+import { videoEmbed, type VideoEmbed } from "@/lib/ingest/video";
 import { formatDateTime } from "@/lib/format";
 import { useResolvedRef } from "./refs";
 import { shareArtifact } from "./share";
@@ -92,6 +93,33 @@ function ShareButton({ mulchId, nodeId }: { mulchId: string; nodeId: string }) {
       {state === "copied" && <Check size={11} strokeWidth={2.5} />}
       {state === "busy" ? "Sharing" : state === "copied" ? "Link copied" : "Share"}
     </button>
+  );
+}
+
+/** A YouTube or Vimeo video: its poster, and the player after a click (so nothing loads until asked). */
+function VideoPlayer({ video, poster, title }: { video: VideoEmbed; poster?: string; title?: string }) {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div className="nodrag nowheel relative aspect-video overflow-hidden rounded-t-[inherit] bg-ink">
+      {playing ? (
+        <iframe
+          src={video.embed}
+          title={title ?? "Video"}
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+          className="absolute inset-0 h-full w-full border-0"
+        />
+      ) : (
+        <button onClick={() => setPlaying(true)} className="absolute inset-0 grid place-items-center group/play" aria-label="Play">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {poster && <img src={poster} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />}
+          <span className="relative h-12 w-12 rounded-full bg-white/90 grid place-items-center shadow-lg group-hover/play:scale-105 transition-transform">
+            <Play size={20} strokeWidth={2} className="ml-0.5 fill-ink" />
+          </span>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -192,6 +220,7 @@ function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
   if (node.kind === "ref") return <RefBody node={node} />;
   if (node.kind === "artifact") return <ArtifactBody node={node} mulchId={mulchId} />;
   if (node.kind === "media") return <MediaBody node={node} mulchId={mulchId} />;
+  const video = node.kind === "link" ? videoEmbed(node.url) : undefined;
   if (node.kind === "image" && node.assetId) {
     return (
       <div>
@@ -207,6 +236,8 @@ function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
     );
   }
   return (
+    <>
+      {video && <VideoPlayer video={video} poster={node.poster ? `/api/mulches/${mulchId}/assets/${node.poster}` : video.poster} title={node.title} />}
     <div className="px-4 py-3">
       {(style.label || node.url) && (
         <div className="flex items-center gap-1.5 mb-1 text-[12px] text-ink-3">
@@ -231,6 +262,7 @@ function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
         )}
       </div>
     </div>
+    </>
   );
 }
 

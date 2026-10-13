@@ -9,7 +9,7 @@
 import os from "node:os";
 import path from "node:path";
 
-export type CredentialName = "groq" | "firecrawl" | "fal" | "exa" | "anthropic" | "openai";
+export type CredentialName = "groq" | "firecrawl" | "fal" | "exa" | "gemini" | "anthropic" | "openai";
 
 const ENV_NAMES: Record<CredentialName, string> = {
   groq: "GROQ_API_KEY",
@@ -17,6 +17,7 @@ const ENV_NAMES: Record<CredentialName, string> = {
   fal: "FAL_KEY",
   exa: "EXA_API_KEY",
   // Not ANTHROPIC_/OPENAI_API_KEY: a key in the shell must never switch the AI to API billing by itself.
+  gemini: "GEMINI_API_KEY",
   anthropic: "MLCH_ANTHROPIC_API_KEY",
   openai: "MLCH_OPENAI_API_KEY",
 };

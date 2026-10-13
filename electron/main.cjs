@@ -56,9 +56,15 @@ function libraryDir() {
   return path.join(documentsDir(), 'mlch');
 }
 function openExternal(url) { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(log); }
+// Video players a card may load in a frame (src/lib/ingest/video.ts PLAYER_ORIGINS).
+const PLAYER_ORIGINS = new Set(['https://www.youtube.com', 'https://player.vimeo.com']);
 function allowedPermission(contents, permission, requestingURL) {
   if (!contents || contents !== window?.webContents) return false;
-  try { if (new URL(requestingURL).origin !== origin) return false; } catch { return false; }
+  let from;
+  try { from = new URL(requestingURL).origin; } catch { return false; }
+  // A playing video may go full screen; nothing else for players.
+  if (PLAYER_ORIGINS.has(from)) return permission === 'fullscreen';
+  if (from !== origin) return false;
   // Screen capture only right after the person asked for a screenshot.
   if (permission === 'display-capture') return Date.now() < captureUntil;
   // `media` is the microphone (the page never asks for the camera).
@@ -346,7 +352,13 @@ async function createWindow() {
   // Frames inside the page (artifacts) may not navigate anywhere else.
   current.webContents.on('will-frame-navigate', (event) => {
     if (event.isMainFrame) return;
-    try { if (new URL(event.url).origin === origin) return; } catch {}
+    try {
+      const target = new URL(event.url);
+      if (target.origin === origin) return;
+      // Video cards: the YouTube and Vimeo players only (and what they load inside themselves).
+      if (PLAYER_ORIGINS.has(target.origin) && /^\/(embed|video)\//.test(target.pathname)) return;
+      if (event.frame?.parent && PLAYER_ORIGINS.has(new URL(event.frame.parent.url).origin)) return;
+    } catch {}
     event.preventDefault();
   });
   current.webContents.on('render-process-gone', async (_event, details) => {

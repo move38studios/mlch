@@ -88,7 +88,8 @@ function viewerCsp(env: Env): string {
     "img-src 'self' data: blob:",
     "media-src 'self' data: blob:",
     `connect-src 'self' ${socket}`,
-    "frame-src 'self'",
+    // Video cards play YouTube and Vimeo in place (src/lib/ingest/video.ts PLAYER_ORIGINS).
+    "frame-src 'self' https://www.youtube.com https://player.vimeo.com",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { fetchImage, privateAddress } from "../fetchImage";
+import { fetchImage, privateAddress } from "../fetchFile";
 
 describe("images from the web", () => {
   it("never reaches this Mac or a local network", async () => {

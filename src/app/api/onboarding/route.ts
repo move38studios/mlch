@@ -59,7 +59,7 @@ export async function GET() {
       agentAuth: settings.agentAuth,
       consent: { claude: !!settings.subscriptionConsent.claude, codex: !!settings.subscriptionConsent.codex },
       transcription: settings.transcription,
-      keys: { groq: !!getCredential("groq"), exa: !!getCredential("exa"), fal: !!getCredential("fal"), firecrawl: !!getCredential("firecrawl"), anthropic: !!getCredential("anthropic"), openai: !!getCredential("openai") },
+      keys: { groq: !!getCredential("groq"), exa: !!getCredential("exa"), gemini: !!getCredential("gemini"), fal: !!getCredential("fal"), firecrawl: !!getCredential("firecrawl"), anthropic: !!getCredential("anthropic"), openai: !!getCredential("openai") },
       local: await localStatus().catch(() => ({ installed: false, model: "unavailable" as const })),
       searchModel: existsSync(SEARCH_MODEL) ? "present" : (searchState.__mlchSearchModel ?? "missing"),
       vaults: obsidianVaults().filter((vault) => !linked.has(vault.path)),

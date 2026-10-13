@@ -17,8 +17,10 @@ import { arrangeGroups, boundsOf, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/mulch/sizes";
 import { applyToMulch, atomicWriteFile, emit, getMulch, listMulches, mulchDir } from "@/lib/mulch/store";
 import { NODE_KINDS, type Mulch, type MulchNode, type MulchOp, type NodeKind, type NodeRef } from "@/lib/mulch/types";
-import { assetPath, isHttpUrl, isImage, readLink, saveAsset } from "@/lib/ingest/ingest";
-import { fetchImage } from "@/lib/ingest/fetchImage";
+import { assetPath, isHttpUrl, isImage, readLink } from "@/lib/ingest/ingest";
+import { fetchFile, FILE_EXTENSION } from "@/lib/ingest/fetchFile";
+import { addFile, addLink } from "@/lib/ingest/place";
+import { videoEmbed } from "@/lib/ingest/video";
 import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
 import { desktopRequest } from "@/lib/desktop/server";
 import { modelSchema, searchModels } from "@/lib/media/fal";
@@ -43,7 +45,7 @@ export type ToolName =
   | "write_doc"
   | "say"
   | "tell"
-  | "add_image"
+  | "add_file"
   | "hand_off"
   | "set_title"
   | "list_files"
@@ -442,18 +444,19 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     inputShape: { url: z.string().url().max(2000) },
     readOnly: true,
   },
-  add_image: {
-    name: "add_image",
-    title: "Add picture",
+  add_file: {
+    name: "add_file",
+    title: "Add file",
     description:
-      "Put an existing picture on the canvas: from the web (`url`: the address of the image file itself, https) or from this Mac (`path`, read-only). " +
-      "Use it for diagrams, figures, photos and covers that sources show. Say what it is in `caption` and, for the web, where it comes from in `source_url` (the page). " +
-      "For pictures that do not exist yet, use media_generate.",
+      "Put an existing file on the canvas, from the web (`url`: the address of the file itself, https) or from this Mac (`path`, read-only): " +
+      "pictures (diagrams, figures, photos, covers), PDFs and Word documents (read and digested), audio and video (played in place, transcribed). " +
+      "A YouTube or Vimeo page address becomes a video that plays in place. Say what it is in `caption` and, for the web, the page it is on in `source_url`. " +
+      "Pictures that do not exist yet: media_generate. A web page to read: a link item via add_nodes.",
     inputShape: {
       url: z.string().max(2000).optional(),
       path: z.string().max(1000).optional(),
       caption: z.string().min(1).max(600),
-      source_url: z.string().max(2000).optional().describe("The page the picture is on, for credit."),
+      source_url: z.string().max(2000).optional().describe("The page the file is on, for credit."),
       near: z.array(z.string()).max(6).optional(),
     },
     readOnly: false,
@@ -861,36 +864,40 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       return ok("Shown.", "Status");
     },
 
-    async add_image(args) {
+    async add_file(args) {
       const { url, path: file, caption, source_url, near } = args as { url?: string; path?: string; caption: string; source_url?: string; near?: string[] };
-      if (!url === !file) return fail("Give either url (an image on the web) or path (an image on this Mac).");
-      let bytes: Buffer;
-      let fileName: string;
-      if (url) {
-        const got = await fetchImage(url);
-        if ("error" in got) return fail(`${got.error} Nothing was added.`);
-        bytes = got.bytes;
-        fileName = `${path.basename(new URL(url).pathname).replace(/\.[^.]*$/, "") || "image"}${got.extension}`;
-      } else {
-        const resolved = resolveReadable(ctx.readRoot ?? os.homedir(), file!);
-        if (!resolved || !isImage(resolved)) return fail(`${file}: not an image you may read (png, jpg, gif, webp, svg in your home folder, private places excluded).`);
-        const read = await fs.readFile(resolved).catch(() => undefined);
-        if (!read) return fail(`${file}: not found.`);
-        if (read.length > 15 * 1024 * 1024) return fail(`${file}: over 15 MB.`);
-        bytes = read;
-        fileName = path.basename(resolved);
-      }
-      const assetId = await saveAsset(ctx.mulchId, bytes, fileName);
+      if (!url === !file) return fail("Give either url (a file on the web) or path (a file on this Mac).");
       const mulch = await getMulch(ctx.mulchId);
-      const id = newClientId("n");
-      const position = placeResult(mulch, { w: NODE_WIDTH.image, h: 240 }, near, id);
+      const seed = newClientId("n");
+      const size = { w: NODE_WIDTH.image, h: 240 };
+      const at = placeResult(mulch, size, near, seed);
+      const centre = { x: at.x + size.w / 2, y: at.y + 40 };
       const source = source_url && isHttpUrl(source_url) ? source_url : url;
-      const ops: MulchOp[] = [
-        { op: "addNode", node: { id, kind: "image", x: position.x, y: position.y, assetId, fileName: fileName.slice(0, 200), text: caption, ...(source ? { url: source } : {}), origin, createdAt: Date.now() } },
-      ];
-      await commit(ops);
-      ctx.added.push(id);
-      return ok(`Added picture ${id}.`, "Added a picture", ops);
+      let node: MulchNode;
+      if (url && videoEmbed(url)) {
+        node = await addLink(ctx.mulchId, url, centre, { origin });
+      } else {
+        let bytes: Buffer;
+        let fileName: string;
+        if (url) {
+          const got = await fetchFile(url);
+          if ("error" in got) return fail(`${got.error} Nothing was added.`);
+          bytes = got.bytes;
+          fileName = `${path.basename(new URL(url).pathname).replace(/\.[^.]*$/, "") || "file"}${got.extension}`;
+        } else {
+          const resolved = resolveReadable(ctx.readRoot ?? os.homedir(), file!);
+          if (!resolved || !FILE_EXTENSION.test(resolved)) return fail(`${file}: not a file you may read that the canvas can hold (pictures, PDF, Word, audio, video in your home folder; private places excluded).`);
+          const read = await fs.readFile(resolved).catch(() => undefined);
+          if (!read) return fail(`${file}: not found.`);
+          if (read.length > 100 * 1024 * 1024) return fail(`${file}: over 100 MB.`);
+          bytes = read;
+          fileName = path.basename(resolved);
+        }
+        const picture = isImage(fileName);
+        node = await addFile(ctx.mulchId, bytes, fileName, centre, { origin, ...(picture ? { text: caption } : { title: caption }), ...(source ? { url: source } : {}) });
+      }
+      ctx.added.push(node.id);
+      return ok(`Added ${node.kind} ${node.id}.`, "Added a file", []);
     },
 
     async tell(args) {
