@@ -18,6 +18,10 @@ interface VoiceState {
   call?: { mulchId: string; system: boolean };
   /** Loudness of the Mac's sound during a call, 0–1. */
   systemLevel: number;
+  /** Hold-to-talk: when the current hold began (speech then is an instruction, not thinking). */
+  holdingSince?: number;
+  /** When the last hold ended: speech recorded up to then belongs to it. */
+  heldUntil?: number;
 }
 
 export const useVoice = create<VoiceState>(() => ({ recording: false, level: 0, speaking: false, pending: 0, systemLevel: 0 }));
@@ -31,6 +35,9 @@ let recorder: Recorder | undefined;
 let queue: Promise<void> = Promise.resolve();
 
 function upload(mulchId: string, wav: Blob, startedAt: number) {
+  // Speech while ⌥ is held goes as an instruction (HoldToTalk), not as thinking.
+  const { holdingSince, heldUntil } = useVoice.getState();
+  if (holdingSince !== undefined || (heldUntil !== undefined && startedAt <= heldUntil && Date.now() - heldUntil < 3000)) return;
   useVoice.setState((s) => ({ pending: s.pending + 1 }));
   queue = queue.then(async () => {
     try {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { useMulch } from "@/lib/mulch/client";
 import { CallButton, MicButton, TranscriptStrip } from "./Mic";
+import { HoldToTalk } from "./HoldToTalk";
 
 async function post(path: string, body: unknown): Promise<void> {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -41,6 +42,7 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
 
   return (
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 w-[min(700px,calc(100%-360px))] min-w-[380px]">
+      <HoldToTalk mulchId={mulchId} />
       <TranscriptStrip />
       <div className="float flex items-center gap-2 rounded-2xl pl-2 pr-2 py-2">
         <MicButton mulchId={mulchId} />

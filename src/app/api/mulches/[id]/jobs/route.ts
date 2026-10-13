@@ -9,6 +9,12 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
+/** The mulch's jobs as the page sees them. */
+export async function GET(_request: Request, { params }: Params) {
+  const { id } = await params;
+  return handle(async () => ({ jobs: await getJobs(id) }));
+}
+
 /** One job: stop it, start it again, mark finished jobs as seen, or close its message. */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
