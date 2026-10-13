@@ -22,7 +22,11 @@ export async function requestShare(mulchId: string, body: { kind: "mulch" } | { 
   // A shared canvas's link preview: the canvas as it is on screen now.
   if (body.kind === "mulch") {
     const canvas = document.querySelector(".react-flow")?.getBoundingClientRect();
+    // Just the canvas: the floating controls, menus and input step aside for the picture.
+    document.documentElement.classList.add("mlch-capturing");
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const preview = canvas ? await desktop()?.capture?.({ x: canvas.x, y: canvas.y, width: canvas.width, height: canvas.height }).catch(() => null) : null;
+    document.documentElement.classList.remove("mlch-capturing");
     if (preview) body = { ...body, preview } as typeof body;
   }
   const response = await fetch(`/api/mulches/${mulchId}/shares`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

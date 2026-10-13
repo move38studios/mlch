@@ -198,6 +198,14 @@ select:focus-visible {
     stroke-dashoffset: calc(var(--scribble-length) * -1);
   }
 }
+/* Taking a shared canvas's preview picture: only the canvas shows. */
+.mlch-capturing .float,
+.mlch-capturing header,
+.mlch-capturing .react-flow__controls,
+.mlch-capturing .react-flow__minimap {
+  visibility: hidden;
+}
+
 /* Onboarding: each step comes in from below. */
 .step-enter {
   animation: step-enter 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
