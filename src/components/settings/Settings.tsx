@@ -386,9 +386,11 @@ export function Settings() {
               onBlur={(e) => {
                 const text = e.target.value;
                 // Emptied: no style at all. Back to the default text: the default (it follows new releases).
-                if (!text.trim()) settings.style !== "" && void update({ style: "", styleCleared: true });
-                else if (text.trim() === view.styleDefault.trim()) settings.style !== undefined && void update({ style: null, styleCleared: false });
-                else if (text !== settings.style) void update({ style: text, styleCleared: false });
+                if (!text.trim()) {
+                  if (settings.style !== "") void update({ style: "", styleCleared: true });
+                } else if (text.trim() === view.styleDefault.trim()) {
+                  if (settings.style !== undefined) void update({ style: null, styleCleared: false });
+                } else if (text !== settings.style) void update({ style: text, styleCleared: false });
               }}
               rows={8}
               placeholder={"Colours: #0B3D2E and #F2E8D5. Headings in Fraunces, text in Inter.\nLogo: ~/Brand/logo.svg, top left on title slides.\nFew words per slide."}
