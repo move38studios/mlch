@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "dev": "npm run build && wrangler dev -c wrangler.mlch.jsonc --var APEX_ORIGIN:http://localhost:8787 --var SHARE_ORIGIN:http://localhost:8787 --var DEV_SIGN_IN:1",
+    "dev": "npm run build && wrangler dev -c wrangler.mlch.jsonc --local-upstream localhost:8787 --var APEX_ORIGIN:http://localhost:8787 --var SHARE_ORIGIN:http://localhost:8787 --var DEV_SIGN_IN:1",
     "typecheck": "tsc --noEmit && tsc --noEmit -p viewer",
     "test": "npm run build && vitest run",
     "check": "npm run typecheck && npm run test",

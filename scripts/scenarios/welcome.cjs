@@ -58,6 +58,12 @@ module.exports = async ({ page, base, shot: take }) => {
   await shot('8-calls');
   await next();
 
+  await heading('Sharing');
+  await page.waitForSelector('button[aria-pressed=true]:has-text("mlch.app")');
+  await page.waitForSelector('button:has-text("Sign in with Google")');
+  await shot('8b-sharing');
+  await next();
+
   await heading('Ready');
   await shot('9-ready');
   await page.click('button:has-text("Open mlch")');

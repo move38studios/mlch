@@ -279,7 +279,7 @@ export function SharingChoice() {
         <Option selected={view.mode === "own"} onSelect={() => void choose("own")} title="Your own server">
           Run the mlch server on your own Cloudflare account, and enter its address and key here.
         </Option>
-        {view.mode === "own" && <OwnServer key={view.server ?? ""} view={view} reload={load} />}
+        {view.mode === "own" && <OwnServer view={view} reload={load} />}
       </div>
     </div>
   );

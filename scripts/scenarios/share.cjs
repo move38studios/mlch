@@ -1,6 +1,7 @@
-// Sharing against a local Worker: canvas live, a made file, and Open in mlch.
-//   (cd cloud && npm run dev) &
-//   MLCH_SHARE_URL=http://localhost:8787 node scripts/electron-run.cjs scripts/scenarios/share.cjs --library <tmp dir> --shots <dir>
+// Sharing against a local own server: canvas live, a made file, and Open in mlch.
+//   (cd cloud && npx wrangler dev --port 8788 --var SERVER_KEY:dev-key) &
+//   MLCH_SCENARIO_LIBRARY=<tmp dir> node scripts/electron-run.cjs scripts/scenarios/share.cjs --library <tmp dir> --shots <dir>
+// (mlch.app's sign-in and subscription: share-account.cjs.)
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,6 +14,12 @@ module.exports = async ({ app, page, base, shot }) => {
     return { status: r.status, ...(await r.json().catch(() => ({}))) };
   }, { url, method, body });
   const node = (id, text, extra = {}) => ({ id, kind: 'idea', x: 0, y: 0, text, origin: 'user', createdAt: Date.now(), ...extra });
+
+  // Shares go to the own server (address in Settings, key through the desktop shell as the page saves it).
+  const server = process.env.MLCH_OWN_SERVER || 'http://localhost:8788';
+  assert.equal((await api('/api/account', 'POST', { action: 'mode', mode: 'own', server })).status, 200);
+  assert.ok(await page.evaluate(async () => (await window.mlchDesktop.credentials.write({ shareKey: 'dev-key' })).ok));
+  await page.waitForTimeout(300);
 
   const mulch = (await api('/api/mulches', 'POST', {})).mulch;
   fs.mkdirSync(path.join(library, mulch.id, 'artifacts'), { recursive: true });
@@ -49,8 +56,11 @@ module.exports = async ({ app, page, base, shot }) => {
   // A made file on its own.
   const deck = await api(`/api/mulches/${mulch.id}/shares`, 'POST', { kind: 'artifact', nodeId: 'd' });
   assert.equal(deck.status, 200, JSON.stringify(deck));
-  const response = await fetch(deck.share.url);
-  assert.equal(response.status, 200);
+  // A page opens in the frame page (Full screen); the file itself is served sandboxed.
+  const frame = await fetch(deck.share.url);
+  assert.equal(frame.status, 200);
+  assert.match(await frame.text(), /artifacts\/deck\.html/);
+  const response = await fetch(`${deck.share.url}artifacts/deck.html`);
   assert.match(response.headers.get('content-security-policy') ?? '', /sandbox/);
   assert.match(await response.text(), /Seat pricing/);
 
