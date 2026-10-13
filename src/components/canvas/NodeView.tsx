@@ -15,7 +15,7 @@ import { shareArtifact } from "./share";
 import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import { jitter } from "@/lib/mulch/place";
-import type { MulchNode } from "@/lib/mulch/types";
+import type { MulchNode, MulchOp } from "@/lib/mulch/types";
 import { hasThumbnail } from "@/lib/artifacts/thumbnails";
 import { KIND_STYLES } from "./kinds";
 import { MediaBody } from "./MediaBody";
@@ -222,20 +222,37 @@ function RefBody({ node }: { node: MulchNode }) {
   );
 }
 
-function Body({ node, mulchId }: { node: MulchNode; mulchId: string }) {
+function Body({ node, mulchId, transparent = false }: { node: MulchNode; mulchId: string; transparent?: boolean }) {
   const style = KIND_STYLES[node.kind];
   if (node.kind === "ref") return <RefBody node={node} />;
   if (node.kind === "artifact") return <ArtifactBody node={node} mulchId={mulchId} />;
   if (node.kind === "media") return <MediaBody node={node} mulchId={mulchId} />;
   const video = node.kind === "link" ? videoEmbed(node.url) : undefined;
   if (node.kind === "image" && node.assetId) {
+    const src = `/api/mulches/${mulchId}/assets/${node.assetId}`;
+    const caption = node.title || node.fileName;
+    // A picture with see-through parts sits on the paper; its words below it, small.
+    if (transparent) {
+      return (
+        <div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={node.text || node.fileName || ""} className="block w-full" draggable={false} />
+          {(node.title || node.text) && (
+            <div className="pt-1.5 text-center text-ink-3">
+              {node.title && <div className="font-medium truncate">{node.title}</div>}
+              {node.text && <p className="line-clamp-3">{node.text}</p>}
+            </div>
+          )}
+        </div>
+      );
+    }
     return (
       <div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/api/mulches/${mulchId}/assets/${node.assetId}`} alt={node.text || node.fileName || ""} className="block w-full rounded-t-[inherit]" draggable={false} />
-        {(node.title || node.fileName || node.text) && (
+        <img src={src} alt={node.text || node.fileName || ""} className="block w-full rounded-t-[inherit]" draggable={false} />
+        {(caption || node.text) && (
           <div className="px-3 py-2">
-            <div className="text-ink-2 font-medium truncate">{node.title || node.fileName}</div>
+            {caption && <div className="text-ink-2 font-medium truncate">{caption}</div>}
             {node.text && <p className="text-ink-2 mt-0.5 line-clamp-3">{node.text}</p>}
           </div>
         )}
@@ -292,6 +309,39 @@ function useClipped(ref: React.RefObject<HTMLDivElement | null>, active: boolean
   return clipped;
 }
 
+/**
+ * Whether a picture has see-through parts. Found once, in the browser (it decodes the picture
+ * anyway), and kept on the card; a read-only canvas (a share) only looks.
+ */
+function useTransparent(node: MulchNode, mulchId: string, readOnly: boolean, apply: (ops: MulchOp[], options?: { undoable?: boolean }) => void): boolean {
+  const [seen, setSeen] = useState<boolean>();
+  const unknown = node.kind === "image" && !!node.assetId && node.transparent === undefined;
+  useEffect(() => {
+    if (!unknown) return;
+    let cancelled = false;
+    const image = new Image();
+    image.onload = () => {
+      if (cancelled) return;
+      const size = 48;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return;
+      context.drawImage(image, 0, 0, size, size);
+      const pixels = context.getImageData(0, 0, size, size).data;
+      let see = false;
+      for (let i = 3; i < pixels.length && !see; i += 4) see = pixels[i] < 250;
+      setSeen(see);
+      if (!readOnly) apply([{ op: "updateNode", id: node.id, patch: { transparent: see } }], { undoable: false });
+    };
+    image.src = `/api/mulches/${mulchId}/assets/${node.assetId}`;
+    return () => {
+      cancelled = true;
+    };
+  }, [unknown, node.id, node.assetId, mulchId, readOnly, apply]);
+  return node.kind === "image" && (node.transparent ?? seen ?? false);
+}
+
 function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const { node, mulchId, fresh } = data;
   const style = KIND_STYLES[node.kind];
@@ -303,13 +353,14 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const apply = useMulch((s) => s.apply);
   const tilt = style.tilt ? jitter(node.id)(5) : 0;
   const sizedByShape = node.kind === "image" || node.kind === "media" || node.kind === "artifact";
+  const transparent = useTransparent(node, mulchId, readOnly, apply);
   const clipRef = useRef<HTMLDivElement>(null);
   const clipped = useClipped(clipRef, !!node.fixedH && !editing);
   const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || node.kind === "image" || (node.kind === "link" && !!node.assetId);
 
   return (
     <div
-      className={`mlch-node group relative text-ink ${style.card} ${style.tilt ? "rounded-[3px]" : "rounded-[10px]"} ${outline(node, style.tinted)} ${selected ? "outline-[2.5px] outline-amber outline-offset-2" : ""} ${fresh ? "node-enter" : ""} ${node.fixedH ? "h-full" : ""}`}
+      className={`mlch-node group relative text-ink ${transparent ? "text-[12.5px]" : `${style.card} ${outline(node, style.tinted)}`} ${style.tilt ? "rounded-[3px]" : "rounded-[10px]"} ${selected ? "outline-[2.5px] outline-amber outline-offset-2" : ""} ${fresh ? "node-enter" : ""} ${node.fixedH ? "h-full" : ""}`}
       style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
       onDoubleClick={(e) => {
         e.stopPropagation();
@@ -333,10 +384,10 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
       ) : node.fixedH ? (
         // A height the person chose: the text clips, fading out at the bottom (only when there is more).
         <div ref={clipRef} className={`h-full overflow-hidden ${clipped ? "mlch-fade-bottom" : ""}`}>
-          <Body node={node} mulchId={mulchId} />
+          <Body node={node} mulchId={mulchId} transparent={transparent} />
         </div>
       ) : (
-        <Body node={node} mulchId={mulchId} />
+        <Body node={node} mulchId={mulchId} transparent={transparent} />
       )}
       {(long || clipped) && !editing && (
         <button

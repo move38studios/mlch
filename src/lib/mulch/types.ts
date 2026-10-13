@@ -69,6 +69,8 @@ export interface MulchNode {
   h?: number;
   /** The person set the height (resized it): `h` is kept, the text clips. Otherwise `h` is the measured height. */
   fixedH?: boolean;
+  /** A picture with see-through parts (a logo, a cut-out): drawn on the paper without a card. Found when first shown. */
+  transparent?: boolean;
   /** Short heading. Optional for ideas and notes, whose text is the content. */
   title?: string;
   /** Body text (markdown allowed for writeups and docs). */
