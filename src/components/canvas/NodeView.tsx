@@ -388,13 +388,22 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
           if (/\.(html|svg)$/.test(node.docPath)) setViewer(node.id);
           else if (!readOnly) openFile(mulchId, node.docPath, "open");
         } else if (node.kind === "image") setOpen(node.id);
-        else if (node.kind !== "artifact" && node.kind !== "media" && !readOnly) setEditing(node.id);
+        // Made pictures and recordings open in the panel too (not from a player's own controls).
+        else if (node.kind === "media") {
+          if (!(e.target as HTMLElement).closest("video, audio, button")) setOpen(node.id);
+        }
+        // Text the card's chosen size cuts off is edited in the side panel, where all of it shows.
+        else if (node.kind !== "artifact" && !readOnly) {
+          if (clipped) setOpen(node.id, { edit: true });
+          else setEditing(node.id);
+        }
         // Read-only (a shared canvas): long or clipped cards open in full.
         else if (readOnly && (long || clipped)) setOpen(node.id);
       }}
     >
       {editing ? (
-        <div className="px-4 py-3">
+        // In a card of a chosen height, text typed past the bottom scrolls inside the card.
+        <div className={node.fixedH ? "nowheel h-full overflow-y-auto px-4 py-3" : "px-4 py-3"}>
           <Editor node={node} onDone={() => setEditing(undefined)} />
         </div>
       ) : node.fixedH ? (
@@ -407,7 +416,8 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
       )}
       {(long || clipped) && !editing && (
         <button
-          className="nodrag absolute top-2 right-2 p-1 rounded-md text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-paper-2 hover:text-ink"
+          // On white, so it shows over a picture; always there while the card is selected.
+          className={`nodrag absolute top-2 right-2 p-1 rounded-md bg-white/95 shadow-[0_1px_3px_rgba(0,0,0,0.15)] text-ink-2 hover:text-ink ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
           onClick={() => setOpen(node.id)}
           title="Open"
           aria-label="Open"

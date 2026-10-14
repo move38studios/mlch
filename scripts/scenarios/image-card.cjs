@@ -11,8 +11,8 @@ module.exports = async ({ page, base, shot }) => {
   const mulch = (await api('/api/mulches', 'POST', {})).mulch;
   const library = process.argv[process.argv.indexOf('--library') + 1];
   fs.mkdirSync(path.join(library, mulch.id, 'assets'), { recursive: true });
-  fs.copyFileSync(path.join(__dirname, '..', '..', 'public', 'brand', 'icon-180.png'), path.join(library, mulch.id, 'assets', 'a1.png'));
-  await api(`/api/mulches/${mulch.id}/ops`, 'POST', { ops: [{ op: 'addNode', node: { id: 'n-img', kind: 'image', x: 0, y: 0, assetId: 'a1.png', fileName: 'icon.png', text: 'The icon', origin: 'user', createdAt: 1 } }] });
+  fs.copyFileSync(path.join(__dirname, '..', '..', 'public', 'brand', 'icon-180.png'), path.join(library, mulch.id, 'assets', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png'));
+  await api(`/api/mulches/${mulch.id}/ops`, 'POST', { ops: [{ op: 'addNode', node: { id: 'n-img', kind: 'image', x: 0, y: 0, assetId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png', fileName: 'icon.png', text: 'The icon', origin: 'user', createdAt: 1 } }] });
   await page.goto(`${base}/n/${mulch.id}`);
   const card = page.locator('.react-flow__node[data-id="n-img"]');
   await card.waitFor();
@@ -32,7 +32,21 @@ module.exports = async ({ page, base, shot }) => {
   assert.ok(after > before + 80, 'the picture got wider');
   await shot('resized');
   await card.dblclick();
-  await page.waitForSelector('aside img[src*="a1.png"]');
+  await page.waitForSelector('aside img[src*="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"]');
   await shot('full');
+  await page.locator('aside button[aria-label="Close"]').click();
+
+  // A made picture (a media card): selected, its Open button shows on white; double-click opens it too.
+  await api(`/api/mulches/${mulch.id}/ops`, 'POST', { ops: [{ op: 'addNode', node: { id: 'n-made', kind: 'media', x: 600, y: 0, w: 260, assetId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png', mime: 'image/png', fileName: 'made.png', text: 'A prompt', origin: 'agent:test', createdAt: 2 } }] });
+  const made = page.locator('.react-flow__node[data-id="n-made"]');
+  await made.waitFor();
+  await made.click({ position: { x: 40, y: 40 } });
+  const open = made.locator('button[aria-label="Open"]');
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(200);
+  assert.equal(await open.evaluate((el) => getComputedStyle(el).opacity), '1', 'Open shows while selected');
+  await shot('made-selected');
+  await made.dblclick({ position: { x: 40, y: 40 } });
+  await page.waitForSelector('aside button[aria-label="Show in Finder"]');
   console.log('image-card ok');
 };

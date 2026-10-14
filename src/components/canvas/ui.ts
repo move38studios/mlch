@@ -7,6 +7,8 @@ interface CanvasUi {
   editingId?: string;
   /** Node whose full content is open in the side panel. */
   openId?: string;
+  /** The side panel opens straight into editing the card's text (a card too small to edit in place). */
+  openEditing?: boolean;
   /** Text to find and highlight in the side panel. */
   highlight?: { quote?: string; page?: number };
   setHighlight(highlight?: { quote?: string; page?: number }): void;
@@ -16,13 +18,13 @@ interface CanvasUi {
   /** Looking at a past checkpoint: nothing can be changed. */
   readOnly: boolean;
   setEditing(id?: string): void;
-  setOpen(id?: string): void;
+  setOpen(id?: string, options?: { edit?: boolean }): void;
 }
 
 export const useCanvasUi = create<CanvasUi>((set) => ({
   readOnly: false,
   setEditing: (editingId) => set({ editingId }),
-  setOpen: (openId) => set({ openId }),
+  setOpen: (openId, options) => set({ openId, openEditing: !!options?.edit }),
   setViewer: (viewerId) => set({ viewerId }),
   setHighlight: (highlight) => set({ highlight }),
 }));

@@ -162,7 +162,9 @@ export function SidePanel() {
   const contentRef = useRef<HTMLDivElement>(null);
   // Editing the item's own text (as double-click does on the card); documents show text extracted from a file, so not those.
   const [draft, setDraft] = useState<string>();
-  useEffect(() => setDraft(undefined), [openId]);
+  const openEditing = useCanvasUi((s) => s.openEditing);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only when another item opens
+  useEffect(() => setDraft(openEditing && node ? node.text : undefined), [openId]);
 
   // Find the quote (or page marker) in the shown text, highlight and scroll to it.
   useEffect(() => {
