@@ -253,6 +253,20 @@ describe("Claude harness runTurn", () => {
     expect(status.problem).toBeUndefined();
   });
 
+  it("with the person's API key: the start-up report naming that key does not stop the turn", async () => {
+    // A real API-key turn says so in its init message; the recording above was made on a subscription.
+    const onKey = recorded.map((message) => (message.type === "system" && message.subtype === "init" ? { ...message, apiKeySource: "ANTHROPIC_API_KEY" } : message)) as SDKMessage[];
+    const account = { tokenSource: "none", apiKeySource: "ANTHROPIC_API_KEY", apiProvider: "firstParty" };
+    const { query } = fakeQueries({ account, messages: onKey });
+    const events = await collect(harness({ query, auth: async () => ({ mode: "apiKey" as const, key: "sk-ant-person" }) }).runTurn(params()));
+    expect(events.filter((e) => e.type === "error")).toEqual([]);
+    expect(events.some((e) => e.type === "text-delta")).toBe(true);
+    // On a subscription the same report still stops it.
+    const { query: again } = fakeQueries({ messages: onKey });
+    const refused = await collect(harness({ query: again }).runTurn(params()));
+    expect(refused).toContainEqual(expect.objectContaining({ type: "error", code: "wrong_billing" }));
+  });
+
   it("with API key mode but no key: never starts Claude Code and says where to add one", async () => {
     const { query, made } = fakeQueries({ messages: recorded });
     const events = await collect(harness({ query, auth: async () => ({ mode: "apiKey" as const }) }).runTurn(params()));

@@ -192,6 +192,14 @@ describe("ClaudeEventMapper", () => {
     expect(events[1]).toMatchObject({ type: "error", code: "wrong_billing" });
   });
 
+  it("lets the person's own API key through, and only that source", () => {
+    const own = new ClaudeEventMapper({ expectedTools: ["add_numbers"], ownApiKey: true });
+    expect(own.map(init({ apiKeySource: "ANTHROPIC_API_KEY" }) as SDKMessage).some((e) => e.type === "error")).toBe(false);
+    expect(own.fatal).toBe(false);
+    const helper = new ClaudeEventMapper({ expectedTools: ["add_numbers"], ownApiKey: true });
+    expect(helper.map(init({ apiKeySource: "apiKeyHelper" }) as SDKMessage)).toContainEqual(expect.objectContaining({ code: "wrong_billing" }));
+  });
+
   it("maps the signed-out sequence to one not_signed_in error", () => {
     // Shape verified live with an empty CLAUDE_CONFIG_DIR (reports/claude-sdk.md §2).
     const { mapper, events } = mapAll([

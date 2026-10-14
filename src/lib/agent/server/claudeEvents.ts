@@ -146,14 +146,17 @@ export class ClaudeEventMapper {
   rateLimit: SDKRateLimitInfo | undefined;
 
   private readonly expectedTools: string[];
+  /** The person chose to pay with their own API key (set in the environment as ANTHROPIC_API_KEY). */
+  private readonly ownApiKey: boolean;
   private blocks = new Map<number, OpenBlock>();
   private messageId = "";
   private messageSeq = 0;
   private readonly streamedMessageIds = new Set<string>();
   private rateLimited = false;
 
-  constructor(options: { expectedTools: string[] }) {
+  constructor(options: { expectedTools: string[]; ownApiKey?: boolean }) {
     this.expectedTools = options.expectedTools;
+    this.ownApiKey = options.ownApiKey ?? false;
   }
 
   map(message: SDKMessage): HarnessEvent[] {
@@ -179,7 +182,9 @@ export class ClaudeEventMapper {
       this.sessionId = message.session_id;
       events.push({ type: "session", sessionId: message.session_id });
     }
-    if (message.apiKeySource && message.apiKeySource !== "none") {
+    // Only the key the person gave mlch may bill; any other source (a helper, a Console login) still stops the turn.
+    const ownKey = this.ownApiKey && message.apiKeySource === "ANTHROPIC_API_KEY";
+    if (message.apiKeySource && message.apiKeySource !== "none" && !ownKey) {
       this.fatal = true;
       events.push(
         this.error(

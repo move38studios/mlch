@@ -802,7 +802,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     let stderrTail = "";
     /** A rate-limit report this turn said extra usage could pay (whether or not it did yet). */
     let extraUsageSeen = false;
-    const mapper = new ClaudeEventMapper({ expectedTools: params.tools.definitions.map((d) => d.name) });
+    const mapper = new ClaudeEventMapper({ expectedTools: params.tools.definitions.map((d) => d.name), ownApiKey: !!apiKey });
     const q = deps.query({
       prompt: input(),
       options: buildClaudeOptions({
