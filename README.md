@@ -4,7 +4,7 @@
 
 You talk or type; mlch maps it onto an endless canvas while you speak, looks things up, connects it to what you explored before, and makes the deck when you ask. The AI runs on your own Claude Code or Codex subscription.
 
-**Early release (0.2.2).** Expect rough edges. Download: [mlch.app](https://mlch.app). MIT licensed.
+**Early release (0.2.3).** Expect rough edges. Download: [mlch.app](https://mlch.app). MIT licensed.
 
 This README is for building, forking, self-hosting and contributing. CLAUDE.md describes the architecture in detail (it is also what coding agents working on mlch read first).
 
