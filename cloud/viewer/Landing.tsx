@@ -34,21 +34,30 @@ const ai = (node: MulchNode): MulchNode => ({ ...node, origin: "agent:landing" }
 
 const NODES: MulchNode[] = [
   // The logo, as a picture on the canvas (served from /brand by the Worker at the asset address image cards use).
-  card("logo", "image", 150, -270, "Say \u201cmulch\u201d.", { assetId: "icon.svg", w: 120, transparent: true }),
+  card("logo", "image", 150, -340, "Say \u201cmulch\u201d.", { assetId: "icon.svg", w: 120, transparent: true }),
   card("about", "idea", 0, 0, "A partner to think with, and a live canvas for every project, call and idea. While you talk, it maps, researches and connects what you say to everything you’ve explored before. Then it makes the deck.", { title: "A whiteboard that thinks with you", w: 420 }),
   card("note", "note", -330, -20, "An AI app for non-linear thinkers."),
-  ai(card("talk", "idea", 520, -180, "You talk or type; mlch maps it onto the canvas while you speak.")),
+  ai(card("talk", "idea", 520, -150, "You talk or type; mlch maps it onto the canvas while you speak.")),
   ai(card("lookup", "idea", 560, 20, "It looks things up as you go: sources, examples, definitions, the questions worth asking.")),
   ai(card("connect", "idea", 520, 230, "It spots where today’s thinking meets what you explored before, in other canvases and in your notes, and draws the line.")),
   ai(card("make", "idea", 80, 330, "Ask for a deck, a document or an interactive page, and share it with a link.")),
   ai(card("calls", "idea", -300, 260, "On calls it listens to both sides and keeps the notes.")),
+  // DRAFT wording below (preview for George; his words replace it).
+  card("runs-on", "image", -420, -310, "Your own Claude or ChatGPT plan, or an API key. mlch sells no AI.", { assetId: "stack.svg", w: 250, transparent: true, title: "Runs on your Claude Code or Codex" }),
+  card("open", "link", -400, 470, "MIT license. Share links from your own server for free, or from mlch.app for $12 a year.", { url: "https://github.com/move38studios/mlch", title: "Free and open source", w: 300 }),
+  card("local", "idea", 580, -350, "Speech is transcribed on your Mac. Your canvases and notes are indexed and searched on it too.", { title: "On your Mac", w: 280 }),
+  card("obsidian", "idea", 560, 450, "Link your Obsidian vault or any folder of notes. mlch reads them in place, with their links and tags.", { title: "Your notes, where they are", w: 280 }),
 ];
 
-const EDGES: MulchEdge[] = ["talk", "lookup", "connect", "make", "calls"].map((target) => ({ id: `e-${target}`, source: "about", target, origin: "agent:landing", createdAt: at }));
+const EDGES: MulchEdge[] = [
+  ...["talk", "lookup", "connect", "make", "calls"].map((target) => ({ id: `e-${target}`, source: "about", target, origin: "agent:landing", createdAt: at })),
+  { id: "e-obsidian", source: "connect", target: "obsidian", origin: "user", createdAt: at },
+  { id: "e-open", source: "make", target: "open", origin: "user", createdAt: at },
+];
 
 /** On a phone the same cards go in one column, so the canvas can open zoomed in at the top and be scrolled. */
-const PHONE_ORDER = ["logo", "note", "about", "talk", "lookup", "connect", "make", "calls"];
-const PHONE_Y: Record<string, number> = { logo: -230, note: 0, about: 220, talk: 540, lookup: 720, connect: 920, make: 1140, calls: 1320 };
+const PHONE_ORDER = ["logo", "note", "runs-on", "about", "talk", "lookup", "connect", "obsidian", "make", "open", "calls", "local"];
+const PHONE_Y: Record<string, number> = { logo: -230, note: 0, "runs-on": 200, about: 600, talk: 920, lookup: 1100, connect: 1300, obsidian: 1520, make: 1760, open: 1940, calls: 2180, local: 2360 };
 
 function seed(phone: boolean): Mulch {
   const nodes = phone ? NODES.map((node) => ({ ...node, x: node.kind === "note" ? 20 : node.id === "logo" ? 95 : 0, y: PHONE_Y[node.id] ?? PHONE_ORDER.indexOf(node.id) * 200, w: node.id === "logo" ? 110 : 300 })) : NODES;
