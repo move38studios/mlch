@@ -22,7 +22,7 @@ export async function GET() {
 /** Folders too broad to be useful context: linking one asks first. */
 function tooBroad(folder: string): boolean {
   const home = os.homedir();
-  const broad = ["/", home, ...["Documents", "Downloads", "Desktop", "Library", "Pictures", "Movies", "Music", "dev", "Developer", "code", "src", "Projects"].map((name) => path.join(home, name))];
+  const broad = ["/", home, ...["Documents", "Downloads", "Desktop", "Library", "Pictures", "Movies", "Music", "dev", "Developer", "code", "src", "Projects"].map((name) => path.join(/*turbopackIgnore: true*/ home, name))];
   return broad.includes(folder) || folder === path.parse(folder).root || folder.startsWith("/Volumes/") && folder.split("/").length <= 3;
 }
 
