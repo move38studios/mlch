@@ -29,8 +29,29 @@ function copyTree(from, to) {
   fs.cpSync(from, to, { recursive: true, verbatimSymlinks: true });
 }
 
+// Every file in the app writable by its owner. macOS's updater (Squirrel's ShipIt) changes each file of the new
+// app before it swaps it in, and stops with "Permission denied" on a read-only one, so the update never installs
+// (SwiftPM copies some resources read-only). Runs before signing; permissions are not part of the signature.
+function ownerWritable(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const file = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) continue;
+    const mode = fs.statSync(file).mode;
+    if (!(mode & 0o200)) fs.chmodSync(file, mode | 0o200);
+    if (entry.isDirectory()) ownerWritable(file);
+  }
+}
+
 exports.default = async function afterPack(context) {
-  const resources = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources');
+  const bundle = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+  try {
+    await pack(context, path.join(bundle, 'Contents', 'Resources'));
+  } finally {
+    ownerWritable(bundle);
+  }
+};
+
+async function pack(context, resources) {
   macBundle(path.join(resources, 'FluidAudio_FluidAudio.bundle'));
   const staged = path.join(context.packager.projectDir, 'build', 'app');
   const app = path.join(resources, 'app');
@@ -50,4 +71,4 @@ exports.default = async function afterPack(context) {
     }
   };
   copy(source, target);
-};
+}

@@ -108,7 +108,10 @@ if (!flag("--upload-only")) {
   const unzipped = fs.mkdtempSync(path.join(os.tmpdir(), "mlch-zip-"));
   run("ditto", ["-x", "-k", zip, unzipped]);
   expect("update zip", assessed(["-a", "-vv", "-t", "exec", path.join(unzipped, "mlch.app")]));
-  if (failures.length) throw new Error(`Not released, Gatekeeper refused: ${failures.join(", ")}.`);
+  // macOS's updater stops on a read-only file in the new app (build/after-pack.cjs makes them writable).
+  const readOnly = read("find", [path.join(unzipped, "mlch.app"), "!", "-type", "l", "!", "-perm", "-u+w"]);
+  if (readOnly) failures.push(`update zip has read-only files, updates would not install: ${readOnly.split("\n").slice(0, 3).join(", ")}`);
+  if (failures.length) throw new Error(`Not released: ${failures.join(", ")}.`);
 }
 
 const feed = path.join(dist, "latest-mac.yml");
@@ -130,6 +133,13 @@ if (dmg) {
 const out = path.join(dist, `${channel}-mac.yml`);
 fs.writeFileSync(out, yml);
 put(`${channel}-mac.yml`, out);
+// Beta follows latest when it has nothing newer, so turning Beta updates on never finds an empty feed.
+if (channel === "latest") {
+  const beta = await fetch("https://mlch.app/releases/mac/beta-mac.yml", { cache: "no-store" }).then((r) => (r.ok ? r.text() : ""));
+  const betaVersion = beta.match(/version: (\S+)/)?.[1];
+  const older = (a, b) => a.split(".").map(Number).some((n, i, all) => all.slice(0, i).every((m, j) => m === Number(b.split(".")[j])) && n < Number(b.split(".")[i]));
+  if (!betaVersion || older(betaVersion, version)) put("beta-mac.yml", out);
+}
 // What clients will read now.
 const served = await fetch(`https://mlch.app/releases/mac/${channel}-mac.yml`, { cache: "no-store" }).then((r) => r.text());
 if (!served.includes(`version: ${version}`)) throw new Error(`mlch.app still serves ${served.match(/version: (\S+)/)?.[1]} on ${channel}.`);

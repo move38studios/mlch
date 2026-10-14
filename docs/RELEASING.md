@@ -9,7 +9,7 @@
 - The update zip unpacks to the same notarized app.
 - `latest-mac.yml` goes up last, so no one sees a release before all of its files are there.
 
-The release script refuses to upload anything unless Gatekeeper (`spctl`) accepts the app, the DMG and the app inside the zip as "Notarized Developer ID", and `stapler validate` passes for the app and the DMG.
+The release script refuses to upload anything unless Gatekeeper (`spctl`) accepts the app, the DMG and the app inside the zip as "Notarized Developer ID", `stapler validate` passes for the app and the DMG, and no file in the update is read-only (macOS's updater cannot install an app with a read-only file in it; 0.2.1 and 0.2.2 had two).
 
 ## Before
 
@@ -37,7 +37,7 @@ If an upload fails partway: `npm run release -- --upload-only`. It re-runs the G
 1. Download from https://mlch.app/download in a browser, open the DMG, drag the app to Applications and open it. Expect one "downloaded from the internet" prompt, nothing else.
 2. Check the download from the shell:
    `spctl -a -vv -t open --context context:primary-signature mlch-<x.y.z>-arm64.dmg` says accepted, Notarized Developer ID.
-3. Open the previous version and let it update (it checks at start; reopen once if needed). After the restart, About shows the new version.
+3. Open the previous version and let it update: Restart to Update, then mlch → About shows the new version. This is the only check that the update really installs. If it comes back as the old version, `~/Library/Caches/app.mlch.mac.ShipIt/ShipIt_stderr.log` says why.
 4. If the landing page or the Worker changed: in `cloud/`, `npm run deploy`.
 5. Check the GitHub release page has the DMG and the notes.
 
