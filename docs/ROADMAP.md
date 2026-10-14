@@ -13,6 +13,11 @@ Order agreed 2026-10-13: **docs/PLAN-3.md**, a small public release (fixes from 
 1. **Home screen.** The full logo on the empty screen (centred, the scribbles and lettering), the small wordmark top-left once there is a list. The empty screen as one clear start (New, or straight into a new mulch with the mic ready, tied to onboarding). Whether mlch needs a tagline at all (in the app: probably not; on mlch.app: maybe). Wording from George.
 2. **Connectors.** The person's own MCP servers, opt-in, read-only by default, approval cards for actions. Today the harness turns them off on purpose (`settingSources: []`; Codex MCP servers disabled).
 
+## When the problem shows up
+
+- **Mulches from a newer mlch in an older build.** Official builds, forks and builds from source can open the same library. If a release changes the mulch format (always with a migration), an older build or a fork may misread a migrated mulch. Then: write the format version in each mulch and open a newer one read-only in an older build, saying it was saved by a newer mlch. (Noted 2026-10-14.)
+- **Forks and mlch.app sharing.** Forks share through mlch.app unless they set their own server. The Worker accepts older app versions and can answer "Update mlch to keep sharing". If forks start breaking shares (other ops, other formats), require a version or build header and refuse unknown ones with a plain message. (Noted 2026-10-14.)
+
 ## Waiting for more testing
 
 - **Marks.** Headings (areas of the canvas) moved into plan 2 (M3). Marks the person puts on cards (important, decided, open) that the AI respects: maybe. Decorative stickers like briefbuster's: no, they fight the minimal look; the scribble is our one playful element.

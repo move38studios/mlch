@@ -59,6 +59,8 @@ const commit = read("git", ["rev-parse", "HEAD"]);
 if (!flag("--upload-only")) {
   if (read("git", ["status", "--porcelain"])) throw new Error("Uncommitted changes: commit first, so the release matches a commit.");
   if (read("git", ["tag", "--list", `v${version}`])) throw new Error(`v${version} is already released: raise the version in package.json.`);
+  // The official app updates from mlch.app: a feed address in the environment would be built into it (build.json).
+  if (process.env.MLCH_UPDATE_URL) throw new Error("Unset MLCH_UPDATE_URL: official builds update from mlch.app.");
   if (!process.env.APPLE_KEYCHAIN_PROFILE) throw new Error("Set APPLE_KEYCHAIN_PROFILE (xcrun notarytool store-credentials) so the release is notarized.");
   run("npm", ["run", "check"]);
   run("npm", ["run", "dist"], { env: { ...process.env, MLCH_OFFICIAL: "1" } });

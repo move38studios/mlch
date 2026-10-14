@@ -41,9 +41,15 @@ npm run check            # typecheck, lint, tests
 npm run dist:unsigned    # a packaged app in dist/mac-arm64/
 ```
 
-A build from source shows as "mlch dev", keeps its own settings and saved keys, and never updates itself (official builds update from mlch.app). macOS asks you to allow an unsigned app the first time.
+A build from source shows as "mlch dev" and keeps its own settings and saved keys, so it can sit beside the official app. macOS asks you to allow an unsigned app the first time.
 
-Forks: set your own update feed with `MLCH_UPDATE_URL`, your own sharing server in Settings, and your own source link with `MLCH_SOURCE_URL` when building `cloud/`.
+### Updates in your own build
+
+- **Official builds** (from mlch.app) download updates in the background and install them on restart. Settings → Updates can turn automatic downloads off.
+- **A build from source never installs our updates.** macOS only installs an update signed by the same developer as the app. Instead, it tells you when a new official version is out and links to the release on GitHub. Turn that off in Settings → Updates.
+- **Your own updates:** sign your builds with your own Developer ID (`identity` in electron-builder.yml) and build with `MLCH_UPDATE_URL=https://… npm run dist`. Point it at a folder on any web server that holds `latest-mac.yml` and the zips electron-builder makes. Your app then updates from there the way the official one does from mlch.app. `scripts/release.mjs` shows the official steps (notarizing, checks, upload order).
+
+Forks can also set their own sharing server in Settings, and their own source link with `MLCH_SOURCE_URL` when building `cloud/`.
 
 ## Run your own sharing server
 
