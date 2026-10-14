@@ -224,6 +224,13 @@ export function Settings() {
     void loadSettings();
     void loadStatus();
   }, [loadSettings, loadStatus]);
+  // A CLI still being found or downloaded (right after launch): ask again until it settles.
+  const settling = !!harnesses?.some((h) => /^(Getting .* ready|Downloading )/.test(h.problem ?? ""));
+  useEffect(() => {
+    if (!settling) return;
+    const timer = setInterval(() => void loadStatus(), 2000);
+    return () => clearInterval(timer);
+  }, [settling, loadStatus]);
   // Opened at a section (e.g. /settings#sharing from the Share menu): scroll to it once the page has its content.
   const loaded = !!view;
   useEffect(() => {
