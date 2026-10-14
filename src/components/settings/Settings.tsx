@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { UpdatesStatus } from "@/components/desktop/Updates";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
@@ -468,10 +469,10 @@ export function Settings() {
             {libraryError && <p className="mt-1.5 text-[13px] text-danger">{libraryError}</p>}
           </Section>
         )}
+        <Section title="Updates" id="updates">
+          <UpdatesStatus build={view?.build} />
+        </Section>
         <Section title="Diagnostics">
-          <p className="text-[13px] text-ink-3 mb-3 tabular-nums">
-            {view ? `Version ${view.build.version}${view.build.commit ? ` (${view.build.commit})` : ""}${view.build.official ? "" : view.desktop ? ", built from source" : ""}` : ""}
-          </p>
           <div className="flex items-center gap-2">
             <button
               onClick={async () => {

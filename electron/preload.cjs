@@ -27,6 +27,20 @@ contextBridge.exposeInMainWorld('mlchDesktop', {
     ipcRenderer.on('desktop:menu', listener);
     return () => ipcRenderer.removeListener('desktop:menu', listener);
   },
+  updates: {
+    state: () => ipcRenderer.invoke('desktop:update:state'),
+    check: () => ipcRenderer.invoke('desktop:update:check'),
+    restart: () => ipcRenderer.invoke('desktop:update:restart'),
+    download: () => ipcRenderer.invoke('desktop:update:download'),
+    setPrefs: (patch) => ipcRenderer.invoke('desktop:update:prefs', patch),
+    setChannel: (channel) => ipcRenderer.invoke('desktop:update:channel', channel),
+    seen: () => ipcRenderer.invoke('desktop:update:seen'),
+    onChange: (callback) => {
+      const listener = (_event, state) => callback(state);
+      ipcRenderer.on('desktop:update', listener);
+      return () => ipcRenderer.removeListener('desktop:update', listener);
+    },
+  },
   credentials: {
     status: () => ipcRenderer.invoke('desktop:credentials:status'),
     write: (value) => ipcRenderer.invoke('desktop:credentials:write', value),

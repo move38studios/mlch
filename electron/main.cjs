@@ -292,11 +292,58 @@ function setupScreenshots() {
 let updater;
 let updateReady = false;
 /**
- * Official builds update from mlch.app. A build from source has no feed, so it never
- * updates itself into ours (its own feed: MLCH_UPDATE_URL).
+ * What the page shows about updates: off (a build from source), idle, checking, downloading, ready, latest or
+ * error; the version being fetched or ready; and, on the first run after an update, the version and its notes.
  */
+let updateState = { status: 'off' };
+function setUpdateState(patch) {
+  updateState = { ...updateState, ...patch };
+  if (window && !window.isDestroyed()) window.webContents.send('desktop:update', { ...updateState, channel: updateChannel() });
+}
+/** The version that ran last, and the notes of a downloaded update (userData), for "Updated to …" once. */
+function noteUpdatedVersion() {
+  const lastFile = path.join(app.getPath('userData'), 'last-version');
+  const notesFile = path.join(app.getPath('userData'), 'update-notes.json');
+  let last;
+  try { last = fs.readFileSync(lastFile, 'utf8').trim(); } catch {}
+  if (last && last !== app.getVersion()) {
+    let notes;
+    try { const saved = JSON.parse(fs.readFileSync(notesFile, 'utf8')); if (saved.version === app.getVersion()) notes = saved.notes; } catch {}
+    updateState = { ...updateState, updated: { version: app.getVersion(), ...(notes ? { notes } : {}) } };
+  }
+  try { fs.writeFileSync(lastFile, app.getVersion()); fs.rmSync(notesFile, { force: true }); } catch {}
+}
+/** Release notes from the feed: a string, or electron-updater's list of { note }. */
+function notesText(info) {
+  const notes = info?.releaseNotes;
+  if (typeof notes === 'string') return notes.replace(/<[^>]+>/g, '').trim() || undefined;
+  if (Array.isArray(notes)) return notes.map((n) => String(n?.note ?? '').replace(/<[^>]+>/g, '').trim()).filter(Boolean).join('\n') || undefined;
+  return undefined;
+}
+/**
+ * Official builds update from mlch.app. A build from source never updates itself into ours: it installs updates
+ * only from its own feed (MLCH_UPDATE_URL when it was packaged, kept in build.json; the variable at run time also
+ * works), and otherwise only says when a new mlch is out (notify, below).
+ */
+function updateFeed() { return process.env.MLCH_UPDATE_URL || buildInfo.updateUrl || ''; }
 function updatesOn() {
-  return app.isPackaged && !process.env.MLCH_NO_UPDATES && (buildInfo.official || !!process.env.MLCH_UPDATE_URL);
+  return app.isPackaged && !process.env.MLCH_NO_UPDATES && (buildInfo.official || !!updateFeed());
+}
+/** A packaged build that cannot install updates: it checks mlch.app's feed and links to the release. */
+function notifyOnly() {
+  return app.isPackaged && !process.env.MLCH_NO_UPDATES && !updatesOn();
+}
+/** The person's choices (userData/update-prefs.json): download automatically (installing builds), tell me (the others), a version not to mention again. */
+function updatePrefsFile() { return path.join(app.getPath('userData'), 'update-prefs.json'); }
+function updatePrefs() {
+  let saved = {};
+  try { saved = JSON.parse(fs.readFileSync(updatePrefsFile(), 'utf8')); } catch {}
+  return { autoDownload: saved.autoDownload !== false, notify: saved.notify !== false, dismissed: typeof saved.dismissed === 'string' ? saved.dismissed : undefined };
+}
+function setUpdatePrefs(patch) {
+  const next = { ...updatePrefs(), ...patch };
+  try { fs.writeFileSync(updatePrefsFile(), JSON.stringify(next)); } catch (error) { log(`Update preferences not saved: ${error.message}`); }
+  return next;
 }
 /** "beta" or "latest" (the default), kept beside the app's other preferences. */
 function updateChannelFile() { return path.join(app.getPath('userData'), 'update-channel'); }
@@ -305,26 +352,72 @@ function updateChannel() {
 }
 function setUpdateChannel(channel) {
   fs.writeFileSync(updateChannelFile(), channel);
+  setUpdateState({});
   if (updater) {
     updater.channel = channel;
     void updater.checkForUpdates().catch(() => {});
-  }
+  } else if (notifyOnly()) void checkNotify();
   Menu.setApplicationMenu(buildMenu());
 }
+/** a.b.c newer than x.y.z (pre-release tags ignored). */
+function newerVersion(a, b) {
+  const parts = (v) => String(v).split('-')[0].split('.').map((n) => Number(n) || 0);
+  const [x, y] = [parts(a), parts(b)];
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
+}
+const RELEASES_PAGE = 'https://github.com/move38studios/mlch/releases';
+/** For builds that cannot install updates: is a newer official mlch out? */
+async function checkNotify() {
+  if (!notifyOnly()) return updateState;
+  setUpdateState({ status: 'checking' });
+  try {
+    const response = await fetch(`https://mlch.app/releases/mac/${updateChannel()}-mac.yml`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`mlch.app answered ${response.status}`);
+    const latest = (await response.text()).match(/^version: (\S+)/m)?.[1];
+    if (latest && newerVersion(latest, app.getVersion())) setUpdateState({ status: 'available', version: latest, url: `${RELEASES_PAGE}/tag/v${latest}`, checkedAt: Date.now() });
+    else setUpdateState({ status: 'latest', version: undefined, url: undefined, checkedAt: Date.now() });
+  } catch (error) {
+    setUpdateState({ status: 'error', error: String(error?.message ?? error).split('\n')[0] });
+  }
+  return updateState;
+}
 function startUpdates() {
+  const prefs = updatePrefs();
+  if (notifyOnly()) {
+    setUpdateState({ status: 'idle', mode: 'notify', notify: prefs.notify, dismissed: prefs.dismissed });
+    const check = () => { if (updatePrefs().notify) void checkNotify(); };
+    check();
+    setInterval(check, 24 * 60 * 60 * 1000).unref();
+    return;
+  }
   if (!updatesOn()) return;
   const { autoUpdater } = require('electron-updater');
   updater = autoUpdater;
-  if (process.env.MLCH_UPDATE_URL) autoUpdater.setFeedURL({ provider: 'generic', url: process.env.MLCH_UPDATE_URL });
+  if (updateFeed()) autoUpdater.setFeedURL({ provider: 'generic', url: updateFeed() });
   // Each channel has its own feed file (beta-mac.yml, latest-mac.yml); never down to an older version.
   autoUpdater.channel = updateChannel();
   autoUpdater.allowDowngrade = false;
+  // Downloads quietly unless the person chose to be asked (Settings → Updates).
+  autoUpdater.autoDownload = prefs.autoDownload;
   // One line per problem: the updater's own errors carry whole HTTP responses.
   const firstLine = (value) => String(value?.message ?? value).split('\n')[0];
   autoUpdater.logger = { info: log, warn: (value) => log(firstLine(value)), error: (value) => log(firstLine(value)), debug: () => {} };
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('update-downloaded', () => {
+  setUpdateState({ status: 'idle', mode: 'install', autoDownload: prefs.autoDownload, dismissed: prefs.dismissed });
+  autoUpdater.on('checking-for-update', () => { if (!updateReady && updateState.status !== 'downloading') setUpdateState({ status: 'checking' }); });
+  autoUpdater.on('update-not-available', () => { if (!updateReady) setUpdateState({ status: 'latest', version: undefined, checkedAt: Date.now() }); });
+  autoUpdater.on('update-available', (info) => {
+    if (updateReady) return;
+    setUpdateState(autoUpdater.autoDownload ? { status: 'downloading', version: info?.version, percent: 0 } : { status: 'available', version: info?.version, checkedAt: Date.now() });
+  });
+  autoUpdater.on('download-progress', (progress) => { if (!updateReady) setUpdateState({ status: 'downloading', percent: Math.round(progress?.percent ?? 0) }); });
+  autoUpdater.on('error', (error) => { if (!updateReady) setUpdateState({ status: 'error', error: firstLine(error) }); });
+  autoUpdater.on('update-downloaded', (info) => {
     updateReady = true;
+    setUpdateState({ status: 'ready', version: info?.version });
+    // Shown once after the restart, with "Updated to …".
+    try { fs.writeFileSync(path.join(app.getPath('userData'), 'update-notes.json'), JSON.stringify({ version: info?.version, notes: notesText(info) })); } catch {}
     Menu.setApplicationMenu(buildMenu());
     void refreshTray();
   });
@@ -332,7 +425,22 @@ function startUpdates() {
   void check();
   setInterval(check, 6 * 60 * 60 * 1000).unref();
 }
+/** An update the person chose to fetch (automatic downloads off). */
+function downloadUpdate() {
+  if (!updater || updateReady || updateState.status !== 'available') return;
+  setUpdateState({ status: 'downloading', percent: 0 });
+  updater.downloadUpdate().catch((error) => setUpdateState({ status: 'error', error: String(error?.message ?? error).split('\n')[0] }));
+}
 async function checkForUpdatesNow() {
+  if (notifyOnly()) {
+    const state = await checkNotify();
+    if (state.status === 'available') {
+      const { response } = await dialog.showMessageBox({ message: `mlch ${state.version} is out.`, detail: 'This build does not update itself.', buttons: ['View release', 'OK'], defaultId: 0, cancelId: 1 });
+      if (response === 0) openExternal(state.url);
+    } else if (state.status === 'latest') await dialog.showMessageBox({ message: `mlch ${app.getVersion()} is the latest version.`, buttons: ['OK'] });
+    else await dialog.showMessageBox({ type: 'warning', message: 'Could not check for updates.', detail: state.error ?? '', buttons: ['OK'] });
+    return;
+  }
   if (!updater) {
     await dialog.showMessageBox({ message: 'Updates are off in this build.', buttons: ['OK'] });
     return;
@@ -340,14 +448,31 @@ async function checkForUpdatesNow() {
   try {
     const result = await updater.checkForUpdates();
     const next = result?.updateInfo?.version;
-    if (!next || next === app.getVersion()) await dialog.showMessageBox({ message: `mlch ${app.getVersion()} is the latest version.`, buttons: ['OK'] });
-    else await dialog.showMessageBox({ message: `mlch ${next} is downloading. Restart to update when it is ready.`, buttons: ['OK'] });
+    if (!next || !newerVersion(next, app.getVersion())) await dialog.showMessageBox({ message: `mlch ${app.getVersion()} is the latest version.`, buttons: ['OK'] });
+    else if (updateReady) await dialog.showMessageBox({ message: `mlch ${next} is ready. Restart to update.`, buttons: ['OK'] });
+    else if (!updater.autoDownload) {
+      const { response } = await dialog.showMessageBox({ message: `mlch ${next} is out.`, buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1 });
+      if (response === 0) downloadUpdate();
+    } else await dialog.showMessageBox({ message: `mlch ${next} is downloading. Restart to update when it is ready.`, buttons: ['OK'] });
   } catch (error) {
     await dialog.showMessageBox({ type: 'warning', message: 'Could not check for updates.', detail: String(error?.message ?? error).split('\n')[0], buttons: ['OK'] });
   }
 }
 function restartToUpdate() {
-  if (updateReady) updater?.quitAndInstall();
+  if (!updateReady) return;
+  // quitAndInstall closes the windows before before-quit, which then cannot ask: ask here.
+  if (jobActivity.working > 0 && !process.env.MLCH_NO_QUIT_PROMPT) {
+    const count = jobActivity.working;
+    const response = dialog.showMessageBoxSync(window && !window.isDestroyed() ? window : undefined, {
+      type: 'question',
+      message: count === 1 ? '1 job is running.' : `${count} jobs are running.`,
+      detail: 'Restarting stops them. They can be retried later.',
+      buttons: ['Restart', 'Cancel'], defaultId: 1, cancelId: 1,
+    });
+    if (response !== 0) return;
+  }
+  quitConfirmed = true;
+  updater?.quitAndInstall();
 }
 
 // mlch: the menu bar. New, New Call, the last few mulches, and the call being listened to.
@@ -654,6 +779,32 @@ function registerBridge() {
   ipcMain.handle('desktop:backend-state', guarded(() => backend.online()));
   ipcMain.handle('desktop:restart-backend', guarded(() => startWithRetry()));
   ipcMain.handle('desktop:open-logs', guarded(() => openLogs()));
+  ipcMain.handle('desktop:update:state', guarded(() => ({ ...updateState, channel: updateChannel() })));
+  ipcMain.handle('desktop:update:check', guarded(async () => {
+    if (notifyOnly()) return checkNotify();
+    if (!updater) return updateState;
+    await updater.checkForUpdates().catch(() => {});
+    return updateState;
+  }));
+  ipcMain.handle('desktop:update:download', guarded(() => downloadUpdate()));
+  ipcMain.handle('desktop:update:prefs', guarded((patch) => {
+    const next = setUpdatePrefs({
+      ...(typeof patch?.autoDownload === 'boolean' ? { autoDownload: patch.autoDownload } : {}),
+      ...(typeof patch?.notify === 'boolean' ? { notify: patch.notify } : {}),
+      ...(typeof patch?.dismissed === 'string' ? { dismissed: patch.dismissed } : {}),
+    });
+    if (updater) {
+      updater.autoDownload = next.autoDownload;
+      // Turned on with an update waiting: fetch it now.
+      if (next.autoDownload && updateState.status === 'available') downloadUpdate();
+    }
+    setUpdateState({ autoDownload: next.autoDownload, notify: next.notify, dismissed: next.dismissed });
+    if (notifyOnly() && patch?.notify === true) void checkNotify();
+    return updateState;
+  }));
+  ipcMain.handle('desktop:update:restart', guarded(() => restartToUpdate()));
+  ipcMain.handle('desktop:update:channel', guarded((channel) => { setUpdateChannel(channel === 'beta' ? 'beta' : 'latest'); return updateChannel(); }));
+  ipcMain.handle('desktop:update:seen', guarded(() => { const { updated: _seen, ...rest } = updateState; updateState = rest; }));
   ipcMain.handle('desktop:library:choose', guarded(async () => {
     try { return await chooseLibrary(); } catch (error) { log(error); return { ok: false, error: String(error?.message ?? error) }; }
   }));
@@ -689,8 +840,8 @@ function buildMenu() {
   return Menu.buildFromTemplate([
     { label: app.name, submenu: [
       { role: 'about' },
-      { label: 'Check for Updates…', enabled: updatesOn(), click: () => void checkForUpdatesNow() },
-      ...(updatesOn() ? [{ label: 'Beta Updates', type: 'checkbox', checked: updateChannel() === 'beta', click: (item) => setUpdateChannel(item.checked ? 'beta' : 'latest') }] : []),
+      { label: 'Check for Updates…', enabled: updatesOn() || notifyOnly(), click: () => void checkForUpdatesNow() },
+      ...(updatesOn() || notifyOnly() ? [{ label: 'Beta Updates', type: 'checkbox', checked: updateChannel() === 'beta', click: (item) => setUpdateChannel(item.checked ? 'beta' : 'latest') }] : []),
       ...(updateReady ? [{ label: 'Restart to Update', click: restartToUpdate }] : []),
       { type: 'separator' },
       { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => void openPage('/settings') },
@@ -839,6 +990,7 @@ else {
     // About: the version, and which commit it was built from (and whether officially).
     app.setAboutPanelOptions({ applicationVersion: buildInfo.version, version: [buildInfo.commit, buildInfo.official ? '' : app.isPackaged ? 'built from source' : 'development'].filter(Boolean).join(', '), copyright: '© 2026 move38 B.V.' });
     setupScreenshots();
+    noteUpdatedVersion();
     if (await startWithRetry()) await createWindow();
     createTray();
     startUpdates();

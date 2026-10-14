@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FOCUS_SEARCH } from "@/components/desktop/SearchKey";
+import { UpdateNotice } from "@/components/desktop/Updates";
 import { Archive, ArchiveRestore, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { Scribble, Wordmark } from "@/components/brand/Scribble";
 import Link from "next/link";
@@ -147,8 +148,9 @@ export function Home() {
 
   return (
     <main className="min-h-full flex flex-col">
-      <header className="drag h-[52px] shrink-0 pl-20 pr-3 flex items-center">
+      <header className="drag h-[52px] shrink-0 pl-20 pr-3 flex items-center gap-2">
         <div className="flex-1" />
+        <UpdateNotice />
         <Link
           href="/settings"
           className="p-2 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink"
