@@ -69,6 +69,7 @@ const COMMAND = `Your job now: carry out the person's instruction, given in the 
 - Never reword the person's items while doing something else (a write-up, an arrangement).
 - If part of the instruction cannot be done, do the rest and say why with \`tell\`, with what would work instead. If the instruction is unclear in a way that matters, ask one question with \`tell\` instead of guessing. Spoken instructions are transcribed speech: one that trails off is usually finished by what they went on to say, or clear enough from the canvas; act on the obvious reading rather than asking.
 - Read get_mulch first if the canvas in the message is cut short.
+- If \`set_title\` is available, the canvas has no name yet: name it after what the instruction is about.
 - Finish with \`say\`: one short line on what you did.`;
 
 const CALL = `Your job now: capture a conversation as it happens. The message has the last half minute or so of a call: each line is [me] (the person using mlch) or [them] (the others on the call), with the call so far for context.

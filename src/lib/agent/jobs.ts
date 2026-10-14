@@ -1073,7 +1073,7 @@ export function submitCommand(mulchId: string, instruction: string, inputIds?: s
     inputIds,
     retry: { kind: "command", input: instruction },
     async run(job, signal) {
-      await getMulch(mulchId); // a missing mulch fails the job here
+      const mulch = await getMulch(mulchId); // a missing mulch fails the job here
       await runTurn({
         mulchId,
         job,
@@ -1083,7 +1083,8 @@ export function submitCommand(mulchId: string, instruction: string, inputIds?: s
         prompt:
           `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\n${conversationBlock(await callTranscript(mulchId))}` +
           `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
-        tools: withKeyTools(COMMAND_TOOLS),
+        // An instruction can be the first thing on a canvas: it names it then.
+        tools: withKeyTools([...COMMAND_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])]),
         // The person asked: every linked folder, including ones kept for when they ask.
         sources: "all",
         brief: instruction,
