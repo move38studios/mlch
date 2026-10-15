@@ -1093,32 +1093,45 @@ onAfterApply((mulchId, batch) => {
 
 /* ── telling the person ─────────────────────────────────────────── */
 
-/** Jobs already announced, so each finish is announced once. */
+/** Jobs (and connector cards) already announced, so each is announced once. */
 const announced = new Set<string>();
+/** Jobs that ran in this process: an old job touched again (seen, retried) is never announced. */
+const ranHere = new Set<string>();
 let activityTimer: ReturnType<typeof setTimeout> | undefined;
 
+function notify(mulchId: string, note: { ids?: string[]; title: string; body?: string; failed?: boolean }): void {
+  void getMulch(mulchId)
+    .then((mulch) => desktopRequest("notify", { mulchId, ids: note.ids ?? [], title: note.title, body: note.body ?? mulch.title, failed: !!note.failed }))
+    .catch(() => {});
+}
+
 /**
- * A finished long job, or an instruction that took a while, is announced with
- * a notification (main shows it only when the person is not looking at that
- * mulch). The Dock badge counts finished results not yet seen, and main asks
- * before quitting while work is running.
+ * The person's own work (instructions, making, research, folders, call notes) is
+ * announced with a notification when it finishes, done or failed, however long it
+ * took; so is a connector card waiting for their answer. Main shows it only when
+ * the person is not looking at that mulch. Capture and enrichment never notify.
+ * The Dock badge counts finished results not yet seen, and main asks before
+ * quitting while work is running.
  */
 onJobChanged((mulchId, job) => {
+  for (const approval of job.approvals ?? []) {
+    const key = `approval:${approval.id}`;
+    if (announced.has(key)) continue;
+    announced.add(key);
+    notify(mulchId, { title: `${approval.server.replace(/^claude\.ai\s+/i, "")}: ${approval.tool.replace(/_/g, " ")}` });
+  }
+  if (job.state === "running") ranHere.add(job.id);
   const finished = job.state === "done" || job.state === "failed";
-  const took = (job.finishedAt ?? 0) - (job.startedAt ?? Date.now());
-  if (finished && job.unseen && !announced.has(job.id) && (job.lane === "long" || took > 20_000)) {
+  if (finished && job.retry && ranHere.has(job.id) && !announced.has(job.id)) {
+    ranHere.delete(job.id);
     announced.add(job.id);
-    void getMulch(mulchId)
-      .then((mulch) =>
-        desktopRequest("notify", {
-          mulchId,
-          ids: job.resultIds ?? [],
-          title: job.label,
-          body: job.state === "failed" ? (job.error ?? "") : mulch.title,
-          failed: job.state === "failed",
-        }),
-      )
-      .catch(() => {});
+    const message = job.message && !job.message.dismissed ? shorten(job.message.text.replace(/\s+/g, " "), 160) : undefined;
+    notify(mulchId, {
+      ids: job.resultIds,
+      title: job.label,
+      body: job.state === "failed" ? (job.error ?? "") : message,
+      failed: job.state === "failed",
+    });
   }
   clearTimeout(activityTimer);
   activityTimer = setTimeout(() => {
