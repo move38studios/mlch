@@ -225,7 +225,7 @@ function SystemAudio({ available }: { available: boolean }) {
     <Card>
       <div className="flex items-center gap-3">
         <span className="text-[15px] font-semibold flex-1">Call audio</span>
-        {/* macOS has no public way to read this permission (a denied tap is silent), so no status is shown. */}
+        {/* macOS has no public way to read this permission; the helper asks TCC and refuses when it is denied, so a denial shows as the error. */}
         {state !== "done" && (
           <button onClick={() => void ask()} disabled={!available || state === "asking"} className="h-8 px-3.5 rounded-lg bg-amber text-ink text-[13px] font-semibold disabled:bg-paper-2 disabled:text-ink-3">
             {state === "asking" ? "Asking" : "Allow"}

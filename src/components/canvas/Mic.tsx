@@ -82,6 +82,9 @@ export function stopMic() {
   useVoice.setState({ recording: false, level: 0, speaking: false });
 }
 
+const SILENT_MS = 60_000;
+const NO_SYSTEM_SOUND = "No sound from the Mac in the first minute. If others are talking, turn on mlch in System Settings > Privacy & Security > Screen & System Audio Recording, under System Audio Recording Only.";
+
 let levelTimer: ReturnType<typeof setInterval> | undefined;
 let menuListening = false;
 
@@ -107,10 +110,20 @@ export async function startCall(mulchId: string): Promise<void> {
   if (body.audioError) notify(`Only the microphone: ${body.audioError}`);
   if (!(await startMic(mulchId))) return void stopCall();
   clearInterval(levelTimer);
+  // Without System Audio Recording a capture hears only digital silence, so a
+  // first minute of exactly nothing gets one notice.
+  const startedAt = Date.now();
+  let heard = false;
   levelTimer = setInterval(async () => {
     const state = (await fetch(`/api/mulches/${mulchId}/call`).then((r) => r.json()).catch(() => undefined)) as { call?: boolean; capture?: { peak: number } | null } | undefined;
     if (state && !state.call) return void stopCall(false);
-    useVoice.setState({ systemLevel: Math.min(1, (state?.capture?.peak ?? 0) * 3) });
+    const peak = state?.capture?.peak ?? 0;
+    useVoice.setState({ systemLevel: Math.min(1, peak * 3) });
+    if (peak > 0) heard = true;
+    else if (!heard && state?.capture && Date.now() - startedAt > SILENT_MS) {
+      heard = true;
+      notify(NO_SYSTEM_SOUND);
+    }
   }, 1000);
 }
 

@@ -6,7 +6,8 @@ import Foundation
 /// The Mac's sound output (everything, or some apps) through a Core Audio
 /// process tap (macOS 14.2+), resampled to 16 kHz mono and cut into chunks at
 /// pauses. Needs the "System Audio Recording Only" permission; without it the
-/// tap delivers silence, which shows as a level of zero.
+/// tap delivers silence, which shows as a level of zero (AudioPermission
+/// refuses a start when it is denied; the page notices a silent first minute).
 public final class ProcessTap: @unchecked Sendable {
     public enum Target: Sendable, Equatable {
         case all
@@ -112,6 +113,15 @@ public final class ProcessTap: @unchecked Sendable {
     }
 
     private func receive(_ data: UnsafePointer<AudioBufferList>) {
+        // The capture device lists the output device's own inputs first (an
+        // audio interface has some) and the tap's stream last: read only that.
+        let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: data))
+        guard let last = buffers.last else { return }
+        var single = AudioBufferList(mNumberBuffers: 1, mBuffers: last)
+        withUnsafePointer(to: &single) { convert($0) }
+    }
+
+    private func convert(_ data: UnsafePointer<AudioBufferList>) {
         guard let inputFormat, let converter,
               let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, bufferListNoCopy: data, deallocator: nil),
               buffer.frameLength > 0 else { return }

@@ -50,6 +50,7 @@ public final class Helper: @unchecked Sendable {
                 "loaded": await transcriber.loaded,
                 "downloading": lock.withLock { downloading != nil },
                 "sessions": tapping,
+                "audioCapture": AudioPermission.check().rawValue,
                 "osSupportsTap": ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 14, minorVersion: 2, patchVersion: 0)),
             ]
         case "download-model":
@@ -90,6 +91,8 @@ public final class Helper: @unchecked Sendable {
         }
     }
 
+    static let noPermission = "mlch can't hear the Mac's sound. Turn on mlch in System Settings > Privacy & Security > Screen & System Audio Recording, under System Audio Recording Only."
+
     static func target(_ value: Any?) throws -> ProcessTap.Target {
         if value == nil || (value as? String) == "all" { return .all }
         if let pid = value as? Int { return .pid(pid_t(pid)) }
@@ -99,6 +102,8 @@ public final class Helper: @unchecked Sendable {
 
     private func startTap(_ message: [String: Any]) throws -> [String: Any] {
         let target = try Self.target(message["target"])
+        // Denied means the tap would only ever hear silence. Unknown goes ahead: starting it asks.
+        if AudioPermission.check() == .denied { throw HelperError(Self.noPermission) }
         let session = (message["session"] as? String).flatMap { $0.range(of: #"^[\w-]{1,64}$"#, options: .regularExpression) != nil ? $0 : nil } ?? UUID().uuidString
         let dir = chunkRoot.appendingPathComponent(session, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
