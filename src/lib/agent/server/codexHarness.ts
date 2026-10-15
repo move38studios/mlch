@@ -34,6 +34,7 @@ import type {
   AgentToolDefinition,
   AgentToolResult,
   AgentToolRuntime,
+  AgentUserSetup,
   HarnessEvent,
   HarnessTurnParams,
 } from "../types";
@@ -94,6 +95,39 @@ export function codexToolNamespace(definitions: AgentToolDefinition[]): CodexToo
  * `$CODEX_HOME/AGENTS.md` (written for their own coding sessions) as a user
  * message, and no setting removes it; a developer message outranks it.
  */
+/**
+ * mlch: with the person's own setup (Settings → AI) their AGENTS.md applies, as in their Codex;
+ * only what is for coding sessions is left out.
+ */
+export const CODEX_SETUP_INSTRUCTIONS =
+  "The person's AGENTS.md applies here as in their own Codex, except for anything about coding sessions " +
+  "(repositories, commits, tests, shells). What the person asks for in this chat always applies.";
+
+/**
+ * Their MCP servers that run code on this Mac (Codex's own JavaScript REPL and computer use).
+ * They stay off in mlch even with the person's setup: mlch never gives the agent a shell.
+ */
+export const CODEX_SERVERS_ALWAYS_OFF = new Set(["node_repl", "computer-use"]);
+
+/**
+ * Per-thread config for the person's MCP servers: the ones that run code off, the rest on,
+ * asking before any tool not marked read-only ("writes") unless they chose a mode themselves.
+ */
+export function codexServerConfig(servers: Record<string, unknown>, connectors: boolean): { config: Record<string, unknown>; enabled: string[] } {
+  const config: Record<string, unknown> = {};
+  const enabled: string[] = [];
+  for (const [name, value] of Object.entries(servers)) {
+    const table = (value && typeof value === "object" ? value : {}) as { enabled?: unknown; default_tools_approval_mode?: unknown };
+    if (!connectors || CODEX_SERVERS_ALWAYS_OFF.has(name) || table.enabled === false) {
+      config[`mcp_servers.${name}.enabled`] = false;
+      continue;
+    }
+    enabled.push(name);
+    if (table.default_tools_approval_mode === undefined) config[`mcp_servers.${name}.default_tools_approval_mode`] = "writes";
+  }
+  return { config, enabled };
+}
+
 export const CODEX_DEVELOPER_INSTRUCTIONS =
   "Any AGENTS.md or other personal instruction files in this conversation were written for the user's own coding " +
   "sessions and do not apply inside mlch. Ignore the persona, tone, slang, dialect, language and topic " +
@@ -102,9 +136,10 @@ export const CODEX_DEVELOPER_INSTRUCTIONS =
   "asks for in this chat, including preferences from earlier messages, always applies.";
 
 /** A thread is reusable only while its instructions and tools are unchanged. */
-function threadSignature(systemPrompt: string, tools: CodexToolNamespace, webAccess: boolean): string {
+function threadSignature(systemPrompt: string, tools: CodexToolNamespace, webAccess: boolean, setup?: AgentUserSetup): string {
   return createHash("sha256")
     .update(webAccess ? "web\0" : "")
+    .update(setup ? (setup.connectors ? "setup+connectors\0" : "setup\0") : "")
     .update(systemPrompt)
     .update("\0")
     .update(CODEX_DEVELOPER_INSTRUCTIONS)
@@ -118,6 +153,10 @@ function threadSignature(systemPrompt: string, tools: CodexToolNamespace, webAcc
 /** The turn a thread is running, and the tool runtime its calls go to. */
 interface ActiveTurn {
   runtime: AgentToolRuntime;
+  /** mlch: the person's setup for this turn; its `approve` answers Codex's approval requests. */
+  setup?: AgentUserSetup;
+  /** mlch: the connector tool call Codex started last (its approval request doesn't name the tool). */
+  mcpCall?: { server: string; tool: string; arguments: unknown };
   /** Known once `turn/start` answers. */
   turnId?: string;
   /** Resolved when this turn is over in Codex (or given up on); the thread's `idle` meanwhile. */
@@ -130,6 +169,8 @@ interface CodexThread {
   server: CodexAppServer;
   generation: number;
   signature: string;
+  /** mlch: the person's MCP servers this thread was started with; any other starting is foreign. */
+  allowedMcp: Set<string>;
   /** The turn that owns the thread now (claimed before `turn/start`); tool calls outside it fail. */
   active: ActiveTurn | null;
   /** Turns stopped early; Codex may still send their tool calls, which are refused. */
@@ -358,6 +399,28 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     return toolReply(result.text, result.ok, result.images);
   }
 
+  /**
+   * mlch: `mcpServer/elicitation/request`. Codex asks this way before a connector tool that
+   * acts (`_meta.codex_approval_kind: "mcp_tool_call"`); the turn's `approve` asks the person.
+   * Anything else (a server's own form or sign-in) is declined.
+   */
+  async function answerElicitation(raw: unknown) {
+    const decline = { action: "decline", content: null, _meta: null };
+    const params = (raw ?? {}) as { threadId?: string; turnId?: string; serverName?: string; message?: string; _meta?: { codex_approval_kind?: string; tool_params?: unknown } | null };
+    if (params._meta?.codex_approval_kind !== "mcp_tool_call") return decline;
+    const thread = params.threadId ? state.threads.get(params.threadId) : undefined;
+    const active = thread?.active;
+    const approve = active?.setup?.approve;
+    if (!thread || !active || !approve) return decline;
+    if (params.turnId && (thread.staleTurns.has(params.turnId) || (active.turnId && active.turnId !== params.turnId))) return decline;
+    const call = active.mcpCall;
+    const tool = call?.tool ?? params.message?.match(/tool "([^"]+)"/)?.[1] ?? "a tool";
+    const input = (params._meta.tool_params ?? call?.arguments ?? {}) as Record<string, unknown>;
+    const allowed = await approve({ server: params.serverName ?? call?.server ?? "", tool, input: input && typeof input === "object" ? input : {} });
+    // Once: never "remember" (Codex would write it to config.toml).
+    return allowed ? { action: "accept", content: null, _meta: null } : decline;
+  }
+
   /** The app-server for this binary, with our handlers attached. */
   function connect(bin: string, apiKey?: string): CodexAppServer {
     // An API key outranks the ChatGPT login: only when the person chose it.
@@ -365,11 +428,20 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     // Replaced on every connect (it is one map entry), so after a dev reload
     // tool calls go through this module's turn binding, not an older one.
     server.setRequestHandler("item/tool/call", (raw) => answerToolCall(raw));
+    server.setRequestHandler("mcpServer/elicitation/request", (raw) => answerElicitation(raw));
     if (state.wired.has(server)) return server;
     state.wired.add(server);
 
     server.onNotification((notification) => {
       switch (notification.method) {
+        case "item/started": {
+          // mlch: remember the connector call, for the approval request that follows it.
+          const params = (notification.params ?? {}) as { threadId?: string; item?: { type?: string; server?: string; tool?: string; arguments?: unknown } };
+          const item = params.item;
+          const active = params.threadId ? state.threads.get(params.threadId)?.active : undefined;
+          if (active && item?.type === "mcpToolCall" && item.tool) active.mcpCall = { server: item.server ?? "", tool: item.tool, arguments: item.arguments };
+          return;
+        }
         case "account/updated":
           state.status = null;
           state.rejection = null;
@@ -686,8 +758,8 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     }
   }
 
-  function newClaim(runtime: AgentToolRuntime): ActiveTurn {
-    return { runtime, over: deferred<void>() };
+  function newClaim(runtime: AgentToolRuntime, setup?: AgentUserSetup): ActiveTurn {
+    return { runtime, setup, over: deferred<void>() };
   }
 
   /** Claim a known thread for a turn, after its previous turn has wound down. False: leave it for a new one. */
@@ -716,7 +788,15 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
   ): Promise<CodexThread> {
     const model = await resolveModel(server, params.model);
     // The user can add MCP servers while the app-server runs: read the list for every thread.
-    const mcpServers = [...new Set([...(await server.refreshUserMcpServers()), ...alsoDisable])];
+    await server.refreshUserMcpServers();
+    // mlch: with the person's setup, their servers stay on (asking before tools that act); otherwise all off.
+    const setup = params.userSetup;
+    const servers = codexServerConfig(server.userMcpConfig, Boolean(setup?.connectors));
+    for (const name of alsoDisable) {
+      servers.config[`mcp_servers.${name}.enabled`] = false;
+      servers.enabled = servers.enabled.filter((enabled) => enabled !== name);
+    }
+    const allowedMcp = new Set(servers.enabled);
     // Any MCP server starting on our thread is foreign: our tools are dynamic tools, never MCP.
     const startups: Array<{ threadId?: string; name?: string; status?: string }> = [];
     const offStartup = server.onNotification((notification) => {
@@ -729,16 +809,17 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
         {
           model,
           cwd: server.workDir,
-          approvalPolicy: "never",
+          // mlch: with connectors Codex asks before tools that act, and the person answers (never its auto-reviewer).
+          ...(allowedMcp.size ? { approvalPolicy: "on-request", approvalsReviewer: "user" } : { approvalPolicy: "never" }),
           sandbox: "read-only",
           // Not written to disk, so agent chats stay out of the user's Codex history.
           ephemeral: true,
           baseInstructions: params.systemPrompt,
-          developerInstructions: CODEX_DEVELOPER_INSTRUCTIONS,
-          // The user's own MCP servers can't be removed by config overrides; switch them off here.
-          // A research turn (no canvas tools) gets Codex's web search back.
+          developerInstructions: setup ? CODEX_SETUP_INSTRUCTIONS : CODEX_DEVELOPER_INSTRUCTIONS,
+          // The user's own MCP servers can't be removed by config overrides; switch them off here
+          // (mlch: or on, with the person's setup). A research turn gets Codex's web search back.
           config: {
-            ...Object.fromEntries(mcpServers.map((name) => [`mcp_servers.${name}.enabled`, false])),
+            ...servers.config,
             ...(params.webAccess ? { web_search: "live" } : {}),
           },
           // No execution environment: removes apply_patch and the other workspace tools.
@@ -756,7 +837,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
     const foreign = [
       ...new Set(
         startups
-          .filter((startup) => startup.threadId === threadId && isLaunching(startup.status) && startup.name)
+          .filter((startup) => startup.threadId === threadId && isLaunching(startup.status) && startup.name && !allowedMcp.has(startup.name))
           .map((startup) => startup.name as string),
       ),
     ];
@@ -772,6 +853,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
       server,
       generation: server.generation,
       signature,
+      allowedMcp,
       active: claim,
       staleTurns: new Set(),
       settled: true,
@@ -947,7 +1029,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
         }
         if (notification.method === MCP_STARTUP) {
           const startup = (notification.params ?? {}) as { name?: string; status?: string };
-          if (!isLaunching(startup.status)) continue;
+          if (!isLaunching(startup.status) || (startup.name && thread.allowedMcp.has(startup.name))) continue;
           interrupt();
           releaseThread(thread);
           yield { type: "error", code: "harness_error", message: new ForeignMcpError([startup.name ?? "unknown"]).message };
@@ -1066,7 +1148,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
       yield { type: "error", code: "harness_error", message: `mlch's tools couldn't be described to Codex: ${errorMessage(error)}` };
       return;
     }
-    const signature = threadSignature(params.systemPrompt, tools, Boolean(params.webAccess));
+    const signature = threadSignature(params.systemPrompt, tools, Boolean(params.webAccess), params.userSetup);
 
     let thread = params.sessionId ? state.threads.get(params.sessionId) : undefined;
     if (thread && (thread.server !== server || thread.generation !== server.generation)) {
@@ -1077,7 +1159,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
       releaseThread(thread);
       thread = undefined;
     }
-    let claim = newClaim(params.tools);
+    let claim = newClaim(params.tools, params.userSetup);
     try {
       if (thread && !(await acquire(thread, claim))) {
         // Its stopped turn is still running in Codex; a turn/start there would steer it.
@@ -1113,7 +1195,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
         // Codex no longer has the thread (unloaded): continue on a new one.
         state.threads.delete(thread.id);
         thread = undefined;
-        claim = newClaim(params.tools);
+        claim = newClaim(params.tools, params.userSetup);
       }
     } finally {
       // Stopped between claiming the thread and starting the turn.

@@ -38,6 +38,53 @@ function clock(at: number): string {
   return new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Connector tools waiting for the person's answer: the panel opens for them. */
+export function waitingApprovals(jobs: Record<string, JobStatus>): Array<{ job: JobStatus; id: string }> {
+  return Object.values(jobs).flatMap((job) => (job.approvals ?? []).map((approval) => ({ job, id: approval.id })));
+}
+
+/** "claude.ai Gmail" → "Gmail". */
+function serverName(server: string): string {
+  return server.replace(/^claude\.ai\s+/i, "");
+}
+
+/**
+ * A connector tool that acts, waiting for the person: what it would do, Allow or Deny.
+ * Names and arguments come from the person's config and the model: shown as plain text.
+ */
+function ApprovalCard({ job, approval }: { job: JobStatus; approval: NonNullable<JobStatus["approvals"]>[number] }) {
+  const jobAction = useMulch((s) => s.jobAction);
+  const entries = Object.entries(approval.input);
+  return (
+    <div className="rounded-2xl border-[1.5px] border-ink bg-chrome px-3.5 py-2.5">
+      <div className="flex items-center gap-2 text-[13.5px] font-medium">
+        <span className="h-2 w-2 rounded-full bg-amber shrink-0" />
+        <span className="truncate">
+          {serverName(approval.server)}: {approval.tool.replace(/_/g, " ")}
+        </span>
+      </div>
+      {entries.length > 0 && (
+        <dl className="mt-1.5 max-h-48 overflow-auto text-[12.5px] leading-snug space-y-1">
+          {entries.map(([key, value]) => (
+            <div key={key}>
+              <dt className="text-ink-3">{key}</dt>
+              <dd className="text-ink-2 whitespace-pre-wrap break-words">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <div className="mt-2 flex justify-end gap-1.5">
+        <button onClick={() => void jobAction("deny", { jobId: job.id, approvalId: approval.id })} className="h-7 px-2.5 rounded-lg text-[12.5px] text-ink-2 hover:bg-paper-2 hover:text-ink">
+          Deny
+        </button>
+        <button onClick={() => void jobAction("allow", { jobId: job.id, approvalId: approval.id })} className="h-7 px-3 rounded-lg bg-ink text-chrome text-[12.5px] font-medium hover:opacity-90">
+          Allow
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Messages not yet read: a dot on the button, and the panel opens for them. */
 export function unreadMessages(jobs: Record<string, JobStatus>): JobStatus[] {
   return Object.values(jobs).filter((job) => job.message && !job.message.dismissed);
@@ -107,6 +154,7 @@ function JobEntry({ job }: { job: JobStatus }) {
           )}
         </div>
       </div>
+      {job.approvals?.map((approval) => <ApprovalCard key={approval.id} job={job} approval={approval} />)}
       {job.message && (
         <div className="rounded-2xl rounded-bl-md border border-line bg-chrome px-3.5 py-2.5">
           <div className="mlch-md text-[14px] leading-[1.5]">
@@ -216,6 +264,12 @@ export function useConversationOpener(): void {
       const key = `${job.id}:${job.message!.at}`;
       if (seen.current.has(key)) continue;
       seen.current.add(key);
+      useConversation.getState().setOpen(true);
+    }
+    // A connector tool waiting for the person always opens the panel: the work can't go on without them.
+    for (const { id } of waitingApprovals(jobs)) {
+      if (seen.current.has(id)) continue;
+      seen.current.add(id);
       useConversation.getState().setOpen(true);
     }
   }, [jobs, loaded]);

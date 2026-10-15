@@ -355,7 +355,7 @@ async function readKeptJobs(dir: string): Promise<JobStatus[]> {
   }
   return jobs.map((job) =>
     job.state === "queued" || job.state === "running"
-      ? { ...job, state: "failed", error: "Stopped when mlch quit.", activity: undefined, anchor: undefined, unseen: true, finishedAt: job.finishedAt ?? Date.now() }
+      ? { ...job, state: "failed", error: "Stopped when mlch quit.", activity: undefined, anchor: undefined, approvals: undefined, unseen: true, finishedAt: job.finishedAt ?? Date.now() }
       : job,
   );
 }

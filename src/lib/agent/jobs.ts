@@ -14,7 +14,7 @@
 
 import { log } from "@/lib/log";
 import { getHarness } from "@/lib/agent/server/harnesses";
-import type { AgentHarnessStatus, AgentWorkspace, HarnessEvent } from "@/lib/agent/types";
+import type { AgentHarnessStatus, AgentUserSetup, AgentWorkspace, HarnessEvent, ToolApprovalRequest } from "@/lib/agent/types";
 import type { JobLane, JobRetry, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
@@ -30,7 +30,7 @@ import { privateDirs } from "./files";
 import { holdSpace, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, NODE_WIDTH } from "@/lib/mulch/sizes";
 import { dropEcho } from "@/lib/voice/echo";
-import { callPrompt, commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
+import { CONNECTORS_NOTE, callPrompt, commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
 import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
 import { search } from "@/lib/search";
@@ -149,6 +149,64 @@ interface TurnSpec {
   reviewRound?: number;
   /** Linked folders it may search: all when the person asked for this job. */
   sources?: "all" | "auto";
+  /**
+   * The person's own Claude Code / Codex setup and connectors (Settings → AI). Only for
+   * work they asked for: capture and enrichment run on everything said, so they stay quick
+   * (the setup adds seconds per turn) and never act unasked.
+   */
+  ownSetup?: boolean;
+}
+
+/* ── connector approvals ──────────────────────────────────────── */
+
+const APPROVAL_TEXT_LIMIT = 2_000;
+
+/** Arguments as the card shows them: long strings cut, nested values as JSON. */
+function approvalInput(input: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(input)
+      .slice(0, 20)
+      .map(([key, value]) => {
+        const text =
+          typeof value === "string" ? value : Array.isArray(value) && value.every((item) => typeof item === "string") ? value.join(", ") : (JSON.stringify(value) ?? "");
+        return [key, text.length > APPROVAL_TEXT_LIMIT ? `${text.slice(0, APPROVAL_TEXT_LIMIT)}…` : text];
+      }),
+  );
+}
+
+const pendingApprovals = ((globalThis as typeof globalThis & { __mlchApprovals?: Map<string, (allow: boolean) => void> }).__mlchApprovals ??= new Map());
+
+/**
+ * Ask the person about a connector tool that acts: the job shows a card in the
+ * conversation, the turn waits for Allow or Deny. Stopping the job denies.
+ */
+function askApproval(mulchId: string, job: JobStatus, request: ToolApprovalRequest, signal: AbortSignal): Promise<boolean> {
+  const id = newClientId("a");
+  return new Promise((resolve) => {
+    const finish = (allow: boolean) => {
+      if (!pendingApprovals.delete(id)) return;
+      signal.removeEventListener("abort", onAbort);
+      job.approvals = (job.approvals ?? []).filter((approval) => approval.id !== id);
+      if (!job.approvals.length) delete job.approvals;
+      void setJob(mulchId, { ...job }).catch(() => {});
+      log.info("agent", allow ? "connector tool allowed" : "connector tool denied", { mulchId, jobId: job.id, server: request.server, tool: request.tool });
+      resolve(allow);
+    };
+    const onAbort = () => finish(false);
+    pendingApprovals.set(id, finish);
+    signal.addEventListener("abort", onAbort, { once: true });
+    job.approvals = [...(job.approvals ?? []), { id, server: request.server, tool: request.tool, input: approvalInput(request.input), at: Date.now() }];
+    void setJob(mulchId, { ...job }).catch(() => {});
+    log.info("agent", "connector tool waiting for the person", { mulchId, jobId: job.id, server: request.server, tool: request.tool });
+  });
+}
+
+/** The person's answer to a connector tool card. False when nothing is waiting under that id. */
+export function answerApproval(approvalId: string, allow: boolean): boolean {
+  const finish = pendingApprovals.get(approvalId);
+  if (!finish) return false;
+  finish(allow);
+  return true;
 }
 
 class JobError extends Error {}
@@ -215,8 +273,12 @@ function describeToolUse(name: string, input: Record<string, unknown> = {}): str
     case "Grep":
     case "LS":
       return "Looking through files";
-    default:
-      return undefined;
+    default: {
+      // The person's connectors: mcp__claude_ai_Gmail__search_threads → "Gmail: search threads".
+      const mcp = name.match(/^mcp__(.+?)__(.+)$/);
+      if (!mcp) return undefined;
+      return `${mcp[1].replace(/^claude_ai_/, "").replace(/_/g, " ")}: ${mcp[2].replace(/_/g, " ")}`;
+    }
   }
 }
 
@@ -268,15 +330,20 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     added: [] as string[],
   };
   const harness = getHarness(settings.harness);
+  const userSetup: AgentUserSetup | undefined =
+    spec.ownSetup && settings.agentSetup
+      ? { connectors: true, approve: (request) => askApproval(spec.mulchId, spec.job, request, spec.signal) }
+      : undefined;
   const events: AsyncIterable<HarnessEvent> = harness.runTurn({
     ...(spec.sessionId ? { sessionId: spec.sessionId } : {}),
     history: [],
     prompt: spec.prompt,
-    systemPrompt: typeof spec.systemPrompt === "string" ? spec.systemPrompt : spec.systemPrompt(settings),
+    systemPrompt: (typeof spec.systemPrompt === "string" ? spec.systemPrompt : spec.systemPrompt(settings)) + (userSetup ? CONNECTORS_NOTE : ""),
     tools: createMulchTools(ctx),
     model: modelFor(settings, spec.lane),
     webAccess: spec.webAccess,
     workspace: spec.workspace,
+    userSetup,
     signal: spec.signal,
   });
   // The model's own words, sentence by sentence, are the best "what it is doing now".
@@ -617,6 +684,7 @@ export function submitCallNotes(mulchId: string, call: { startedAt: number; ende
           `${call.transcriptId ? `Connect the notes to the transcript ${call.transcriptId} (label "notes of"). ` : ""}Do not add other items. Finish with say.\n</instruction>`,
         tools: ["write_doc", "connect", "say"],
         brief: "Call notes",
+        ownSetup: true,
       });
     },
   });
@@ -861,6 +929,7 @@ export function submitResearch(mulchId: string, brief: string, options: LongOpti
         tools: exa ? [...RESEARCH_TOOLS, "exa_search"] : RESEARCH_TOOLS,
         webAccess: true,
         brief,
+        ownSetup: true,
       };
       const first = await runTurnWithSession(spec);
       const made = async () => {
@@ -1094,6 +1163,7 @@ export function submitCommand(mulchId: string, instruction: string, inputIds?: s
         allowUserEdits: true,
         // Instructions may read the person's files ("look at my dev/briefbuster folder"), read-only.
         readRoot: os.homedir(),
+        ownSetup: true,
       });
     },
   });
@@ -1194,6 +1264,7 @@ export function submitMake(mulchId: string, brief: string, options: LongOptions 
         tools: ["get_mulch", "view_image", "present_file", "preview_artifact", "say", "search_all_mulches", "read_source"],
         workspace,
         webAccess: true,
+        ownSetup: true,
       });
       // Codex makes files without our tools, and Claude may forget one: put any new file on the canvas.
       const current = await getMulch(mulchId);

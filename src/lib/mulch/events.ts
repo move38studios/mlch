@@ -46,6 +46,11 @@ export interface JobStatus {
   retry?: JobRetry;
   /** A message from the AI to the person (`tell`), shown until they close it. */
   message?: { text: string; at: number; dismissed?: boolean };
+  /**
+   * Connector tools that act, waiting for the person's Allow or Deny. Server and
+   * tool names come from the person's config: untrusted text.
+   */
+  approvals?: Array<{ id: string; server: string; tool: string; input: Record<string, string>; at: number }>;
   /** Long work: the space held on the canvas for its result. */
   anchor?: { x: number; y: number; w: number; h: number };
 }

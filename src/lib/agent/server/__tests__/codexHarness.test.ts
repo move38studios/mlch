@@ -5,6 +5,7 @@ import type { AgentHarness, AgentSignInStart, AgentToolRuntime, HarnessEvent, Ha
 import { CodexAppServer } from "../codexAppServer";
 import {
   CODEX_DEVELOPER_INSTRUCTIONS,
+  CODEX_SETUP_INSTRUCTIONS,
   codexInputSchema,
   codexToolNamespace,
   createCodexHarness,
@@ -1019,5 +1020,84 @@ describe("codexInputSchema", () => {
       },
       required: ["nodeId", "op"],
     });
+  });
+});
+
+describe("the person's own Codex setup", () => {
+  const servers = { node_repl: {}, gmail: {}, figma: { default_tools_approval_mode: "approve" }, old: { enabled: false } };
+  const withServers = { "config/read": () => ({ config: { mcp_servers: servers, model_provider: null } }) };
+
+  it("keeps their MCP servers on, asking before tools that act, with their AGENTS.md", async () => {
+    const { harness, child } = setup(withServers);
+    await collect(harness.runTurn(params({ userSetup: { connectors: true, approve: async () => false } })));
+    const [start] = child().requests("thread/start");
+    expect(start.params).toMatchObject({
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      sandbox: "read-only",
+      environments: [],
+      developerInstructions: CODEX_SETUP_INSTRUCTIONS,
+      config: {
+        "mcp_servers.node_repl.enabled": false,
+        "mcp_servers.old.enabled": false,
+        "mcp_servers.gmail.default_tools_approval_mode": "writes",
+      },
+    });
+    // Their own choice of mode stands.
+    expect((start.params as { config: object }).config).not.toHaveProperty("mcp_servers.figma.default_tools_approval_mode");
+    expect((start.params as { config: object }).config).not.toHaveProperty("mcp_servers.gmail.enabled");
+  });
+
+  it("lets their servers start on the thread", async () => {
+    const { harness } = setup({
+      ...withServers,
+      "thread/start": (_params, server) => {
+        setTimeout(() => server.notify("mcpServer/startupStatus/updated", { threadId: RECORDED_THREAD, name: "gmail", status: "starting" }), 1);
+        return { thread: { id: RECORDED_THREAD }, model: "gpt-5.6-luna" };
+      },
+    });
+    const events = await collect(harness.runTurn(params({ userSetup: { connectors: true } })));
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+  });
+
+  for (const allow of [true, false]) {
+    it(`answers Codex's approval request with the person's ${allow ? "yes" : "no"}`, async () => {
+      const answers: RpcLine[] = [];
+      const approve = vi.fn(async () => allow);
+      const { harness } = setup({
+        ...withServers,
+        "turn/start": (_params, server) => {
+          setTimeout(async () => {
+            server.notify("item/started", { threadId: RECORDED_THREAD, turnId: RECORDED_TURN, item: { type: "mcpToolCall", id: "m1", server: "gmail", tool: "send_message", arguments: { to: "a@b.c" } } });
+            answers.push(
+              await server.request("mcpServer/elicitation/request", {
+                threadId: RECORDED_THREAD,
+                turnId: RECORDED_TURN,
+                serverName: "gmail",
+                mode: "form",
+                message: 'Allow the gmail MCP server to run tool "send_message"?',
+                _meta: { codex_approval_kind: "mcp_tool_call", tool_params: { to: "a@b.c" } },
+                requestedSchema: { type: "object", properties: {} },
+              }),
+            );
+            for (const notification of recorded) if (notification.method === "turn/completed") server.notify(notification.method, notification.params);
+          }, 1);
+          return { turn: { id: RECORDED_TURN, items: [], status: "inProgress", error: null } };
+        },
+      });
+      await collect(harness.runTurn(params({ userSetup: { connectors: true, approve } })));
+      expect(approve).toHaveBeenCalledWith({ server: "gmail", tool: "send_message", input: { to: "a@b.c" } });
+      expect(answers[0].result).toEqual({ action: allow ? "accept" : "decline", content: null, _meta: null });
+    });
+  }
+
+  it("declines a server's own forms and requests outside a turn", async () => {
+    const { harness, server, child } = setup();
+    await harness.getStatus();
+    await server.start();
+    const form = await child().request("mcpServer/elicitation/request", { threadId: "nope", serverName: "x", mode: "form", message: "Your name?", _meta: null });
+    expect(form.result).toMatchObject({ action: "decline" });
+    const stray = await child().request("mcpServer/elicitation/request", { threadId: "nope", serverName: "x", _meta: { codex_approval_kind: "mcp_tool_call" } });
+    expect(stray.result).toMatchObject({ action: "decline" });
   });
 });

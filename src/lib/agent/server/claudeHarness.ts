@@ -39,6 +39,9 @@ import {
   type SDKControlGetUsageResponse,
   type SDKRateLimitInfo,
   type SDKUserMessage,
+  type CanUseTool,
+  type HookCallbackMatcher,
+  type McpServerStatus,
 } from "@anthropic-ai/claude-agent-sdk/core";
 import type {
   AgentWorkspace,
@@ -47,6 +50,7 @@ import type {
   AgentSignInOptions,
   AgentSignInStart,
   AgentToolRuntime,
+  AgentUserSetup,
   HarnessEvent,
   HarnessTurnParams,
 } from "../types";
@@ -73,9 +77,10 @@ import {
 } from "./claudeEvents";
 import { ClaudeSignIn } from "./claudeSignIn";
 import { buildClaudeEnv, MLCH_VERSION } from "./env";
-import { agentAuth, API_KEY_MISSING, type AgentAuth } from "./auth";
+import { agentAuth, API_KEY_MISSING, useAgentSetup, type AgentAuth } from "./auth";
 import { withConversationHistory } from "./history";
 import { executeTool } from "./toolExecution";
+import { apiKeyNotice, mcpToolName, readClaudeUserBilling, subscriptionOverrides, type ClaudeUserBilling } from "./claudeSetup";
 
 const LABEL = "Claude Code";
 
@@ -114,6 +119,10 @@ export interface ClaudeHarnessDeps {
   buildEnv: () => Record<string, string>;
   /** Subscription login or the person's API key (auth.ts). */
   auth: () => Promise<AgentAuth>;
+  /** mlch: whether turns may load the person's Claude Code setup (Settings → AI). */
+  useSetup: () => Promise<boolean>;
+  /** mlch: the billing parts of the person's Claude Code user settings (claudeSetup.ts). */
+  userBilling: () => ClaudeUserBilling;
   runCommand: typeof runCommand;
   query: typeof sdkQuery;
   signIn: ClaudeSignIn;
@@ -249,7 +258,78 @@ export function workspaceOptions(workspace: AgentWorkspace): Partial<Options> {
   };
 }
 
-/** SDK options for one agent turn: locked down to our tools, our prompt, the user's subscription. */
+/** Tools that write files; a turn's own allow rules say where (workspaceAllowRules). */
+const FILE_EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+/**
+ * mlch: with the person's settings loaded, their own allow rules apply too,
+ * and one like `Edit` would allow edits anywhere. A PreToolUse hook's deny
+ * outranks every rule, so file edits stay inside the workspace whatever the
+ * rules say.
+ */
+export function workspaceEditHook(workspace: AgentWorkspace | undefined): HookCallbackMatcher {
+  const writable = workspace ? [workspace.cwd, ...workspace.writable].map((dir) => path.resolve(dir)) : [];
+  return {
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PreToolUse" || !FILE_EDIT_TOOLS.has(input.tool_name)) return {};
+        const toolInput = (input.tool_input ?? {}) as { file_path?: unknown; notebook_path?: unknown };
+        const target = typeof toolInput.file_path === "string" ? toolInput.file_path : typeof toolInput.notebook_path === "string" ? toolInput.notebook_path : "";
+        const resolved = target ? path.resolve(workspace?.cwd ?? "/", target) : "";
+        if (resolved && writable.some((dir) => resolved === dir || resolved.startsWith(dir + path.sep))) return {};
+        return {
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: writable.length
+              ? `Files can only be written in ${writable.join(" or ")}.`
+              : "Writing files isn't available here.",
+          },
+        };
+      },
+    ],
+  };
+}
+
+/** Read-only flags of the person's MCP tools, per server, from Claude Code's own report. */
+export type McpToolFlags = Map<string, Map<string, boolean>>;
+
+export function mcpToolFlags(statuses: McpServerStatus[]): McpToolFlags {
+  const flags: McpToolFlags = new Map();
+  for (const server of statuses) {
+    const tools = new Map<string, boolean>();
+    for (const tool of server.tools ?? []) tools.set(mcpToolName(tool.name), tool.annotations?.readOnly === true);
+    flags.set(server.name, tools);
+  }
+  return flags;
+}
+
+const DECLINED = "The person declined this. Don't try it again unless they ask; tell them what you would have done instead.";
+
+/**
+ * mlch: what a turn may do beyond its allow rules. The person's MCP servers
+ * (anything not ours, `source !== "sdk"`): tools marked read-only run, others
+ * ask the person (`approve`); without connectors or a way to ask, they are
+ * refused. Everything else is refused, as `dontAsk` would.
+ */
+export function connectorPermissions(setup: AgentUserSetup, toolFlags: () => Promise<McpToolFlags>): CanUseTool {
+  return async (toolName, input, options) => {
+    const server = options.mcpServer;
+    if (!server || server.source === "sdk") {
+      return { behavior: "deny", message: `${toolName} isn't available in mlch. Use mlch's tools, or the person's connectors.` };
+    }
+    if (!setup.connectors) return { behavior: "deny", message: "The person's connectors aren't available for this work." };
+    const tool = mcpToolName(toolName);
+    const readOnly = (await toolFlags().catch(() => new Map() as McpToolFlags)).get(server.name)?.get(tool) === true;
+    if (readOnly) return { behavior: "allow", updatedInput: input };
+    if (!setup.approve) return { behavior: "deny", message: `${tool} acts on the person's behalf, and they can't be asked here. Only tools that read are available.` };
+    if (options.signal.aborted) return { behavior: "deny", message: "The work was stopped.", interrupt: true };
+    const allowed = await setup.approve({ server: server.name, tool, input });
+    return allowed ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: DECLINED };
+  };
+}
+
+/** SDK options for one agent turn: our tools, our prompt, the user's subscription; with `userSetup`, their own setup too. */
 export function buildClaudeOptions(input: {
   bin: string;
   env: Record<string, string>;
@@ -258,6 +338,10 @@ export function buildClaudeOptions(input: {
   resume: string | undefined;
   abortController: AbortController;
   onStderr: (data: string) => void;
+  /** mlch: flag settings over the person's user settings (who pays); only with `params.userSetup`. */
+  overrides?: Record<string, unknown>;
+  /** mlch: the permission callback for the person's connectors; only with `params.userSetup`. */
+  canUseTool?: CanUseTool;
 }): Options {
   const { params } = input;
   // "default" lets Claude Code pick the plan's default model.
@@ -265,14 +349,25 @@ export function buildClaudeOptions(input: {
   // mlch: a making turn gets Claude Code's own tools inside its OS sandbox.
   const workspace = params.workspace;
   const nativeTools = workspace ? [...CLAUDE_WORKSPACE_TOOLS] : [];
+  const setup = params.userSetup;
   return {
     pathToClaudeCodeExecutable: input.bin,
     cwd: workspace?.cwd ?? input.cwd,
     env: workspace ? { ...input.env, ...workspace.env } : input.env,
-    // No user/project settings: no CLAUDE.md, hooks, plugins, or apiKeyHelper.
-    settingSources: [],
-    // No MCP servers but ours (.mcp.json, user and plugin servers are ignored).
-    strictMcpConfig: true,
+    ...(setup
+      ? {
+          // mlch: the person's own Claude Code: CLAUDE.md, hooks, plugins, and (connectors) their MCP servers.
+          settingSources: ["user"],
+          strictMcpConfig: !setup.connectors,
+          ...(input.overrides ? { settings: input.overrides } : {}),
+          hooks: { PreToolUse: [workspaceEditHook(workspace)] },
+        }
+      : {
+          // No user/project settings: no CLAUDE.md, hooks, plugins, or apiKeyHelper.
+          settingSources: [],
+          // No MCP servers but ours (.mcp.json, user and plugin servers are ignored).
+          strictMcpConfig: true,
+        }),
     // No built-in tools: no shell, files, sub-agents or skills. Web search and
     // fetch only when asked; shell and files only in a sandboxed workspace.
     tools: [...nativeTools, ...(params.webAccess ? CLAUDE_WEB_TOOLS : [])],
@@ -289,8 +384,9 @@ export function buildClaudeOptions(input: {
       ...(params.webAccess ? CLAUDE_WEB_TOOLS : []),
       ...(workspace ? workspaceAllowRules(workspace) : []),
     ],
-    // Our tools run without asking; anything else is denied.
-    permissionMode: "dontAsk",
+    // Our tools run without asking; anything else is denied, or (the person's
+    // setup) decided by canUseTool: their connectors read freely and ask to act.
+    ...(setup && input.canUseTool ? { permissionMode: "default" as const, canUseTool: input.canUseTool } : { permissionMode: "dontAsk" as const }),
     systemPrompt: params.systemPrompt,
     model,
     thinking: { type: "adaptive", display: "summarized" },
@@ -314,12 +410,14 @@ export function buildClaudeProbeOptions(input: {
   env: Record<string, string>;
   cwd: string;
   abortController: AbortController;
+  /** mlch: turns load the person's settings with these overrides on top; the probe does the same. */
+  overrides?: Record<string, unknown>;
 }): Options {
   return {
     pathToClaudeCodeExecutable: input.bin,
     cwd: input.cwd,
     env: input.env,
-    settingSources: [],
+    ...(input.overrides ? { settingSources: ["user"], settings: input.overrides } : { settingSources: [] }),
     strictMcpConfig: true,
     tools: [],
     mcpServers: {},
@@ -470,6 +568,8 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     lookupBinary: () => resolveClaudeBinary(),
     buildEnv: () => buildClaudeEnv(),
     auth: () => agentAuth("claude"),
+    useSetup: () => useAgentSetup(),
+    userBilling: () => readClaudeUserBilling(),
     runCommand,
     query: sdkQuery,
     signIn: overrides.signIn ?? sharedSignIn(),
@@ -565,6 +665,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
   async function probeAccount(
     bin: string,
     env: Record<string, string>,
+    overrides: Record<string, unknown> | undefined,
   ): Promise<{ account: ClaudeAccountInfo | undefined; models: ClaudeModelInfo[] | undefined }> {
     const release = deferred<void>();
     async function* noPrompt(): AsyncGenerator<SDKUserMessage> {
@@ -572,7 +673,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     }
     const q = deps.query({
       prompt: noPrompt(),
-      options: buildClaudeProbeOptions({ bin, env, cwd: deps.agentCwd, abortController: new AbortController() }),
+      options: buildClaudeProbeOptions({ bin, env, cwd: deps.agentCwd, abortController: new AbortController(), overrides }),
     });
     try {
       const init = await withTimeout(q.initializationResult(), deps.probeTimeoutMs, "Claude Code didn't report its account in time.");
@@ -593,9 +694,12 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     const bin = lookup.path;
     const env = deps.buildEnv();
     await ensureCwd();
+    // mlch: the person's setup loaded as a turn loads it, with the subscription overrides on top.
+    const billing = (await deps.useSetup()) ? deps.userBilling() : undefined;
+    const overrides = billing ? subscriptionOverrides(billing) : undefined;
 
     const [probe, version] = await Promise.all([
-      probeAccount(bin, env).catch(() => undefined),
+      probeAccount(bin, env, overrides).catch(() => undefined),
       versionOf(bin, env),
     ]);
     const account = probe?.account;
@@ -635,6 +739,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
       modelsFallback: models === CLAUDE_MODELS ? true : undefined,
       signIn: ready ? { state: "idle" } : deps.signIn.state(),
       problem: ready ? undefined : verdict.problem,
+      ...(billing && apiKeyNotice(billing) ? { notice: apiKeyNotice(billing) } : {}),
     };
   }
 
@@ -803,6 +908,17 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     /** A rate-limit report this turn said extra usage could pay (whether or not it did yet). */
     let extraUsageSeen = false;
     const mapper = new ClaudeEventMapper({ expectedTools: params.tools.definitions.map((d) => d.name), ownApiKey: !!apiKey });
+    // mlch: the person's setup, with who pays overridden: the subscription, or the key they gave mlch.
+    let overrides: Record<string, unknown> | undefined;
+    if (params.userSetup) {
+      const base = subscriptionOverrides(deps.userBilling());
+      if (apiKey) delete base.env.ANTHROPIC_API_KEY;
+      overrides = base;
+    }
+    let flags: Promise<McpToolFlags> | undefined;
+    const canUseTool = params.userSetup
+      ? connectorPermissions(params.userSetup, () => (flags ??= q.mcpServerStatus().then(mcpToolFlags)))
+      : undefined;
     const q = deps.query({
       prompt: input(),
       options: buildClaudeOptions({
@@ -813,6 +929,8 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
         params,
         resume,
         abortController,
+        overrides,
+        canUseTool,
         onStderr: (data) => {
           stderrTail = (stderrTail + data).slice(-2_000);
         },

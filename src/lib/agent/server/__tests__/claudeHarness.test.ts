@@ -12,6 +12,9 @@ import type { CommandResult } from "../binaries";
 import {
   buildClaudeTools,
   CLAUDE_AUTH_STATUS_ARGS,
+  connectorPermissions,
+  mcpToolFlags,
+  workspaceEditHook,
   createClaudeHarness,
   createClaudeHarnessState,
   fullPlanWindow,
@@ -165,6 +168,8 @@ function harness(overrides: Partial<ClaudeHarnessDeps> = {}) {
     lookupBinary: () => ({ path: BIN, source: "bundled" }),
     buildEnv: () => buildClaudeEnv({ HOME: "/Users/someone", PATH: "/bin", ANTHROPIC_API_KEY: "sk-ant-api", CLAUDECODE: "1" }),
     auth: async () => ({ mode: "subscription" }),
+    useSetup: async () => false,
+    userBilling: () => ({ apiKeyHelper: false, env: [] }),
     agentCwd: AGENT_CWD,
     signIn: stubSignIn(),
     state: createClaudeHarnessState(),
@@ -922,5 +927,122 @@ describe("output parsing", () => {
     expect(parseClaudeVersion("nope")).toBeUndefined();
     expect(parseAuthStatusOutput(`warning: x\n${SIGNED_IN_JSON}\n`)).toMatchObject({ loggedIn: true });
     expect(parseAuthStatusOutput("Not logged in.")).toBeNull();
+  });
+});
+
+describe("the person's own Claude Code setup", () => {
+  const setup = { connectors: true };
+
+  it("loads their settings and connectors, with the subscription forced on top", async () => {
+    const { query, made } = fakeQueries({ messages: recorded });
+    await collect(harness({ query, userBilling: () => ({ apiKeyHelper: true, env: ["ANTHROPIC_BASE_URL"] }) }).runTurn(params({ userSetup: setup })));
+    const options = made[0].options;
+    expect(options).toMatchObject({
+      settingSources: ["user"],
+      strictMcpConfig: false,
+      permissionMode: "default",
+      tools: [],
+      allowedTools: ["mcp__mlch__add_numbers"],
+      settings: {
+        apiKeyHelper: "",
+        env: { ANTHROPIC_API_KEY: "", ANTHROPIC_AUTH_TOKEN: "", ANTHROPIC_BASE_URL: "", CLAUDE_CODE_USE_BEDROCK: "" },
+      },
+    });
+    expect(typeof options.canUseTool).toBe("function");
+    expect(options.hooks?.PreToolUse).toHaveLength(1);
+    expect(options.env).not.toHaveProperty("ANTHROPIC_API_KEY");
+  });
+
+  it("without connectors keeps their settings but no MCP servers of theirs", async () => {
+    const { query, made } = fakeQueries({ messages: recorded });
+    await collect(harness({ query }).runTurn(params({ userSetup: { connectors: false } })));
+    expect(made[0].options).toMatchObject({ settingSources: ["user"], strictMcpConfig: true });
+  });
+
+  it("in API key mode keeps the key the person gave mlch", async () => {
+    const { query, made } = fakeQueries({ messages: recorded });
+    await collect(harness({ query, auth: async () => ({ mode: "apiKey" as const, key: "sk-ant-person" }) }).runTurn(params({ userSetup: setup })));
+    const settings = made[0].options.settings as { env: Record<string, string> };
+    expect(settings.env).not.toHaveProperty("ANTHROPIC_API_KEY");
+    expect(made[0].options.env?.ANTHROPIC_API_KEY).toBe("sk-ant-person");
+  });
+
+  it("probes the account with the same settings a turn loads, and notes an API key it ignores", async () => {
+    const probe = fakeQueries();
+    const status = await harness({ query: probe.query, useSetup: async () => true, userBilling: () => ({ apiKeyHelper: true, env: [] }) }).getStatus();
+    expect(probe.made[0].options).toMatchObject({ settingSources: ["user"], settings: { apiKeyHelper: "" }, strictMcpConfig: true });
+    expect(status.billing).toBe("subscription");
+    expect(status.notice).toMatch(/apiKeyHelper/);
+  });
+});
+
+describe("connector permissions", () => {
+  const flags = async () =>
+    mcpToolFlags([
+      {
+        name: "claude.ai Gmail",
+        status: "connected",
+        tools: [
+          { name: "search_threads", annotations: { readOnly: true } },
+          { name: "send_message", annotations: { readOnly: false } },
+        ],
+      },
+    ]);
+  const options = (server?: { name: string; source: string }) => ({ signal: new AbortController().signal, toolUseID: "t1", requestId: "r1", ...(server ? { mcpServer: server } : {}) });
+  const gmail = { name: "claude.ai Gmail", source: "claudeai" };
+
+  it("runs a connector tool marked read-only", async () => {
+    const decide = connectorPermissions({ connectors: true }, flags);
+    expect(await decide("mcp__claude_ai_Gmail__search_threads", { q: "offsite" }, options(gmail))).toEqual({ behavior: "allow", updatedInput: { q: "offsite" } });
+  });
+
+  it("asks the person before a tool that acts, and does what they say", async () => {
+    const approve = vi.fn(async () => false);
+    const decide = connectorPermissions({ connectors: true, approve }, flags);
+    const denied = await decide("mcp__claude_ai_Gmail__send_message", { to: "a@b.c" }, options(gmail));
+    expect(approve).toHaveBeenCalledWith({ server: "claude.ai Gmail", tool: "send_message", input: { to: "a@b.c" } });
+    expect(denied).toMatchObject({ behavior: "deny", message: expect.stringMatching(/declined/) });
+    approve.mockResolvedValueOnce(true);
+    expect(await decide("mcp__claude_ai_Gmail__send_message", { to: "a@b.c" }, options(gmail))).toMatchObject({ behavior: "allow" });
+  });
+
+  it("treats a tool without a read-only mark as acting", async () => {
+    const approve = vi.fn(async () => true);
+    const decide = connectorPermissions({ connectors: true, approve }, async () => new Map());
+    await decide("mcp__figma__use_figma", {}, options({ name: "figma", source: "user" }));
+    expect(approve).toHaveBeenCalled();
+  });
+
+  it("refuses acting tools when nobody can be asked, and everything that isn't a connector", async () => {
+    const decide = connectorPermissions({ connectors: true }, flags);
+    expect(await decide("mcp__claude_ai_Gmail__send_message", {}, options(gmail))).toMatchObject({ behavior: "deny" });
+    expect(await decide("Bash", { command: "ls" }, options())).toMatchObject({ behavior: "deny" });
+    expect(await decide("mcp__mlch__add_numbers", {}, options({ name: "mlch", source: "sdk" }))).toMatchObject({ behavior: "deny" });
+    const off = connectorPermissions({ connectors: false, approve: async () => true }, flags);
+    expect(await off("mcp__claude_ai_Gmail__search_threads", {}, options(gmail))).toMatchObject({ behavior: "deny" });
+  });
+});
+
+describe("workspace edit hook", () => {
+  const workspace = { cwd: "/lib/m1/work", writable: ["/lib/m1/artifacts"], readDenied: [], networkDomains: [], env: {} };
+  const decide = async (tool: string, file: string, ws = workspace as typeof workspace | undefined) => {
+    const hook = workspaceEditHook(ws).hooks[0];
+    const out = (await hook({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { file_path: file }, tool_use_id: "t", session_id: "s", transcript_path: "", cwd: "/" } as never, "t", { signal: new AbortController().signal })) as { hookSpecificOutput?: { permissionDecision?: string } };
+    return out.hookSpecificOutput?.permissionDecision ?? "pass";
+  };
+
+  it("lets edits inside the workspace through to the rules", async () => {
+    expect(await decide("Write", "/lib/m1/artifacts/deck.html")).toBe("pass");
+    expect(await decide("Edit", "slides.py")).toBe("pass");
+  });
+
+  it("refuses edits anywhere else, whatever the person's rules allow", async () => {
+    expect(await decide("Write", "/Users/someone/.zshrc")).toBe("deny");
+    expect(await decide("Edit", "/lib/m1/artifacts/../../m2/mulch.json")).toBe("deny");
+    expect(await decide("Write", "/tmp/x", undefined)).toBe("deny");
+  });
+
+  it("leaves other tools alone", async () => {
+    expect(await decide("Read", "/Users/someone/.zshrc")).toBe("pass");
   });
 });

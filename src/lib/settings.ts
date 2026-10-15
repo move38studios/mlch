@@ -37,6 +37,12 @@ export const settingsSchema = z.object({
   agentAuth: z
     .object({ claude: z.enum(["subscription", "apiKey"]).default("subscription"), codex: z.enum(["subscription", "apiKey"]).default("subscription") })
     .default({ claude: "subscription", codex: "subscription" }),
+  /**
+   * mlch is an interface on the person's own Claude Code / Codex: their settings, CLAUDE.md /
+   * AGENTS.md, MCP servers and connectors apply to their instructions, research and making.
+   * Off: mlch's own tools only. docs/research/connectors.md.
+   */
+  agentSetup: z.boolean().default(true),
   /** When the person confirmed using their own subscription (ms), per AI. */
   subscriptionConsent: z.object({ claude: z.number().optional(), codex: z.number().optional() }).default({}),
   enrich: z.array(z.enum(ENRICHMENTS)).default([...ENRICHMENTS]),

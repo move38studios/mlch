@@ -1,5 +1,5 @@
 import { handle, jsonError } from "@/lib/http";
-import { cancelJob, retryJob } from "@/lib/agent/jobs";
+import { answerApproval, cancelJob, retryJob } from "@/lib/agent/jobs";
 import { dismissJobMessage, getJobs, getMulch, markJobsSeen, applyToMulch } from "@/lib/mulch/store";
 import { newClientId } from "@/lib/mulch/ids";
 import { placeNear } from "@/lib/mulch/place";
@@ -15,10 +15,10 @@ export async function GET(_request: Request, { params }: Params) {
   return handle(async () => ({ jobs: await getJobs(id) }));
 }
 
-/** One job: stop it, start it again, mark finished jobs as seen, or close its message. */
+/** One job: stop it, start it again, mark finished jobs as seen, close its message, or answer a connector tool card. */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as { action?: unknown; jobId?: unknown; ids?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { action?: unknown; jobId?: unknown; ids?: unknown; approvalId?: unknown };
   const jobId = typeof body.jobId === "string" ? body.jobId : "";
   return handle(async () => {
     switch (body.action) {
@@ -45,6 +45,13 @@ export async function POST(request: Request, { params }: Params) {
         await applyToMulch(id, [{ op: "addNode", node: { id: nodeId, kind: "writeup", x: at.x, y: at.y, title: job.label, text: job.message.text, origin: `agent:${job.id}`, userTouched: true, createdAt: Date.now() } }], "user");
         await dismissJobMessage(id, jobId);
         return { nodeId };
+      }
+      case "allow":
+      case "deny": {
+        // A connector tool that acts, waiting for the person (the job's approval card).
+        const approvalId = typeof body.approvalId === "string" ? body.approvalId : "";
+        if (!approvalId) return jsonError(400, "Which request?");
+        return answerApproval(approvalId, body.action === "allow") ? { ok: true } : jsonError(409, "That request is no longer waiting.");
       }
       case "dismiss-message":
         if (!jobId) return jsonError(400, "Which job?");

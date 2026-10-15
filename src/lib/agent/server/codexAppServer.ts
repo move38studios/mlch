@@ -164,6 +164,8 @@ export class CodexAppServer {
   info: CodexServerInfo | null = null;
   /** MCP servers in the user's config.toml as last read, disabled on every thread we start. */
   userMcpServers: string[] = [];
+  /** mlch: their config.toml `mcp_servers` tables as last read (approval modes per server). */
+  userMcpConfig: Record<string, unknown> = {};
   /** `model_provider` after our overrides (null = the built-in default). */
   modelProvider: string | null = null;
   /** The (empty) directory threads run in. */
@@ -284,7 +286,8 @@ export class CodexAppServer {
    */
   async refreshUserMcpServers(): Promise<string[]> {
     const read = await this.request<{ config?: { mcp_servers?: Record<string, unknown> | null } }>("config/read", {}, 20_000);
-    this.userMcpServers = Object.keys(read?.config?.mcp_servers ?? {});
+    this.userMcpConfig = read?.config?.mcp_servers ?? {};
+    this.userMcpServers = Object.keys(this.userMcpConfig);
     return this.userMcpServers;
   }
 

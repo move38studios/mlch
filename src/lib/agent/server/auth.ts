@@ -22,6 +22,12 @@ export async function agentAuth(id: AgentHarnessId): Promise<AgentAuth> {
   return key ? { mode: "apiKey", key } : { mode: "apiKey" };
 }
 
+/** mlch: whether turns may use the person's own CLI setup (Settings → AI; on unless turned off). */
+export async function useAgentSetup(): Promise<boolean> {
+  const settings = await readSettings().catch(() => undefined);
+  return settings?.agentSetup ?? true;
+}
+
 export const API_KEY_MISSING: Record<AgentHarnessId, string> = {
   claude: "No Anthropic API key. Add it in Settings → AI, or switch to your Claude subscription.",
   codex: "No OpenAI API key. Add it in Settings → AI, or switch to your ChatGPT subscription.",

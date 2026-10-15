@@ -11,7 +11,7 @@ Order agreed 2026-10-13: **docs/PLAN-3.md**, a small public release (fixes from 
 ## Outside the plans
 
 1. **Home screen.** The full logo on the empty screen (centred, the scribbles and lettering), the small wordmark top-left once there is a list. The empty screen as one clear start (New, or straight into a new mulch with the mic ready, tied to onboarding). Whether mlch needs a tagline at all (in the app: probably not; on mlch.app: maybe). Wording from George.
-2. **Connectors.** The person's own MCP servers, opt-in, read-only by default, approval cards for actions. Today the harness turns them off on purpose (`settingSources: []`; Codex MCP servers disabled).
+2. **Your Claude Code and Codex setup: what's left.** Built 2026-10-15 (docs/research/connectors.md). Still to do: ChatGPT apps in Codex, the person's setup in Codex making turns (`codex exec`), a notification and Dock badge when a connector card waits while mlch is in the background.
 
 ## When the problem shows up
 

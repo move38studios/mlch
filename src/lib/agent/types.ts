@@ -91,6 +91,11 @@ export interface AgentHarnessStatus {
   };
   /** The terminal command that signs in with the vendor's own flow. */
   signInCommand: string;
+  /**
+   * mlch: something about the person's CLI setup worth knowing that doesn't
+   * stop turns (an API key in its settings that mlch ignores for the subscription).
+   */
+  notice?: string;
   /** mlch: the plan's usage windows at the last check (percent used), when the vendor reports them. */
   planUsage?: Array<{ name: string; percent: number; resetsAt?: number; at: number }>;
 }
@@ -164,7 +169,31 @@ export interface HarnessTurnParams {
    * for making files. Absent: only our tools.
    */
   workspace?: AgentWorkspace;
+  /**
+   * mlch: run with the person's own CLI setup (their settings, CLAUDE.md /
+   * AGENTS.md, hooks). Absent: mlch's tools only, nothing of theirs.
+   */
+  userSetup?: AgentUserSetup;
   signal: AbortSignal;
+}
+
+export interface AgentUserSetup {
+  /** Their MCP servers and connectors too (instructions, research, making). */
+  connectors: boolean;
+  /**
+   * Ask the person about a connector tool that acts (not marked read-only).
+   * Resolves true to run it. Absent: such tools are refused.
+   */
+  approve?: (request: ToolApprovalRequest) => Promise<boolean>;
+}
+
+/** A connector tool call waiting for the person. Server and tool names come from their config: untrusted text. */
+export interface ToolApprovalRequest {
+  /** The MCP server as the person named it ("claude.ai Gmail"). */
+  server: string;
+  /** The tool's own name ("send_message"). */
+  tool: string;
+  input: Record<string, unknown>;
 }
 
 export interface AgentWorkspace {

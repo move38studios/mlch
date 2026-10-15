@@ -44,7 +44,7 @@ interface MulchState {
   pulse?: { ids: string[]; at: number };
   setPulse(ids: string[]): void;
   /** Stop, retry, or mark finished jobs seen. */
-  jobAction(action: "cancel" | "retry" | "seen" | "dismiss-message" | "keep-message", payload: { jobId?: string; ids?: string[] }): Promise<void>;
+  jobAction(action: "cancel" | "retry" | "seen" | "dismiss-message" | "keep-message" | "allow" | "deny", payload: { jobId?: string; ids?: string[]; approvalId?: string }): Promise<void>;
   /** A view move from the agent. */
   view?: { action: ViewAction; at: number };
   /** Ids of nodes added by others since the last time the canvas looked (for entrance animation). */

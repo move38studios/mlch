@@ -23,6 +23,7 @@ interface SettingsData {
   dailySpendCapUsd: number;
   transcription: "groq" | "local";
   agentAuth: Record<AgentHarnessId, AuthMode>;
+  agentSetup: boolean;
   subscriptionConsent: Partial<Record<AgentHarnessId, number>>;
 }
 interface SettingsView {
@@ -288,6 +289,7 @@ export function Settings() {
                     {h.label} {h.version && <span className="text-ink-3 font-normal">{h.version}</span>}
                   </div>
                   <div className="text-[12.5px] text-ink-2 mt-0.5">
+                    {h.notice && <span className="block mb-0.5 text-ink-3">{h.notice}</span>}
                     {h.problem ? (
                       <span className="text-danger">{h.problem}</span>
                     ) : (
@@ -333,6 +335,12 @@ export function Settings() {
               </div>
             ))}
           </div>
+          {settings && (
+            <label className="mt-4 flex items-start gap-2 text-[13px] text-ink-2 max-w-[520px]">
+              <input type="checkbox" checked={settings.agentSetup} onChange={(e) => void update({ agentSetup: e.target.checked }).then(loadStatus)} className="mt-0.5" />
+              <span>Use my Claude Code and Codex setup for instructions, research and making: CLAUDE.md and AGENTS.md, MCP servers, connectors, plugins</span>
+            </label>
+          )}
           {active && settings && (
             <div className="mt-5 space-y-2">
               {LANES.map((lane) => (
