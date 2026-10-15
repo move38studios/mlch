@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import type { JobStatus } from "@/lib/mulch/events";
 import { settingsSchema } from "@/lib/settings";
-import { commandPrompt, DEFAULT_HOUSE_STYLE, fastPrompt, makerPrompt, PROMPT_DEFAULTS, slowPrompt } from "../prompts";
+import { commandPrompt, DEFAULT_HOUSE_STYLE, EARLIER_MAX, earlierExchanges, fastPrompt, makerPrompt, PROMPT_DEFAULTS, slowPrompt } from "../prompts";
 
 describe("prompts", () => {
   it("uses the defaults when nothing is edited", () => {
@@ -34,5 +35,64 @@ describe("prompts", () => {
     const maker = makerPrompt(settingsSchema.parse({}));
     expect(maker).not.toContain("{{file:mlch:");
     expect(maker).toMatch(/public\/fonts\/SchibstedGrotesk\.woff2/);
+  });
+
+  describe("earlierExchanges", () => {
+    const now = Date.UTC(2026, 9, 15, 15, 35);
+    const job = (id: string, minutesAgo: number, extra: Partial<JobStatus> = {}): JobStatus => ({
+      id,
+      lane: "command",
+      state: "done",
+      label: id,
+      queuedAt: now - minutesAgo * 60_000,
+      finishedAt: now - minutesAgo * 60_000 + 30_000,
+      retry: { kind: "command", input: `instruction ${id}` },
+      ...extra,
+    });
+
+    it("is empty with nothing before", () => {
+      expect(earlierExchanges([])).toBe("");
+    });
+
+    it("lists earlier instructions oldest first with what came of each", () => {
+      const text = earlierExchanges(
+        [
+          job("b", 5, { message: { text: "I can't get into your email.", at: now } }),
+          job("a", 30, { resultIds: ["n1", "n2"] }),
+          job("c", 2, { state: "failed", error: "Timed out." }),
+        ],
+      );
+      expect(text).toContain("<earlier>");
+      expect(text.indexOf("instruction a")).toBeLessThan(text.indexOf("instruction b"));
+      expect(text.indexOf("instruction b")).toBeLessThan(text.indexOf("instruction c"));
+      expect(text).toContain("You told them: I can't get into your email.");
+      expect(text).toContain("Done: 2 item(s) added (n1, n2).");
+      expect(text).toContain("Failed: Timed out.");
+    });
+
+    it("leaves out the current job, running ones and other work, but not old ones", () => {
+      const text = earlierExchanges(
+        [
+          job("current", 0),
+          job("running", 1, { state: "running", finishedAt: undefined }),
+          job("old", 7 * 60),
+          job("speech", 1, { retry: undefined }),
+          job("notes", 1, { retry: { kind: "callNotes", input: "transcript" } }),
+          job("kept", 3),
+        ],
+        "current",
+      );
+      expect(text).toContain("instruction kept");
+      expect(text).toContain("instruction old");
+      for (const id of ["current", "running", "speech", "notes"]) expect(text).not.toContain(`instruction ${id}`);
+    });
+
+    it("keeps only the most recent few", () => {
+      const jobs = Array.from({ length: EARLIER_MAX + 3 }, (_, i) => job(`j${i}`, 60 - i));
+      const text = earlierExchanges(jobs);
+      expect(text).not.toContain("instruction j0\n");
+      expect(text).toContain(`instruction j${EARLIER_MAX + 2}`);
+      expect(text.match(/\] Instruction:/g)).toHaveLength(EARLIER_MAX);
+    });
   });
 });

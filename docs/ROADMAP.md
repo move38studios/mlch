@@ -13,7 +13,6 @@ Order agreed 2026-10-13: **docs/PLAN-3.md**, a small public release (fixes from 
 1. **Home screen.** The full logo on the empty screen (centred, the scribbles and lettering), the small wordmark top-left once there is a list. The empty screen as one clear start (New, or straight into a new mulch with the mic ready, tied to onboarding). Whether mlch needs a tagline at all (in the app: probably not; on mlch.app: maybe). Wording from George.
 2. **Your Claude Code and Codex setup: what's left.** Built 2026-10-15 (docs/research/connectors.md). Still to do: ChatGPT apps in Codex, the person's setup in Codex making turns (`codex exec`), a Dock badge while a connector card waits.
 3. **Settings → AI stuck on "Preparing Claude Code" after launch.** Opening Settings soon after launch can show it in red forever; switching to Codex and back shows the right state. A race between the CLI check at launch and the panel's status. (Noted 2026-10-15.)
-4. **Instructions don't see the conversation before them.** Each instruction is a new turn with the canvas, a call's transcript and the instruction (`submitCommand` in jobs.ts); earlier instructions and the AI's answers (`message`, kept in jobs.json) show in the panel but are not in the prompt. "Try again" or "the second one" then means nothing to the AI. Give each instruction the recent exchanges (the last few, or the last hour or so) as a block in its prompt, or resume the previous instruction's session. (Noted 2026-10-15.)
 
 ## When the problem shows up
 

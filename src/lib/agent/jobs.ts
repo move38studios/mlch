@@ -30,7 +30,7 @@ import { privateDirs } from "./files";
 import { holdSpace, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, NODE_WIDTH } from "@/lib/mulch/sizes";
 import { dropEcho } from "@/lib/voice/echo";
-import { CONNECTORS_NOTE, callPrompt, commandPrompt, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
+import { CONNECTORS_NOTE, callPrompt, commandPrompt, earlierExchanges, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
 import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
 import { search } from "@/lib/search";
@@ -1164,6 +1164,7 @@ export function submitCommand(mulchId: string, instruction: string, inputIds?: s
         systemPrompt: commandPrompt,
         prompt:
           `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\n${conversationBlock(await callTranscript(mulchId))}` +
+          earlierExchanges(await getJobs(mulchId), job.id) +
           `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
         // An instruction can be the first thing on a canvas: it names it then.
         tools: withKeyTools([...COMMAND_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])]),

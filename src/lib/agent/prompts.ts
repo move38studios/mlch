@@ -10,6 +10,7 @@
 
 import path from "node:path";
 import type { Enrichment, PromptKey, Settings } from "@/lib/settings";
+import type { JobRetry, JobStatus } from "@/lib/mulch/events";
 
 const BASE = `You work in mlch, on one of the person's canvases (a "mulch"): an endless 2D canvas where a person thinks out loud. Ideas emerge from mess and cross-pollination and happen at the intersections, so you capture and enrich; you do not funnel towards one answer unless asked.
 
@@ -202,4 +203,44 @@ Save finished files directly in the artifacts folder (not in a subfolder), with 
       ? " Then call present_file for each, with a clear title and one-line description, near the items it draws on. Finish with say: one short line."
       : " Finish with one short line saying what you made."
   }`;
+}
+
+/** Instructions and answers before this one that an instruction is given (the newest, however old: a "try again" can come hours later). */
+export const EARLIER_MAX = 6;
+
+const EARLIER_KINDS: Partial<Record<JobRetry["kind"], string>> = { command: "Instruction", make: "Asked to make", research: "Asked to research" };
+
+function clip(text: string, max: number): string {
+  const flat = text.trim();
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
+}
+
+/**
+ * The person's recent instructions on this canvas and what came of each (the
+ * AI's message, a failure, or items added), oldest first, for an instruction's
+ * prompt: the conversation panel shows them, so "try again" or "the second
+ * one" refers to them. Only finished ones.
+ */
+export function earlierExchanges(jobs: Iterable<JobStatus>, excludeId?: string): string {
+  const recent = [...jobs]
+    .filter((job) => job.id !== excludeId && job.retry && EARLIER_KINDS[job.retry.kind] && (job.state === "done" || job.state === "failed" || job.state === "cancelled"))
+    .sort((a, b) => (a.queuedAt ?? a.startedAt ?? 0) - (b.queuedAt ?? b.startedAt ?? 0))
+    .slice(-EARLIER_MAX);
+  if (!recent.length) return "";
+  const time = (ms: number) => new Date(ms).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const lines = recent.map((job) => {
+    const asked = `[${time(job.queuedAt ?? job.startedAt ?? job.finishedAt ?? 0)}] ${EARLIER_KINDS[job.retry!.kind]}: ${clip(job.retry!.input, 600)}`;
+    const outcome =
+      job.state === "failed"
+        ? `Failed: ${clip(job.error ?? "no reason given", 200)}`
+        : job.state === "cancelled"
+          ? "Stopped by the person."
+          : job.message
+            ? `You told them: ${clip(job.message.text, 1500)}`
+            : job.resultIds?.length
+              ? `Done: ${job.resultIds.length} item(s) added (${job.resultIds.slice(0, 8).join(", ")}).`
+              : "Done.";
+    return `${asked}\n${outcome}`;
+  });
+  return `<earlier>\nThe person's earlier instructions on this canvas and what came of them (oldest first). The new instruction may refer to them ("try again", "the second one"):\n\n${lines.join("\n\n")}\n</earlier>\n\n`;
 }
