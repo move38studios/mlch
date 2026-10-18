@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { RotateCcw, Square, X } from "lucide-react";
+import { Play, RotateCcw, Square, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { create } from "zustand";
 import { Scribble } from "@/components/brand/Scribble";
 import { useMulch } from "@/lib/mulch/client";
 import type { JobStatus, TranscriptSegment } from "@/lib/mulch/events";
+import { PAUSED_TEXT } from "./JobStatus";
 import { useVoice } from "./Mic";
 
 /**
@@ -131,11 +132,12 @@ function JobEntry({ job }: { job: JobStatus }) {
       <div className="text-[13px] text-ink-2">
         <div className="flex items-center gap-2">
           {running ? <Scribble which="bottom" mode="loop" strokeWidth={11} className="h-2.5 w-7 text-ink shrink-0" /> : <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${job.state === "failed" ? "bg-danger" : "bg-line-2"}`} />}
-          <span className={`truncate ${typed ? "text-ink-3" : "text-ink"}`}>{typed ? (running ? (job.activity ?? "Working") : job.state === "failed" ? "Failed" : "Done") : job.label}</span>
+          <span className={`truncate ${typed ? "text-ink-3" : "text-ink"}`}>{typed ? (running ? (job.activity ?? "Working") : job.state === "failed" ? "Failed" : job.state === "paused" ? PAUSED_TEXT : "Done") : job.label}</span>
           {(job.finishedAt ?? job.startedAt ?? job.queuedAt) && <span className="ml-auto shrink-0 tabular-nums text-[11.5px] text-ink-3">{clock((job.finishedAt ?? job.startedAt ?? job.queuedAt)!)}</span>}
         </div>
         {running && !typed && job.activity && <p className="mt-0.5 pl-9 text-[12px] text-ink-3 truncate">{job.activity}</p>}
         {job.state === "failed" && <p className="mt-0.5 pl-9 text-[12.5px] text-danger">{job.error ?? "Failed"}</p>}
+        {job.state === "paused" && !typed && <p className="mt-0.5 pl-9 text-[12px] text-ink-3">{PAUSED_TEXT}</p>}
         <div className="mt-1 pl-9 flex gap-1.5">
           {results.length > 0 && (
             <button onClick={() => setFocus({ ids: results })} className="text-[12px] text-ink-2 hover:text-ink underline-offset-2 hover:underline">
@@ -145,6 +147,11 @@ function JobEntry({ job }: { job: JobStatus }) {
           {running && job.retry && (
             <button onClick={() => void jobAction("cancel", { jobId: job.id })} className="text-[12px] text-ink-3 hover:text-ink inline-flex items-center gap-1">
               <Square size={9} strokeWidth={2.5} /> Stop
+            </button>
+          )}
+          {job.state === "paused" && job.retry && (
+            <button onClick={() => void jobAction("continue", { jobId: job.id })} className="text-[12px] text-ink hover:text-ink inline-flex items-center gap-1 font-medium">
+              <Play size={10} strokeWidth={2.25} /> Keep going
             </button>
           )}
           {job.state === "failed" && job.retry && (

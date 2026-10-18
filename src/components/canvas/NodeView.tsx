@@ -14,7 +14,6 @@ import { useResolvedRef } from "./refs";
 import { shareArtifact } from "./share";
 import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
-import { jitter } from "@/lib/mulch/place";
 import type { MulchNode, MulchOp } from "@/lib/mulch/types";
 import { hasThumbnail } from "@/lib/artifacts/thumbnails";
 import { KIND_STYLES } from "./kinds";
@@ -52,7 +51,9 @@ function Editor({ node, onDone }: { node: MulchNode; onDone: () => void }) {
   }, []);
   const commit = () => {
     if (text !== node.text) {
-      apply(text.trim() ? [{ op: "updateNode", id: node.id, patch: { text, userTouched: true, updatedAt: Date.now() } }] : [{ op: "removeNode", id: node.id }]);
+      // A note keeps its place when its text is cleared; other cards go.
+      const keep = text.trim() || node.kind === "note";
+      apply(keep ? [{ op: "updateNode", id: node.id, patch: { text: text.trim() ? text : "", userTouched: true, updatedAt: Date.now() } }] : [{ op: "removeNode", id: node.id }]);
     }
     onDone();
   };
@@ -351,7 +352,6 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const setOpen = useCanvasUi((s) => s.setOpen);
   const setViewer = useCanvasUi((s) => s.setViewer);
   const apply = useMulch((s) => s.apply);
-  const tilt = style.tilt ? jitter(node.id)(5) : 0;
   const sizedByShape = node.kind === "image" || node.kind === "media" || node.kind === "artifact";
   const transparent = useTransparent(node, mulchId, readOnly, apply);
   // Stable handlers (they depend only on the card's id and kind): React Flow rebinds a resize control's drag
@@ -376,8 +376,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
 
   return (
     <div
-      className={`mlch-node group relative text-ink ${transparent ? "text-[12.5px]" : `${style.card} ${outline(node, style.tinted)}`} ${style.tilt ? "rounded-[3px]" : "rounded-[10px]"} ${selected ? "outline-[2.5px] outline-amber outline-offset-2" : ""} ${fresh ? "node-enter" : ""} ${node.fixedH ? "h-full" : ""}`}
-      style={{ transform: tilt ? `rotate(${tilt}deg)` : undefined }}
+      className={`mlch-node group relative text-ink ${transparent ? "text-[12.5px]" : `${style.card} ${outline(node, style.tinted)}`} ${style.square ? "rounded-[3px]" : "rounded-[10px]"} ${selected ? "outline-[2.5px] outline-amber outline-offset-2" : ""} ${fresh ? "node-enter" : ""} ${node.fixedH ? "h-full" : ""}`}
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (node.kind === "ref") {

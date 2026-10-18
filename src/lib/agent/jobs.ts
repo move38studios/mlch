@@ -44,7 +44,22 @@ import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolName } fro
 /** Sources longer than this are read in part; the rest is found by search. */
 const LONG_SOURCE = 60_000;
 
-const TIMEOUT_MS: Record<JobLane, number> = { fast: 120_000, slow: 300_000, command: 900_000, ingest: 600_000, long: 1_800_000 };
+/**
+ * How long a job runs. The person's instructions and long work (command, long)
+ * run for a period: when it ends they pause, keep what they added, and "keep
+ * going" resumes the same session for another period.
+ */
+const PERIOD_MS = 30 * 60_000;
+const TIMEOUT_MS: Record<JobLane, number> = { fast: 120_000, slow: 300_000, command: PERIOD_MS, ingest: 600_000, long: PERIOD_MS };
+/** MLCH_PERIOD_MS shortens the period (tests). */
+const timeoutFor = (lane: JobLane) => (PAUSING.has(lane) && Number(process.env.MLCH_PERIOD_MS)) || TIMEOUT_MS[lane];
+/** Lanes whose kept jobs pause instead of failing when time or steps run out. */
+const PAUSING: ReadonlySet<JobLane> = new Set(["command", "long"]);
+/**
+ * Model round-trips in one turn of capture, enrichment and reading, which are
+ * quick by design. Instructions and long work have no step limit; their period bounds them.
+ */
+const QUICK_STEPS = 40;
 /** Long work (making, research) at once: per mulch, and in all (it all runs on one subscription). */
 const LONG_PER_MULCH = 2;
 const LONG_TOTAL = 3;
@@ -210,6 +225,28 @@ export function answerApproval(approvalId: string, allow: boolean): boolean {
 }
 
 class JobError extends Error {}
+/** The turn used all its steps: the work is unfinished, not broken. */
+class OutOfSteps extends JobError {}
+
+/** Paused jobs being continued: the session their next turn resumes (absent when there is none to resume). */
+const resuming = new Map<string, JobStatus["session"] | null>();
+
+/** The first turn of a continued job: the same session told to keep going, or the original prompt told what it already did. */
+function continuation(spec: TurnSpec, harness: string): { prompt: string; sessionId?: string } | undefined {
+  if (!resuming.has(spec.job.id)) return undefined;
+  const session = resuming.get(spec.job.id);
+  resuming.delete(spec.job.id);
+  const added = (spec.job.resultIds ?? []).join(", ");
+  const done = added ? `What you added so far is on the canvas (${added}).` : "Nothing was added to the canvas yet.";
+  if (session && session.harness === harness) {
+    // The request again, in case the vendor no longer has the session and it starts fresh.
+    return {
+      sessionId: session.id,
+      prompt: `Your time ran out and the person asked you to keep going. ${done} Pick up where you stopped and finish; do not redo what is done.\n\n<request>\n${spec.job.retry?.input ?? spec.job.label}\n</request>`,
+    };
+  }
+  return { prompt: `You started on this before and your time ran out. ${done} Continue from there; do not redo what is done.\n\n${spec.prompt}` };
+}
 
 async function harnessReady(): Promise<void> {
   const settings = await readSettings();
@@ -330,17 +367,20 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     added: [] as string[],
   };
   const harness = getHarness(settings.harness);
+  const continued = continuation(spec, settings.harness);
+  const sessionId = continued ? continued.sessionId : spec.sessionId;
   const userSetup: AgentUserSetup | undefined =
     spec.ownSetup && settings.agentSetup
       ? { connectors: true, approve: (request) => askApproval(spec.mulchId, spec.job, request, spec.signal) }
       : undefined;
   const events: AsyncIterable<HarnessEvent> = harness.runTurn({
-    ...(spec.sessionId ? { sessionId: spec.sessionId } : {}),
+    ...(sessionId ? { sessionId } : {}),
     history: [],
-    prompt: spec.prompt,
+    prompt: continued?.prompt ?? spec.prompt,
     systemPrompt: (typeof spec.systemPrompt === "string" ? spec.systemPrompt : spec.systemPrompt(settings)) + (userSetup ? CONNECTORS_NOTE : ""),
     tools: createMulchTools(ctx),
     model: modelFor(settings, spec.lane),
+    ...(PAUSING.has(spec.job.lane) ? {} : { maxSteps: QUICK_STEPS }),
     webAccess: spec.webAccess,
     workspace: spec.workspace,
     userSetup,
@@ -349,7 +389,11 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
   // The model's own words, sentence by sentence, are the best "what it is doing now".
   const said = new Map<string, string>();
   for await (const event of events) {
-    if (event.type === "session") ctx.session.id = event.sessionId;
+    if (event.type === "session") {
+      ctx.session.id = event.sessionId;
+      // Kept so a paused job can resume it.
+      spec.job.session = { id: event.sessionId, harness: settings.harness };
+    }
     if (event.type === "tool-pending") setActivity(spec.mulchId, spec.job, TOOL_ACTIVITY[event.toolName]);
     if (event.type === "tool-use") setActivity(spec.mulchId, spec.job, describeToolUse(event.name, event.input));
     if (event.type === "text-delta") said.set(event.id, (said.get(event.id) ?? "") + event.delta);
@@ -362,8 +406,9 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
       log.warn("agent", "turn error", { mulchId: spec.mulchId, jobId: spec.job.id, harness: settings.harness, code: event.code, message: event.message });
       // A refused or failed turn invalidates the cached status.
       state().status = undefined;
-      // The CLI itself broke (not a refusal): if it was the person's own install, use the tested version next time.
-      if (event.code === "harness_error" || event.code === "not_installed") cliFailed(settings.harness);
+      if (event.code === "step_limit") throw new OutOfSteps(event.message);
+      // The CLI itself broke (not a refusal, nor a turn stopped for time): if it was the person's own install, use the tested version next time.
+      if (!spec.signal.aborted && (event.code === "harness_error" || event.code === "not_installed")) cliFailed(settings.harness);
       throw new JobError(event.message);
     }
   }
@@ -437,9 +482,16 @@ function start(mulchId: string, { work, job }: Queued): void {
   const entry = jobsFor(mulchId);
   const lane = work.lane;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error("Timed out")), TIMEOUT_MS[lane]);
+  const timer = setTimeout(() => controller.abort(new Error("Timed out")), timeoutFor(lane));
   const running: Running = { job, controller };
   entry.running[lane].push(running);
+  const timedOut = () => controller.signal.reason instanceof Error && controller.signal.reason.message === "Timed out";
+  // The person's own work keeps what it did and waits for "keep going".
+  const pauses = !!work.retry && PAUSING.has(lane);
+  const pause = async (why: "time" | "steps") => {
+    log.info("jobs", "job paused", { mulchId, jobId: job.id, lane, why, ms: Date.now() - (job.startedAt ?? Date.now()), session: !!job.session });
+    await update(mulchId, job, { state: "paused", finishedAt: Date.now(), activity: undefined, anchor: undefined, approvals: undefined });
+  };
   void (async () => {
     try {
       const patch: Partial<JobStatus> = { state: "running", startedAt: Date.now() };
@@ -453,6 +505,7 @@ function start(mulchId: string, { work, job }: Queued): void {
       await update(mulchId, job, patch);
       log.info("jobs", "job started", { mulchId, jobId: job.id, lane, label: work.label });
       await work.run(job, controller.signal);
+      if (timedOut() && pauses) return await pause("time");
       const cancelled = controller.signal.aborted;
       log.info("jobs", cancelled ? "job cancelled" : "job finished", { mulchId, jobId: job.id, lane, ms: Date.now() - (job.startedAt ?? Date.now()) });
       await update(mulchId, job, {
@@ -464,8 +517,8 @@ function start(mulchId: string, { work, job }: Queued): void {
         unseen: !cancelled && !!work.retry && !!job.resultIds?.length,
       });
     } catch (error) {
-      const timedOut = controller.signal.reason instanceof Error && controller.signal.reason.message === "Timed out";
-      const cancelled = controller.signal.aborted && !timedOut;
+      if (pauses && (timedOut() || error instanceof OutOfSteps)) return await pause(timedOut() ? "time" : "steps").catch(() => {});
+      const cancelled = controller.signal.aborted && !timedOut();
       const message = error instanceof Error ? error.message : String(error);
       await update(mulchId, job, {
         state: cancelled ? "cancelled" : "failed",
@@ -490,17 +543,17 @@ function start(mulchId: string, { work, job }: Queued): void {
   })();
 }
 
-/** Queue work without starting it; returns its job. */
-function queue(mulchId: string, work: Work): JobStatus {
-  const job: JobStatus = { id: newClientId("j"), lane: work.lane, state: "queued", label: work.label, queuedAt: Date.now(), ...(work.retry ? { retry: work.retry } : {}), ...(work.inputIds?.length ? { inputIds: work.inputIds } : {}) };
+/** Queue work without starting it; returns its job (`again`: a paused job carried on). */
+function queue(mulchId: string, work: Work, again?: JobStatus): JobStatus {
+  const job: JobStatus = again ?? { id: newClientId("j"), lane: work.lane, state: "queued", label: work.label, queuedAt: Date.now(), ...(work.retry ? { retry: work.retry } : {}), ...(work.inputIds?.length ? { inputIds: work.inputIds } : {}) };
   jobsFor(mulchId).queues[work.lane].push({ work, job });
   // Only the person's own requests are worth showing while they wait.
   if (work.retry) void setJob(mulchId, { ...job }).catch(() => {});
   return job;
 }
 
-function enqueue(mulchId: string, work: Work): JobStatus {
-  const job = queue(mulchId, work);
+function enqueue(mulchId: string, work: Work, again?: JobStatus): JobStatus {
+  const job = queue(mulchId, work, again);
   pump(mulchId, work.lane);
   return job;
 }
@@ -657,7 +710,7 @@ async function endCall(mulchId: string, call: NonNullable<MulchJobs["call"]>, en
 }
 
 /** The notes of a finished call: summary, decisions, to-dos, open questions, next to its transcript. */
-export function submitCallNotes(mulchId: string, call: { startedAt: number; endedAt: number; transcriptId?: string }): JobStatus {
+export function submitCallNotes(mulchId: string, call: { startedAt: number; endedAt: number; transcriptId?: string }, again?: JobStatus): JobStatus {
   return enqueue(mulchId, {
     lane: "command",
     label: "Call notes",
@@ -687,7 +740,7 @@ export function submitCallNotes(mulchId: string, call: { startedAt: number; ende
         ownSetup: true,
       });
     },
-  });
+  }, again);
 }
 
 export function inCall(mulchId: string): boolean {
@@ -911,7 +964,7 @@ const RESEARCH_TOOLS: ToolName[] = [
  * and a write-up on the canvas. If the turn ends without the table or the
  * write-up, the same session is resumed once with what is missing.
  */
-export function submitResearch(mulchId: string, brief: string, options: LongOptions = {}): JobStatus {
+export function submitResearch(mulchId: string, brief: string, options: LongOptions = {}, again?: JobStatus): JobStatus {
   return enqueue(mulchId, {
     lane: "long",
     label: options.title || shorten(brief, 50),
@@ -956,7 +1009,7 @@ export function submitResearch(mulchId: string, brief: string, options: LongOpti
         prompt: `You are not finished. Still missing: ${missing.join("; ")}. Do these now, then say one line.`,
       });
     },
-  });
+  }, again);
 }
 
 /** Tools that need a key the person may not have set. */
@@ -1062,7 +1115,9 @@ export function nameIfUntitled(mulchId: string): void {
   setTimeout(() => {
     void (async () => {
       const mulch = await getMulch(mulchId).catch(() => undefined);
-      if (!mulch || mulch.title !== "Untitled" || Object.keys(mulch.nodes).length < 2) {
+      // Empty notes say nothing to name it by.
+      const filled = mulch ? Object.values(mulch.nodes).filter((node) => node.text.trim() || node.title || node.assetId || node.docPath || node.url || node.ref) : [];
+      if (!mulch || mulch.title !== "Untitled" || filled.length < 2) {
         naming.delete(mulchId);
         return;
       }
@@ -1148,7 +1203,7 @@ onFinished((record) => {
   if (record.review && record.status !== "cancelled") submitReview(record.mulchId, record);
 });
 
-export function submitCommand(mulchId: string, instruction: string, inputIds?: string[]): JobStatus {
+export function submitCommand(mulchId: string, instruction: string, inputIds?: string[], again?: JobStatus): JobStatus {
   return enqueue(mulchId, {
     lane: "command",
     label: shorten(instruction, 60),
@@ -1180,7 +1235,7 @@ export function submitCommand(mulchId: string, instruction: string, inputIds?: s
         ownSetup: true,
       });
     },
-  });
+  }, again);
 }
 
 /** Digest a document or link already on the canvas into items around it. */
@@ -1253,14 +1308,15 @@ async function newArtifacts(mulchId: string, since: number): Promise<string[]> {
  * Make files with the CLI's own tools in its OS sandbox (python-pptx decks,
  * documents, charts). Whatever it saves in artifacts/ lands on the canvas.
  */
-export function submitMake(mulchId: string, brief: string, options: LongOptions = {}): JobStatus {
+export function submitMake(mulchId: string, brief: string, options: LongOptions = {}, again?: JobStatus): JobStatus {
   return enqueue(mulchId, {
     lane: "long",
     label: options.title || shorten(brief, 50),
     retry: { kind: "make", input: brief, ...options },
     near: options.near,
     async run(job, signal) {
-      const started = Date.now();
+      // A continued job also adopts what it saved in earlier periods.
+      const started = again ? (job.queuedAt ?? Date.now()) : Date.now();
       const workspace = makerWorkspace(mulchId);
       await fs.mkdir(workspace.cwd, { recursive: true });
       await fs.mkdir(workspace.writable[0], { recursive: true });
@@ -1286,7 +1342,7 @@ export function submitMake(mulchId: string, brief: string, options: LongOptions 
       const fresh = (await newArtifacts(mulchId, started)).filter((docPath) => !onMulch.has(docPath));
       for (const docPath of fresh) await addArtifactNode(mulchId, job.id, docPath, job);
     },
-  });
+  }, again);
 }
 
 async function addArtifactNode(mulchId: string, jobId: string, docPath: string, job?: JobStatus): Promise<void> {
@@ -1374,7 +1430,29 @@ export function cancelJob(mulchId: string, jobId: string): boolean {
   }
   const running = findRunning(mulchId, jobId);
   running?.controller.abort();
-  return !!running;
+  if (running) return true;
+  // A paused job waits for "keep going"; stopping it ends it.
+  void getJobs(mulchId).then((jobs) => {
+    const paused = jobs.find((job) => job.id === jobId && job.state === "paused");
+    if (paused) void setJob(mulchId, { ...paused, state: "cancelled", finishedAt: Date.now() });
+  });
+  return false;
+}
+
+/** "keep going": a paused job runs another period, resuming its session where it can. */
+export async function continueJob(mulchId: string, jobId: string): Promise<JobStatus | undefined> {
+  const old = (await getJobs(mulchId)).find((job) => job.id === jobId);
+  if (!old?.retry || old.state !== "paused") return undefined;
+  const job: JobStatus = { ...old, state: "queued", error: undefined, activity: undefined, finishedAt: undefined, unseen: false };
+  resuming.set(job.id, old.session ?? null);
+  void setJob(mulchId, { ...job }).catch(() => {});
+  const { kind, input, near, title } = old.retry;
+  if (kind === "make") return submitMake(mulchId, input, { near, title }, job);
+  if (kind === "research") return submitResearch(mulchId, input, { near, title }, job);
+  if (kind === "callNotes") return submitCallNotes(mulchId, JSON.parse(input) as { startedAt: number; endedAt: number; transcriptId?: string }, job);
+  if (kind === "command") return submitCommand(mulchId, input, old.inputIds, job);
+  resuming.delete(job.id);
+  return undefined;
 }
 
 /** Start a failed or stopped job again, as a new job. */

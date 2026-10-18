@@ -33,13 +33,17 @@ function clock(at: number | undefined): string {
 
 const isActive = (job: Job) => job.state === "running" || job.state === "queued";
 
+/** PLACEHOLDER wording (George): a job whose time period ran out, waiting for "keep going". */
+export const PAUSED_TEXT = "[paused: time ran out]";
+
 /** What the activity list shows, most pressing first. */
 function listed(jobs: Job[], now: number): Job[] {
-  const rank = (job: Job) => (job.state === "running" ? (job.lane === "long" ? 0 : 1) : job.state === "queued" ? 2 : job.state === "failed" ? 3 : 4);
+  const rank = (job: Job) => (job.state === "running" ? (job.lane === "long" ? 0 : 1) : job.state === "queued" ? 2 : job.state === "failed" || job.state === "paused" ? 3 : 4);
   return jobs
     .filter(
       (job) =>
         isActive(job) ||
+        (job.retry && job.state === "paused") ||
         (job.retry && job.state === "failed" && job.unseen) ||
         (job.retry && job.state === "done" && job.resultIds?.length && (job.unseen || now - (job.finishedAt ?? 0) < RECENT_MS)),
     )
@@ -58,7 +62,9 @@ function JobRow({ job, now }: { job: Job; now: number }) {
         ? "Queued"
         : job.state === "failed"
           ? (job.error ?? "Failed")
-          : `${results.length} ${results.length === 1 ? "item" : "items"}`;
+          : job.state === "paused"
+            ? `${PAUSED_TEXT}, ${results.length} ${results.length === 1 ? "item" : "items"}`
+            : `${results.length} ${results.length === 1 ? "item" : "items"}`;
   return (
     <li className="flex items-start gap-2.5 px-3 py-2.5">
       <div className="pt-1.5 w-7 shrink-0">
@@ -66,6 +72,8 @@ function JobRow({ job, now }: { job: Job; now: number }) {
           <Scribble which="bottom" mode="loop" strokeWidth={11} className="h-2.5 w-7 text-ink" />
         ) : job.state === "failed" ? (
           <span className="block h-2 w-2 mt-0.5 rounded-full bg-danger" />
+        ) : job.state === "paused" ? (
+          <Pause size={11} strokeWidth={2.25} className="mt-0.5 text-ink-2" />
         ) : job.state === "done" && job.unseen ? (
           <span className="block h-2 w-2 mt-0.5 rounded-full bg-amber" />
         ) : (
@@ -78,7 +86,7 @@ function JobRow({ job, now }: { job: Job; now: number }) {
             {job.label}
           </span>
           <span className="ml-auto shrink-0 tabular-nums text-[12px] text-ink-3">
-            {job.state === "running" ? elapsed(job.startedAt, now) : job.state === "done" || job.state === "failed" ? clock(job.finishedAt) : ""}
+            {job.state === "running" ? elapsed(job.startedAt, now) : job.state === "done" || job.state === "failed" || job.state === "paused" ? clock(job.finishedAt) : ""}
           </span>
         </div>
         <p className={`mt-0.5 text-[12px] leading-snug line-clamp-2 ${job.state === "failed" ? "text-danger" : "text-ink-3"}`}>{detail}</p>
@@ -100,6 +108,16 @@ function JobRow({ job, now }: { job: Job; now: number }) {
           >
             Show
           </button>
+        )}
+        {job.state === "paused" && (
+          <>
+            <button onClick={() => void jobAction("continue", { jobId: job.id })} className="px-2 py-1 rounded-md text-[12px] font-medium text-ink hover:bg-paper-2">
+              Keep going
+            </button>
+            <button onClick={() => void jobAction("cancel", { jobId: job.id })} className="p-1.5 rounded-md text-ink-3 hover:bg-paper-2 hover:text-ink" title="Stop" aria-label="Stop">
+              <Square size={11} strokeWidth={2} />
+            </button>
+          </>
         )}
         {job.state === "failed" && (
           <>

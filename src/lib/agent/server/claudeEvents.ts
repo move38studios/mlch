@@ -323,7 +323,7 @@ export class ClaudeEventMapper {
       return events;
     }
     if (message.subtype === "error_max_turns") {
-      events.push(this.error("harness_error", "The agent stopped after reaching its step limit for one message."));
+      events.push(this.error("step_limit", "The agent stopped after reaching its step limit for one message."));
       return events;
     }
     const { code, message: userMessage } = classifyClaudeError(detail || message.subtype, undefined, this.rateLimited);

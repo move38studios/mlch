@@ -127,7 +127,7 @@ function nodeLine(node: MulchNode, textLimit: number): string {
   const head = `${node.id} [${node.kind}] @${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.w)}x${Math.round(r.h)}${flags.length ? ` (${flags.join(", ")})` : ""}`;
   if (node.ref) return `${head}: link to ${"mulchId" in node.ref ? `item ${node.ref.itemId} in mulch ${node.ref.mulchId}` : `${node.ref.path} in source ${node.ref.sourceId}`}${node.title ? ` "${oneLine(node.title)}"` : ""}`;
   const body = [node.title ? `"${oneLine(node.title)}"` : undefined, node.url, clip(oneLine(node.text), textLimit)].filter(Boolean).join(" — ");
-  return `${head}: ${body}`;
+  return `${head}: ${body || "(empty)"}`;
 }
 
 /** Compact text form of the canvas for prompts and get_mulch. */

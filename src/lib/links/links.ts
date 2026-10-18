@@ -6,7 +6,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { addFile } from "@/lib/ingest/place";
-import { assetPath } from "@/lib/ingest/ingest";
+import { assetPath, textAssetId } from "@/lib/ingest/ingest";
 import { newClientId } from "@/lib/mulch/ids";
 import { applyToMulch, getMulch, listMulches, mulchDir, peekMulch } from "@/lib/mulch/store";
 import type { MulchNode, MulchOp, NodeKind, NodeRef } from "@/lib/mulch/types";
@@ -133,4 +133,55 @@ export async function bringHere(mulchId: string, refNodeId: string): Promise<str
   ops.push({ op: "removeNode", id: refNodeId });
   await applyToMulch(mulchId, ops, "user");
   return newId;
+}
+
+/** A made file or write-up a card stands for: `artifacts/<name>` or `docs/<name>`, nothing deeper. */
+const DOC_PATH = /^(artifacts|docs)\/[^/\\.][^/\\]*$/;
+
+/**
+ * Files for pasted or duplicated cards (copy, paste, duplicate on the canvas).
+ * Pictures, documents and posters (assets, content-addressed) come along from
+ * another mulch; a made file or write-up is copied under a new name, in this
+ * mulch too, so the copy is edited apart from the original. Returns each
+ * docPath's new path; a file that is gone is left out.
+ */
+export async function copyCardFiles(toMulchId: string, fromMulchId: string, assets: string[], docPaths: string[]): Promise<Record<string, string>> {
+  const fromDir = mulchDir(fromMulchId);
+  const toDir = mulchDir(toMulchId);
+  if (fromMulchId !== toMulchId) {
+    await fs.mkdir(path.join(toDir, "assets"), { recursive: true });
+    for (const asset of new Set(assets)) {
+      // Its extracted text sits beside it; either may be missing.
+      for (const file of [asset, textAssetId(asset)]) {
+        let target: string;
+        try {
+          target = assetPath(toMulchId, file);
+        } catch {
+          continue; // not an asset id
+        }
+        if (await fs.stat(target).then(() => true, () => false)) continue;
+        await fs.copyFile(assetPath(fromMulchId, file), target).catch(() => undefined);
+      }
+    }
+  }
+  const moved: Record<string, string> = {};
+  for (const docPath of new Set(docPaths)) {
+    if (!DOC_PATH.test(docPath)) continue;
+    const source = path.join(fromDir, docPath);
+    const ext = path.extname(docPath);
+    const base = docPath.slice(0, docPath.length - ext.length);
+    await fs.mkdir(path.join(toDir, path.dirname(docPath)), { recursive: true });
+    for (let n = 2; n < 1000; n++) {
+      const candidate = `${base}-${n}${ext}`;
+      try {
+        // COPYFILE_EXCL: never overwrite a file that is there.
+        await fs.copyFile(source, path.join(toDir, candidate), fs.constants.COPYFILE_EXCL);
+        moved[docPath] = candidate;
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") break;
+      }
+    }
+  }
+  return moved;
 }

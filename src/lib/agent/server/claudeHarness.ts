@@ -87,8 +87,6 @@ const LABEL = "Claude Code";
 /** Agent chats live in their own Claude Code project, away from the user's repos and `claude --resume` lists. */
 export const CLAUDE_AGENT_CWD = path.join(os.homedir(), ".mlch", "agent");
 
-/** Upper bound on model round-trips in one turn. */
-const MAX_TURNS = 40;
 /** Claude Code's own web tools, given to research turns only. */
 export const CLAUDE_WEB_TOOLS = ["WebSearch", "WebFetch"] as const;
 
@@ -393,7 +391,7 @@ export function buildClaudeOptions(input: {
     // Checked against the model's own levels before the turn (pickTurnEffort).
     ...(params.effort ? { effort: params.effort as NonNullable<Options["effort"]> } : {}),
     includePartialMessages: true,
-    maxTurns: MAX_TURNS,
+    ...(params.maxSteps ? { maxTurns: params.maxSteps } : {}),
     resume: input.resume,
     abortController: input.abortController,
     stderr: input.onStderr,

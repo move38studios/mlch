@@ -338,7 +338,7 @@ export function Welcome() {
       body = (
         <div className="flex flex-col items-center text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/icon.svg" alt="" className="h-24 w-24 drop-shadow-[0_10px_22px_rgba(0,0,0,0.16)] -rotate-3" />
+          <img src="/brand/icon.svg" alt="" className="h-24 w-24 drop-shadow-[0_10px_22px_rgba(0,0,0,0.16)]" />
           <h1 className="mt-10 text-[34px] leading-tight font-semibold tracking-[-0.015em]">Welcome to mlch</h1>
           <p className="mt-3 text-[18px] text-ink-2">An AI app for non-linear thinkers.</p>
           <button onClick={() => go(1)} className="mt-12 h-12 px-8 rounded-2xl bg-amber text-ink text-[16px] font-semibold shadow-[var(--float-shadow)] hover:brightness-[1.03]">
@@ -613,7 +613,7 @@ export function Welcome() {
       body = (
         <div className="flex flex-col items-center text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/icon.svg" alt="" className="h-20 w-20 drop-shadow-[0_10px_22px_rgba(0,0,0,0.16)] rotate-2" />
+          <img src="/brand/icon.svg" alt="" className="h-20 w-20 drop-shadow-[0_10px_22px_rgba(0,0,0,0.16)]" />
           <h1 className="mt-6 text-[30px] leading-tight font-semibold tracking-[-0.01em]">Ready</h1>
           <p className="mt-3 text-[15px] text-ink-2 max-w-[400px]">&ldquo;Start here&rdquo; in your list shows how mlch works.</p>
           {downloads.length > 0 && <p className="mt-2 text-[13.5px] text-ink-3 max-w-[400px]">Downloads continue in the background.</p>}

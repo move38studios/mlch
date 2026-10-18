@@ -127,6 +127,8 @@ export type AgentErrorCode =
   | "session_busy"
   | "bad_request"
   | "aborted"
+  /** mlch: the turn used the most model round-trips it was given (`maxSteps`); the CLI is fine. */
+  | "step_limit"
   | "harness_error";
 
 /** Events a harness yields while running one turn. The iterator ending means the turn is done. */
@@ -162,6 +164,11 @@ export interface HarnessTurnParams {
   model?: string;
   /** Thinking effort, already checked against the model's own levels. */
   effort?: string;
+  /**
+   * mlch: most model round-trips in this turn (Claude Code's maxTurns). Absent: no
+   * limit; the job's time period bounds it. Codex has no such limit.
+   */
+  maxSteps?: number;
   /** Turn on the harness's own web search and fetch. */
   webAccess?: boolean;
   /**

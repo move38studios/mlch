@@ -287,7 +287,7 @@ describe("Claude harness runTurn", () => {
 
   it("locks the CLI down to our tools, our prompt and the stripped environment", async () => {
     const { query, made } = fakeQueries({ messages: recorded });
-    await collect(harness({ query }).runTurn(params({ model: "haiku", sessionId: "s-9" })));
+    await collect(harness({ query }).runTurn(params({ model: "haiku", sessionId: "s-9", maxSteps: 40 })));
     const options = made[0].options;
     expect(options).toMatchObject({
       pathToClaudeCodeExecutable: BIN,
@@ -304,6 +304,10 @@ describe("Claude harness runTurn", () => {
       resume: "s-9",
     });
     expect(Object.keys(options.mcpServers ?? {})).toEqual(["mlch"]);
+    // Without maxSteps a turn has no step limit (the job's time period bounds it).
+    const { query: unbounded, made: madeUnbounded } = fakeQueries({ messages: recorded });
+    await collect(harness({ query: unbounded }).runTurn(params({})));
+    expect(madeUnbounded[0].options.maxTurns).toBeUndefined();
     expect(options.env).not.toHaveProperty("ANTHROPIC_API_KEY");
     expect(options.env).not.toHaveProperty("CLAUDECODE");
     expect(options.env).toMatchObject({ HOME: "/Users/someone", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });

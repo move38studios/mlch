@@ -27,7 +27,8 @@ export interface JobRetry {
 export interface JobStatus {
   id: string;
   lane: JobLane;
-  state: "queued" | "running" | "done" | "failed" | "cancelled";
+  /** paused: its time period ran out; what it added stays and "keep going" resumes it (`session`). */
+  state: "queued" | "running" | "paused" | "done" | "failed" | "cancelled";
   /** One short line ("Adding ideas", "Deck: cities and forests"). */
   label: string;
   error?: string;
@@ -51,6 +52,8 @@ export interface JobStatus {
    * tool names come from the person's config: untrusted text.
    */
   approvals?: Array<{ id: string; server: string; tool: string; input: Record<string, string>; at: number }>;
+  /** The vendor session its last turn ran in, so a paused job can resume it. */
+  session?: { id: string; harness: string };
   /** Long work: the space held on the canvas for its result. */
   anchor?: { x: number; y: number; w: number; h: number };
 }

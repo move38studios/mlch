@@ -35,6 +35,7 @@ import { Square } from "lucide-react";
 import type { JobStatus } from "@/lib/mulch/events";
 import { elapsed, useNow } from "./JobStatus";
 import { useCanvasGestures } from "./gestures";
+import { CARDS_TYPE, cardsText, copiedCards, pasteOps, readCopiedCards, type CopiedCards, type PasteAt } from "./clipboard";
 
 const ZOOM_LIMITS = { min: 0.1, max: 2 };
 const FIT_PADDING = { top: "60px", left: "40px", right: "40px", bottom: "150px" } as const;
@@ -158,8 +159,15 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
   const dragStart = useRef<Map<string, { x: number; y: number }>>(new Map());
   const resizingIds = useRef<Set<string>>(new Set());
 
+  // Pasted or duplicated cards are selected once they are on the canvas.
+  const selectAfter = useRef<Set<string>>(undefined);
   useEffect(() => {
-    setNodes((previous) => toFlowNodes(mulch, previous, fresh));
+    const pick = selectAfter.current && [...selectAfter.current].every((id) => mulch.nodes[id]) ? selectAfter.current : undefined;
+    if (pick) selectAfter.current = undefined;
+    setNodes((previous) => {
+      const next = toFlowNodes(mulch, previous, fresh);
+      return pick ? next.map((node) => ({ ...node, selected: pick.has(node.id) })) : next;
+    });
   }, [mulch, fresh]);
 
   // Clear the entrance class after it has played.
@@ -338,8 +346,9 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     [flow, readOnly],
   );
 
+  // The note stays even when nothing was typed; it can be written later.
   const commitDraft = useCallback(() => {
-    if (draft?.text.trim()) {
+    if (draft) {
       apply([
         {
           op: "addNode",
@@ -403,7 +412,66 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     [flow, ingest],
   );
 
-  // Paste onto the canvas (not into a text field): files, links or text land in the middle of the view.
+  // The selected cards (and the members of selected groups).
+  const selectedCards = useCallback((): CopiedCards | undefined => {
+    const picked = flow.getNodes().filter((node) => node.selected);
+    const groups = new Set(picked.filter((node) => node.id.startsWith(GROUP_PREFIX)).map((node) => node.id.slice(GROUP_PREFIX.length)));
+    const ids = [...picked.filter((node) => !node.id.startsWith(GROUP_PREFIX)).map((node) => node.id), ...Object.values(mulch.nodes).filter((node) => node.groupId && groups.has(node.groupId)).map((node) => node.id)];
+    return copiedCards(mulch, ids);
+  }, [flow, mulch]);
+
+  const pasteCards = useCallback(
+    async (cards: CopiedCards, at: PasteAt) => {
+      try {
+        const { ops, ids } = await pasteOps(mulchId, cards, at);
+        selectAfter.current = new Set(ids);
+        apply(ops);
+      } catch (error) {
+        useMulch.setState({ notice: { level: "error", message: (error as Error).message, at: Date.now() } });
+      }
+    },
+    [apply, mulchId],
+  );
+
+  const root = useRef<HTMLDivElement>(null);
+  // Where the pointer is over the canvas, for pasting there.
+  const pointer = useRef<{ x: number; y: number }>(undefined);
+
+  // Copy the selected cards, unless text is selected or being edited.
+  useEffect(() => {
+    const onCopy = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable)) return;
+      // Text selected outside the canvas (a side panel, the conversation) is copied as text; on the canvas a selection is a stray from shift-clicking cards.
+      const selection = window.getSelection();
+      if (selection?.toString() && !(selection.anchorNode && root.current?.contains(selection.anchorNode))) return;
+      const cards = selectedCards();
+      if (!cards || !event.clipboardData) return;
+      event.preventDefault();
+      event.clipboardData.setData("text/plain", cardsText(cards));
+      // A read-only canvas (a shared link) has no files here to copy from: text only.
+      if (!readOnly) event.clipboardData.setData(CARDS_TYPE, JSON.stringify(cards));
+    };
+    window.addEventListener("copy", onCopy);
+    return () => window.removeEventListener("copy", onCopy);
+  }, [readOnly, selectedCards]);
+
+  // ⌘D: the selected cards again, a little down and right.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (readOnly || !(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "d") return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable)) return;
+      const cards = selectedCards();
+      if (!cards) return;
+      event.preventDefault();
+      void pasteCards(cards, { offset: { x: 40, y: 40 } });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pasteCards, readOnly, selectedCards]);
+
+  // Paste onto the canvas (not into a text field): copied cards at the pointer; files, links or text in the middle of the view.
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       if (readOnly) return;
@@ -411,6 +479,15 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
       if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable)) return;
       const data = event.clipboardData;
       if (!data) return;
+      const cards = readCopiedCards(data);
+      if (cards?.nodes.length) {
+        event.preventDefault();
+        // At the pointer; else beside the originals here, or in the middle of the view.
+        const view = document.querySelector(".react-flow")?.getBoundingClientRect();
+        const middle = flow.screenToFlowPosition({ x: (view?.left ?? 0) + (view?.width ?? 800) / 2, y: (view?.top ?? 0) + (view?.height ?? 600) / 2 });
+        void pasteCards(cards, pointer.current ? { center: flow.screenToFlowPosition(pointer.current) } : cards.mulchId === mulchId ? { offset: { x: 40, y: 40 } } : { center: middle });
+        return;
+      }
       const rect = document.querySelector(".react-flow")?.getBoundingClientRect();
       const at = flow.screenToFlowPosition({ x: (rect?.left ?? 0) + (rect?.width ?? 800) / 2, y: (rect?.top ?? 0) + (rect?.height ?? 600) / 2 });
       const files = Array.from(data.files);
@@ -426,7 +503,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [flow, ingest, readOnly]);
+  }, [flow, ingest, mulchId, pasteCards, readOnly]);
 
   // Long work shows where its result will land.
   const jobs = useMulch((s) => s.jobs);
@@ -466,9 +543,24 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
   }, [jobs, checkSeen]);
 
   // Mouse wheel zooms, trackpad pans, zoom keys and the View menu.
-  const root = useRef<HTMLDivElement>(null);
   const fitAll = useCallback(() => void flow.fitView({ padding: FIT_PADDING, maxZoom: 1, duration: 400 }), [flow]);
   useCanvasGestures(root, flow, ZOOM_LIMITS, fitAll);
+  useEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    const move = (event: PointerEvent) => {
+      pointer.current = { x: event.clientX, y: event.clientY };
+    };
+    const leave = () => {
+      pointer.current = undefined;
+    };
+    element.addEventListener("pointermove", move);
+    element.addEventListener("pointerleave", leave);
+    return () => {
+      element.removeEventListener("pointermove", move);
+      element.removeEventListener("pointerleave", leave);
+    };
+  }, []);
 
   // The agent moves the view.
   const view = useMulch((s) => s.view);

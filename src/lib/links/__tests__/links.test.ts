@@ -88,4 +88,24 @@ describe("links between mulches and to linked folders", () => {
     expect((await runtime.execute("read_source", { source_id: "vault01", path: "Pricing.md" })).text).toContain("Charge per seat");
     expect((await runtime.execute("read_source", { source_id: "vault01", path: "../etc/passwd" })).ok).toBe(false);
   });
+
+  it("copies pasted cards' files: assets from another mulch, made files under a new name", async () => {
+    const { store, old, here } = await setup([]);
+    const { copyCardFiles } = await import("../links");
+    const asset = `${"a".repeat(64)}.png`;
+    fs.mkdirSync(path.join(store.mulchDir(old.id), "assets"), { recursive: true });
+    fs.writeFileSync(path.join(store.mulchDir(old.id), "assets", asset), "png");
+    fs.writeFileSync(path.join(store.mulchDir(old.id), "assets", `${"a".repeat(64)}.md`), "its text");
+    fs.mkdirSync(path.join(store.mulchDir(old.id), "artifacts"), { recursive: true });
+    fs.writeFileSync(path.join(store.mulchDir(old.id), "artifacts", "deck.html"), "<p>deck</p>");
+
+    const moved = await copyCardFiles(here.id, old.id, [asset, "../../x"], ["artifacts/deck.html", "../secret.txt", "artifacts/gone.html"]);
+    expect(moved).toEqual({ "artifacts/deck.html": "artifacts/deck-2.html" });
+    expect(fs.readFileSync(path.join(store.mulchDir(here.id), "assets", asset), "utf8")).toBe("png");
+    expect(fs.readFileSync(path.join(store.mulchDir(here.id), "assets", `${"a".repeat(64)}.md`), "utf8")).toBe("its text");
+    expect(fs.readFileSync(path.join(store.mulchDir(here.id), "artifacts", "deck-2.html"), "utf8")).toBe("<p>deck</p>");
+    // Duplicated in the same mulch: its own copy, next free name.
+    expect(await copyCardFiles(old.id, old.id, [asset], ["artifacts/deck.html"])).toEqual({ "artifacts/deck.html": "artifacts/deck-2.html" });
+    expect(await copyCardFiles(old.id, old.id, [], ["artifacts/deck.html"])).toEqual({ "artifacts/deck.html": "artifacts/deck-3.html" });
+  });
 });

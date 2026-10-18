@@ -275,7 +275,7 @@ describe("ClaudeEventMapper", () => {
     const maxTurns = mapAll([
       { type: "result", subtype: "error_max_turns", is_error: true, errors: [], usage: {}, session_id: "s", uuid: "u" },
     ]);
-    expect(maxTurns.events).toEqual([{ type: "error", code: "harness_error", message: expect.stringMatching(/step limit/) }]);
+    expect(maxTurns.events).toEqual([{ type: "error", code: "step_limit", message: expect.stringMatching(/step limit/) }]);
 
     const execution = mapAll([
       {

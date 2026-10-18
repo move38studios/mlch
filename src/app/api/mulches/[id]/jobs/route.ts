@@ -1,5 +1,5 @@
 import { handle, jsonError } from "@/lib/http";
-import { answerApproval, cancelJob, retryJob } from "@/lib/agent/jobs";
+import { answerApproval, cancelJob, continueJob, retryJob } from "@/lib/agent/jobs";
 import { dismissJobMessage, getJobs, getMulch, markJobsSeen, applyToMulch } from "@/lib/mulch/store";
 import { newClientId } from "@/lib/mulch/ids";
 import { placeNear } from "@/lib/mulch/place";
@@ -15,7 +15,7 @@ export async function GET(_request: Request, { params }: Params) {
   return handle(async () => ({ jobs: await getJobs(id) }));
 }
 
-/** One job: stop it, start it again, mark finished jobs as seen, close its message, or answer a connector tool card. */
+/** One job: stop it, start it again, keep a paused one going, mark finished jobs as seen, close its message, or answer a connector tool card. */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   const body = (await request.json().catch(() => ({}))) as { action?: unknown; jobId?: unknown; ids?: unknown; approvalId?: unknown };
@@ -29,6 +29,11 @@ export async function POST(request: Request, { params }: Params) {
         if (!jobId) return jsonError(400, "Which job?");
         const job = await retryJob(id, jobId);
         return job ? { job } : jsonError(400, "That job cannot be started again.");
+      }
+      case "continue": {
+        if (!jobId) return jsonError(400, "Which job?");
+        const job = await continueJob(id, jobId);
+        return job ? { job } : jsonError(400, "Only a paused job can keep going.");
       }
       case "seen": {
         const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === "string").slice(0, 100) : [];
