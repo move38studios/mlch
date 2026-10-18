@@ -119,6 +119,27 @@ export interface LinkContent {
   summary: string;
   /** Full text, for the agent and the side panel. */
   text: string;
+  /** The page's own preview picture (og:image, twitter:image), absolute. */
+  image?: string;
+}
+
+/** A page's preview picture from its meta tags (og:image, then twitter:image), as an absolute https address. */
+export function pageImage(html: string, base: string): string | undefined {
+  const head = html.slice(0, 200_000);
+  for (const name of ["og:image:secure_url", "og:image", "og:image:url", "twitter:image", "twitter:image:src"]) {
+    const escaped = name.replace(/[.:]/g, "\\$&");
+    const tag = head.match(new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]*>`, "i"))?.[0];
+    const content = tag?.match(/content=["']([^"']+)["']/i)?.[1];
+    if (!content) continue;
+    try {
+      const url = new URL(decodeEntities(content.trim()), base);
+      if (url.protocol === "http:") url.protocol = "https:";
+      if (url.protocol === "https:") return url.toString();
+    } catch {
+      // not an address
+    }
+  }
+  return undefined;
 }
 
 /** Pages that came back 200 but are a wall, not the content. */
@@ -157,6 +178,16 @@ function firstWords(text: string, max: number): string {
   return clean.length > max ? `${clean.slice(0, max).replace(/\s\S*$/, "")}…` : clean;
 }
 
+function imageOf(value: string | undefined, base: string): { image: string } | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value, base);
+    return url.protocol === "https:" ? { image: url.toString() } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function firecrawlScrape(url: string): Promise<LinkContent | undefined> {
   const key = getCredential("firecrawl");
   if (!key) return undefined;
@@ -169,7 +200,7 @@ async function firecrawlScrape(url: string): Promise<LinkContent | undefined> {
     });
     const data = (await response.json().catch(() => ({}))) as {
       success?: boolean;
-      data?: { markdown?: string; summary?: string; metadata?: { title?: string; ogTitle?: string } };
+      data?: { markdown?: string; summary?: string; metadata?: { title?: string; ogTitle?: string; ogImage?: string; "og:image"?: string; "twitter:image"?: string } };
     };
     if (!response.ok || !data.success) return undefined;
     const text = String(data.data?.markdown ?? "").trim();
@@ -180,6 +211,7 @@ async function firecrawlScrape(url: string): Promise<LinkContent | undefined> {
       title: String(meta.title || meta.ogTitle || "").trim().slice(0, 200),
       summary: String(data.data?.summary || firstWords(text, 500)).trim().slice(0, 1200),
       text,
+      ...(imageOf(meta.ogImage || meta["og:image"] || meta["twitter:image"], url) ?? {}),
     };
   } catch {
     return undefined;
@@ -199,7 +231,8 @@ async function plainFetch(url: string): Promise<LinkContent | undefined> {
     const raw = (await response.text()).slice(0, 3_000_000);
     const { title, text } = /html/.test(type) ? htmlToText(raw) : { title: "", text: raw };
     if (text.length < 200 || BLOCKED.test(text.slice(0, 2000))) return undefined;
-    return { url, title: title.slice(0, 200), summary: firstWords(text, 500), text };
+    const image = /html/.test(type) ? pageImage(raw, response.url || url) : undefined;
+    return { url, title: title.slice(0, 200), summary: firstWords(text, 500), text, ...(image ? { image } : {}) };
   } catch {
     return undefined;
   }

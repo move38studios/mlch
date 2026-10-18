@@ -263,6 +263,11 @@ function Body({ node, mulchId, transparent = false }: { node: MulchNode; mulchId
   return (
     <>
       {video && <VideoPlayer video={video} poster={node.poster ? `/api/mulches/${mulchId}/assets/${node.poster}` : video.poster} title={node.title} />}
+      {/* A link's own preview picture (og:image), as it shows when shared elsewhere. */}
+      {!video && node.kind === "link" && node.poster && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={`/api/mulches/${mulchId}/assets/${node.poster}`} alt="" className="block w-full max-h-[220px] object-cover rounded-t-[inherit] border-b border-line" draggable={false} />
+      )}
     <div className="px-4 py-3">
       {(style.label || node.url) && (
         <div className="flex items-center gap-1.5 mb-1 text-[12px] text-ink-3">

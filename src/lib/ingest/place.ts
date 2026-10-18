@@ -148,7 +148,10 @@ export async function addLink(mulchId: string, url: string, at: { x: number; y: 
       return;
     }
     const assetId = await saveAsset(mulchId, Buffer.from(page.text), "page.md");
-    await applyToMulch(mulchId, [{ op: "updateNode", id: node.id, patch: { title: page.title || host, text: page.summary, assetId } }], "ingest");
+    // The page's own preview picture, shown at the top of the card (as when the link is shared elsewhere).
+    const picture = page.image ? await fetchImage(page.image).catch(() => undefined) : undefined;
+    const poster = picture && !("error" in picture) ? await saveAsset(mulchId, picture.bytes, `preview${picture.extension}`) : undefined;
+    await applyToMulch(mulchId, [{ op: "updateNode", id: node.id, patch: { title: page.title || host, text: page.summary, assetId, ...(poster ? { poster } : {}) } }], "ingest");
     submitIngest(mulchId, node.id, `Reading ${host}`, `Page: ${page.title}\nURL: ${url}\n\n${page.text}`);
   })().catch((error) => {
     log.error("ingest", "link could not be read", { mulchId, url, error });
