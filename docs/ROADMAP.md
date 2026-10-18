@@ -10,9 +10,17 @@ Order agreed 2026-10-13: **docs/PLAN-3.md**, a small public release (fixes from 
 
 ## Outside the plans
 
-1. **Home screen.** The full logo on the empty screen (centred, the scribbles and lettering), the small wordmark top-left once there is a list. The empty screen as one clear start (New, or straight into a new mulch with the mic ready, tied to onboarding). Whether mlch needs a tagline at all (in the app: probably not; on mlch.app: maybe). Wording from George.
-2. **Your Claude Code and Codex setup: what's left.** Built 2026-10-15 (docs/research/connectors.md). Still to do: ChatGPT apps in Codex, the person's setup in Codex making turns (`codex exec`), a Dock badge while a connector card waits.
-3. **Settings → AI stuck on "Preparing Claude Code" after launch.** Opening Settings soon after launch can show it in red forever; switching to Codex and back shows the right state. A race between the CLI check at launch and the panel's status. (Noted 2026-10-15.)
+1. **Everything the AI writes reads cold.** Seen 2026-10-18 on the Loudbox canvas: the competitive landscape deck opens with "31 companies profiled from DCBL's tracked universe of 40" and "How many of the 31 cover each step"; the territories page leans on "George's three post-its", "DCBL's market update v4.3", "the ICP", "Vadim raised this", "the 200–250 companies in the CRM". George: "imagine someone just opening this deck with 0 context." Well-written things assume zero context: the reader has not seen the canvas, the conversation, the sources or the call.
+   - Why it happens: no default prompt says who the reader is. The writer has the whole canvas in its prompt and writes from inside it. Deck content drafted by an instruction (write_doc) went to the maker with "use its wording verbatim", so the inside wording reached the slides and no one read it fresh.
+   - The fix, in the default prompts (BASE, COMMAND, MAKER, RESEARCH; editable in Settings) and the tools:
+     - The rule: write for someone who opens the file with no context. The title says what it is; the opening says the subject (what Loudbox is), for whom, when, and where the facts come from; every name, acronym, number and reference ("the 31", "the call", "DCBL", "the ICP", a person) is explained where it first appears, or cut. No canvas internals (item ids, "on the canvas", "the write-up").
+     - A cold reader pass: after a deck, page or document is written, a fresh model call that sees only the file's text (no canvas, no brief) lists what a newcomer could not follow; the writer fixes it and checks again. A fresh reader, because the writer cannot unknow what it knows. For HTML in `preview_artifact` (which already checks every slide), and for write_doc and the maker's files.
+     - Briefs to the maker say who the reader is and never pass canvas-internal wording as "verbatim".
+     - Make only the formats asked for (the same deck came with an unrequested PDF).
+   - Check: rerun the Loudbox deck and territories page from the same canvas and read them cold.
+2. **Home screen.** The full logo on the empty screen (centred, the scribbles and lettering), the small wordmark top-left once there is a list. The empty screen as one clear start (New, or straight into a new mulch with the mic ready, tied to onboarding). Whether mlch needs a tagline at all (in the app: probably not; on mlch.app: maybe). Wording from George.
+3. **Your Claude Code and Codex setup: what's left.** Built 2026-10-15 (docs/research/connectors.md). Still to do: ChatGPT apps in Codex, the person's setup in Codex making turns (`codex exec`), a Dock badge while a connector card waits.
+4. **Settings → AI stuck on "Preparing Claude Code" after launch.** Opening Settings soon after launch can show it in red forever; switching to Codex and back shows the right state. A race between the CLI check at launch and the panel's status. (Noted 2026-10-15.)
 
 ## From testing (George, 2026-10-18, on the MLCH dev board)
 
