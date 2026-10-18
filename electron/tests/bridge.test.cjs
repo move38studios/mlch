@@ -203,7 +203,7 @@ test('main shows job notifications, keeps the activity count, and makes previews
   assert.deepEqual(calls.notified[1].quietIn, ['20261007-1300-aaaaaa']);
   assert.deepEqual(await ask('notify', { mulchId: '../etc', title: 'x' }), { ok: false, error: 'A notification needs a mulch.' });
   assert.deepEqual(await ask('activity', { working: 2, unseen: -1 }), { ok: true });
-  assert.deepEqual(calls.activity, [{ working: 2, unseen: 0 }]);
+  assert.deepEqual(calls.activity, [{ working: 2, unseen: 0, waiting: 0 }]);
   const file = path.join(temp, 'deck.pptx');
   fs.writeFileSync(file, 'pptx');
   assert.deepEqual(await ask('thumbnail', { path: file, size: 99999 }), { ok: true, value: 'cG5n' });

@@ -1224,7 +1224,10 @@ onJobChanged((mulchId, job) => {
   activityTimer = setTimeout(() => {
     void listMulches()
       .then((all) => {
-        const total = all.reduce((sum, m) => ({ working: sum.working + (m.activity?.working ?? 0), unseen: sum.unseen + (m.activity?.unseen ?? 0) }), { working: 0, unseen: 0 });
+        const total = all.reduce(
+          (sum, m) => ({ working: sum.working + (m.activity?.working ?? 0), unseen: sum.unseen + (m.activity?.unseen ?? 0), waiting: sum.waiting + (m.activity?.waiting ?? 0) }),
+          { working: 0, unseen: 0, waiting: 0 },
+        );
         return desktopRequest("activity", total);
       })
       .catch(() => {});

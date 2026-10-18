@@ -10,6 +10,7 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   useReactFlow,
   ViewportPortal,
   type Connection,
@@ -154,6 +155,7 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
   const setEditing = useCanvasUi((s) => s.setEditing);
   const flow = useReactFlow<FlowNode, Edge>();
   const [nodes, setNodes] = useState<FlowNode[]>([]);
+  const dragPans = useMemo(() => readOnly || (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches), [readOnly]);
   const [selectedEdges, setSelectedEdges] = useState<Set<string>>(new Set());
   const [draft, setDraft] = useState<{ x: number; y: number; text: string }>();
   const dragStart = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -660,8 +662,11 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
       maxZoom={ZOOM_LIMITS.max}
       // Trackpad scroll pans (a mouse wheel zooms, see gestures.ts); pinch and ⌘-wheel zoom.
       panOnScroll
-      // Drag on empty canvas moves it, as does Space-drag; Shift-drag draws a selection box.
-      panOnDrag
+      // Drag on empty canvas draws a selection box (as in Figma); Space-drag, the middle or right button and the
+      // trackpad move it. On a touch screen and on a shared canvas, dragging moves it.
+      panOnDrag={dragPans ? true : [1, 2]}
+      selectionOnDrag={!dragPans}
+      selectionMode={SelectionMode.Partial}
       selectionKeyCode="Shift"
       fitView
       fitViewOptions={{ padding: { top: "40px", left: "40px", right: "40px", bottom: "150px" }, maxZoom: 1 }}

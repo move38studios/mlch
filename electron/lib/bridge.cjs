@@ -42,6 +42,7 @@ function bridgePayload(payload) {
     ...(Array.isArray(payload?.quietIn) ? { quietIn: payload.quietIn.filter(id => typeof id === 'string').slice(0, 200) } : {}),
     ...(Number.isInteger(payload?.working) ? { working: payload.working } : {}),
     ...(Number.isInteger(payload?.unseen) ? { unseen: payload.unseen } : {}),
+    ...(Number.isInteger(payload?.waiting) ? { waiting: payload.waiting } : {}),
     // mlch: the native audio helper (main checks each again).
     ...(typeof payload?.action === 'string' ? { action: payload.action } : {}),
     ...(typeof payload?.target === 'string' || Number.isInteger(payload?.target) ? { target: payload.target } : {}),

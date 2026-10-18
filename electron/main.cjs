@@ -639,7 +639,9 @@ async function audioRequest({ action, path: file, target, session, out, count, m
 
 function setJobActivity(next) {
   jobActivity = next;
-  if (process.platform === 'darwin') app.dock?.setBadge(next.unseen ? String(next.unseen) : '');
+  // Results not yet seen, and connector cards waiting for an answer.
+  const badge = (next.unseen || 0) + (next.waiting || 0);
+  if (process.platform === 'darwin') app.dock?.setBadge(badge ? String(badge) : '');
 }
 
 async function createWindow() {

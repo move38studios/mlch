@@ -226,13 +226,24 @@ export function Settings() {
     void loadSettings();
     void loadStatus();
   }, [loadSettings, loadStatus]);
-  // A CLI still being found or downloaded (right after launch): ask again until it settles.
+  // A CLI still being found or downloaded (right after launch): ask again until it settles. Any other
+  // problem in the first minute (a status read while the CLI was still being set up) is asked again too,
+  // and everything when the window comes back to the front.
   const settling = !!harnesses?.some((h) => /^(Getting .* ready|Downloading )/.test(h.problem ?? ""));
+  const troubled = !!harnesses?.some((h) => h.problem);
+  const [openedAt] = useState(() => Date.now());
   useEffect(() => {
-    if (!settling) return;
-    const timer = setInterval(() => void loadStatus(), 2000);
+    if (!settling && !troubled) return;
+    const timer = setInterval(() => {
+      if (settling || Date.now() - openedAt < 60_000) void loadStatus();
+    }, settling ? 2000 : 4000);
     return () => clearInterval(timer);
-  }, [settling, loadStatus]);
+  }, [settling, troubled, openedAt, loadStatus]);
+  useEffect(() => {
+    const again = () => void loadStatus();
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
+  }, [loadStatus]);
   // Opened at a section (e.g. /settings#sharing from the Share menu): scroll to it once the page has its content.
   const loaded = !!view;
   useEffect(() => {

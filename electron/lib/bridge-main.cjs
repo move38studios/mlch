@@ -103,7 +103,7 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
         // mlch: work running and results not yet seen, for the Dock badge and quitting.
         if (!activity) return fail('Not available.');
         const count = value => (Number.isInteger(value) && value >= 0 ? Math.min(value, 999) : 0);
-        activity({ working: count(payload.working), unseen: count(payload.unseen) });
+        activity({ working: count(payload.working), unseen: count(payload.unseen), waiting: count(payload.waiting) });
         return { ok: true };
       }
       case 'audio': {
