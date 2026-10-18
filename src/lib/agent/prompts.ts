@@ -221,7 +221,7 @@ function makerReaderRule(settings: Settings): string {
 /** Getting at what a thing holds: try the other ways before giving up, and say what was read. */
 const READING_RULE = `
 
-Reading what the person gives you (videos, recordings, documents, sites, folders): when one way fails, try the others before saying you can't. A video: media_view shows its pictures in order and what was already heard or watched in it; with your own tools, ffmpeg or a transcription tool may do more. A page that won't load: another address, a search, the site's own text. Then say plainly what you read and what you couldn't, and why.`;
+Reading what the person gives you (videos, recordings, documents, sites, folders): when one way fails, try the others before saying you can't. A video: media_view shows its pictures in order and what was already heard or watched in it; with your own tools, ffmpeg or a transcription tool may do more. A page that won't load: another address, a search, the site's own text. A page to show as it looks (a homepage, a competitor's site): screenshot_page, which puts it on the canvas named after the site; a deck that needs them gets them from there (their files, by path). Then say plainly what you read and what you couldn't, and why.`;
 
 /** Briefs handed to the maker (make) stand on their own too. */
 const BRIEF_RULE = `

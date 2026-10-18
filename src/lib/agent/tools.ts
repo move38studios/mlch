@@ -22,7 +22,7 @@ import { fetchFile, FILE_EXTENSION } from "@/lib/ingest/fetchFile";
 import { addFile, addLink } from "@/lib/ingest/place";
 import { videoEmbed } from "@/lib/ingest/video";
 import { adoptArtifact, ARTIFACT_EXTENSIONS, ARTIFACT_PATH, artifactFile, saveArtifact } from "@/lib/artifacts/artifacts";
-import { desktopRequest } from "@/lib/desktop/server";
+import { desktopRequest, isDesktop } from "@/lib/desktop/server";
 import { modelSchema, searchModels, type FalModel } from "@/lib/media/fal";
 import { PICKS_CHECKED, picksFor } from "@/lib/media/picks";
 import { startGeneration, waitFor } from "@/lib/media/generations";
@@ -64,6 +64,7 @@ export type ToolName =
   | "make"
   | "present_file"
   | "cold_read"
+  | "screenshot_page"
   | "preview_artifact"
   | "media_search"
   | "media_schema"
@@ -129,7 +130,9 @@ function nodeLine(node: MulchNode, textLimit: number): string {
   ].filter(Boolean);
   const head = `${node.id} [${node.kind}] @${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.w)}x${Math.round(r.h)}${flags.length ? ` (${flags.join(", ")})` : ""}`;
   if (node.ref) return `${head}: link to ${"mulchId" in node.ref ? `item ${node.ref.itemId} in mulch ${node.ref.mulchId}` : `${node.ref.path} in source ${node.ref.sourceId}`}${node.title ? ` "${oneLine(node.title)}"` : ""}`;
-  const body = [node.title ? `"${oneLine(node.title)}"` : undefined, node.url, clip(oneLine(node.text), textLimit)].filter(Boolean).join(" — ");
+  // Files by their place in the mulch's folder, so a maker's brief can name them.
+  const file = node.assetId ? `file assets/${node.assetId}` : node.docPath ? `file ${node.docPath}` : undefined;
+  const body = [node.title ? `"${oneLine(node.title)}"` : undefined, node.url, file, clip(oneLine(node.text), textLimit)].filter(Boolean).join(" — ");
   return `${head}: ${body || "(empty)"}`;
 }
 
@@ -580,6 +583,21 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
       "Give a complete brief: what to make, for whom, the format, and which mulch items it should draw on.",
     inputShape: LONG_JOB_SHAPE,
     readOnly: true,
+  },
+  screenshot_page: {
+    name: "screenshot_page",
+    title: "Screenshot a web page",
+    description:
+      "Take a screenshot of a web page (as a browser window shows it: 1440×900 unless asked otherwise; cookie banners dismissed where possible) and put it on the canvas as a picture, named after the site. " +
+      "The result says the page's title and main heading (its own words, for quoting). Use it for homepages, competitors' sites, anything to show as it looks.",
+    inputShape: {
+      url: z.string().max(2000),
+      caption: z.string().max(300).optional(),
+      near: z.array(z.string()).max(6).optional(),
+      width: z.number().int().min(320).max(2560).optional(),
+      height: z.number().int().min(320).max(2000).optional(),
+    },
+    readOnly: false,
   },
   cold_read: {
     name: "cold_read",
@@ -1339,6 +1357,23 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const id = await addArtifactCard(title, description, docPath, near);
       const text = /\.(html?|svg|md|txt)$/i.test(docPath) ? await fs.readFile(artifactFile(ctx.mulchId, docPath), "utf8").catch(() => "") : "";
       return ok(`Added card ${id} for ${docPath}.${text ? await coldCheck(docPath, text, docPath) : ""}`, `Added ${title}`);
+    },
+
+    async screenshot_page(args) {
+      const { url, caption, near, width, height } = args as { url: string; caption?: string; near?: string[]; width?: number; height?: number };
+      if (!isHttpUrl(url)) return fail("Give a web page's address (http or https).");
+      if (!isDesktop()) return fail("Screenshots need the desktop app.");
+      const result = await desktopRequest("screenshot", { url, ...(width ? { width } : {}), ...(height ? { height } : {}) });
+      if (!result.ok) return fail(`${url}: ${result.error} Nothing was added; try the site's other address, or say it couldn't be captured.`);
+      const shot = result.value as { png: string; title: string; h1: string; url: string };
+      const host = new URL(shot.url || url).hostname.replace(/^www\./, "");
+      const day = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+      const mulch = await getMulch(ctx.mulchId);
+      const size = { w: NODE_WIDTH.image, h: 260 };
+      const at = placeResult(mulch, size, near, `${host}-${Date.now()}`);
+      const node = await addFile(ctx.mulchId, Buffer.from(shot.png, "base64"), `${host}.png`, { x: at.x + size.w / 2, y: at.y + 40 }, { origin, text: caption?.trim() || `${shot.title || host} (${host}), ${day}`, url: shot.url || url });
+      ctx.added.push(node.id);
+      return ok(`Added screenshot ${node.id} of ${host}. Page title: "${shot.title}". Main heading: "${shot.h1}".`, `Screenshot of ${host}`, []);
     },
 
     async cold_read(args) {

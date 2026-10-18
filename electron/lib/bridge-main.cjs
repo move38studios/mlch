@@ -8,7 +8,7 @@ const path = require('node:path');
 
 const DEFAULT_PICKER_TITLE = 'Choose a folder';
 
-function createServerMessageHandler({ shell, dialog, fs, getWindow, render, notify, activity, thumbnail, audio, storeAccount, log = () => {}, platform = process.platform }) {
+function createServerMessageHandler({ shell, dialog, fs, getWindow, render, notify, activity, thumbnail, audio, storeAccount, screenshot, log = () => {}, platform = process.platform }) {
   const bin = platform === 'win32' ? 'Recycle Bin' : 'Trash';
   const fail = error => ({ ok: false, error });
 
@@ -144,6 +144,13 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
         // The helper's own messages are plain sentences for the person; pass them on.
         try { return { ok: true, value: await audio(request) }; }
         catch (error) { log(error); return fail(error?.message || 'The audio helper could not complete that request.'); }
+      }
+      case 'screenshot': {
+        // mlch: a web page for the AI's screenshot_page (lib/screenshot.cjs checks the address again).
+        if (!screenshot) return fail('Screenshots are not available.');
+        if (typeof payload.url !== 'string' || !/^https?:\/\//i.test(payload.url)) return fail('Only web pages (http or https).');
+        try { return { ok: true, value: await screenshot(payload.url, { width: payload.width, height: payload.height }) }; }
+        catch (error) { return fail(error?.message || 'The page could not be captured.'); }
       }
       case 'account-token': {
         // mlch: the mlch.app session after sign-in (or null on sign-out), kept in Keychain like the keys.

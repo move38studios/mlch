@@ -18,6 +18,7 @@ const { createServerMessageHandler } = require('./lib/bridge-main.cjs');
 const { audioHelperPath, createAudioHelper } = require('./lib/audio-helper.cjs');
 const { spawn } = require('node:child_process');
 const { loginShellPath } = require('./lib/shell-path.cjs');
+const { createScreenshotter } = require('./lib/screenshot.cjs');
 // Asked at once, while Electron starts (the shell takes most of a second).
 const shellPath = loginShellPath().catch(() => undefined);
 
@@ -984,7 +985,9 @@ else {
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
       redactor.add(values); backend?.post({ type: 'secrets', values });
     });
-    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, notify: notifyJob, activity: setJobActivity, thumbnail: fileThumbnail, audio: audioRequest, storeAccount, log });
+    const serverMessage = createServerMessageHandler({ shell, dialog, fs, getWindow: () => window, render: renderArtifact, notify: notifyJob, activity: setJobActivity, thumbnail: fileThumbnail, audio: audioRequest, storeAccount, log,
+      // Pages look as they do in Chrome: the user agent without Electron's and mlch's names.
+      screenshot: createScreenshotter({ BrowserWindow, session, userAgent: app.userAgentFallback.replace(/ (Electron|mlch)\/\S+/g, '') }) });
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('MLCH_ELECTRON_PORT must be a port number between 1 and 65535.');
     backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
       entry: path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,

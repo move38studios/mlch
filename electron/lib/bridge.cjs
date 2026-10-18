@@ -6,7 +6,7 @@
 // (src/lib/desktop/server.ts); lib/bridge-main.cjs answers.
 /** Helper requests that read a whole file. */
 const LONG_AUDIO = new Set(['transcribe', 'frames', 'extract-audio']);
-const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render', 'thumbnail', 'notify', 'activity', 'open-url', 'audio', 'account-token']);
+const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render', 'thumbnail', 'notify', 'activity', 'open-url', 'audio', 'account-token', 'screenshot']);
 const INGEST_PICKER_TITLE = 'Choose a folder';
 const REQUEST_TIMEOUT_MS = 30_000;
 // A folder picker waits on the user, not on main; this only bounds a lost reply
@@ -46,6 +46,9 @@ function bridgePayload(payload) {
     ...(typeof payload?.action === 'string' ? { action: payload.action } : {}),
     ...(typeof payload?.target === 'string' || Number.isInteger(payload?.target) ? { target: payload.target } : {}),
     ...(typeof payload?.session === 'string' ? { session: payload.session } : {}),
+    // mlch: a web page's screenshot size.
+    ...(Number.isInteger(payload?.width) ? { width: payload.width } : {}),
+    ...(Number.isInteger(payload?.height) ? { height: payload.height } : {}),
     // mlch: videos read by the helper: where its pictures and sound go, how many, which part.
     ...(typeof payload?.out === 'string' ? { out: payload.out } : {}),
     ...(Number.isInteger(payload?.count) ? { count: payload.count } : {}),
@@ -99,7 +102,7 @@ function createBridgeClient({ post, timeoutMs = REQUEST_TIMEOUT_MS, pickerTimeou
     if (!BRIDGE_REQUESTS.has(type)) return { ok: false, error: 'The desktop app does not handle that request.' };
     const call = send({ type: 'bridge', request: { type, payload: bridgePayload(payload) } }, {
       // Reading a long recording or video takes minutes.
-      timeout: type === 'choose-directory' ? pickerTimeoutMs : type === 'audio' && LONG_AUDIO.has(payload?.action) ? 15 * 60_000 : type === 'render' || type === 'thumbnail' || type === 'audio' ? 60_000 : timeoutMs,
+      timeout: type === 'choose-directory' ? pickerTimeoutMs : type === 'audio' && LONG_AUDIO.has(payload?.action) ? 15 * 60_000 : type === 'render' || type === 'thumbnail' || type === 'audio' || type === 'screenshot' ? 60_000 : timeoutMs,
       fail: reason => ({ ok: false, error: reason === 'timeout' ? 'The desktop app did not answer in time.' : 'The desktop app is not reachable.' }),
     });
     return bridgeResult(await call.result);
