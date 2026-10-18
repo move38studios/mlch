@@ -4,6 +4,8 @@
 // parentPort and waits for the reply carrying the same id. electron/server.cjs
 // exposes request() to route code as globalThis.__mlchDesktop
 // (src/lib/desktop/server.ts); lib/bridge-main.cjs answers.
+/** Helper requests that read a whole file. */
+const LONG_AUDIO = new Set(['transcribe', 'frames', 'extract-audio']);
 const BRIDGE_REQUESTS = new Set(['reveal', 'open', 'trash', 'choose-directory', 'render', 'thumbnail', 'notify', 'activity', 'open-url', 'audio', 'account-token']);
 const INGEST_PICKER_TITLE = 'Choose a folder';
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -44,6 +46,12 @@ function bridgePayload(payload) {
     ...(typeof payload?.action === 'string' ? { action: payload.action } : {}),
     ...(typeof payload?.target === 'string' || Number.isInteger(payload?.target) ? { target: payload.target } : {}),
     ...(typeof payload?.session === 'string' ? { session: payload.session } : {}),
+    // mlch: videos read by the helper: where its pictures and sound go, how many, which part.
+    ...(typeof payload?.out === 'string' ? { out: payload.out } : {}),
+    ...(Number.isInteger(payload?.count) ? { count: payload.count } : {}),
+    ...(Number.isInteger(payload?.maxSide) ? { maxSide: payload.maxSide } : {}),
+    ...(Number.isFinite(payload?.start) ? { start: payload.start } : {}),
+    ...(Number.isFinite(payload?.length) ? { length: payload.length } : {}),
     // mlch: the mlch.app session after sign-in, or null on sign-out (main checks it again).
     ...(typeof payload?.token === 'string' || payload?.token === null ? { token: payload.token } : {}),
   };
@@ -90,7 +98,8 @@ function createBridgeClient({ post, timeoutMs = REQUEST_TIMEOUT_MS, pickerTimeou
   async function request(type, payload) {
     if (!BRIDGE_REQUESTS.has(type)) return { ok: false, error: 'The desktop app does not handle that request.' };
     const call = send({ type: 'bridge', request: { type, payload: bridgePayload(payload) } }, {
-      timeout: type === 'choose-directory' ? pickerTimeoutMs : type === 'render' || type === 'thumbnail' || type === 'audio' ? 60_000 : timeoutMs,
+      // Reading a long recording or video takes minutes.
+      timeout: type === 'choose-directory' ? pickerTimeoutMs : type === 'audio' && LONG_AUDIO.has(payload?.action) ? 15 * 60_000 : type === 'render' || type === 'thumbnail' || type === 'audio' ? 60_000 : timeoutMs,
       fail: reason => ({ ok: false, error: reason === 'timeout' ? 'The desktop app did not answer in time.' : 'The desktop app is not reachable.' }),
     });
     return bridgeResult(await call.result);

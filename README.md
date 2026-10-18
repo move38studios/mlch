@@ -28,7 +28,7 @@ This README is for building, forking, self-hosting and contributing. CLAUDE.md d
 
 - The library folder is `~/Documents/mlch` until you choose another in Settings, Library (a synced folder such as iCloud Drive or Dropbox works when one Mac uses it at a time). Settings live in the library too.
 - Keys are in the macOS Keychain. Logs are in `~/Library/Logs/mlch`.
-- What leaves the Mac: what the AI needs, to your AI provider; audio to Groq only if you choose Groq; what you share, to the sharing server; services you add keys for (fal, Exa, Gemini, Firecrawl).
+- What leaves the Mac: what the AI needs, to your AI provider; audio to Groq only if you choose Groq; what you share, to the sharing server; services you add keys for (fal, Exa, Gemini, Firecrawl). With a Gemini key, videos you add are sent to Gemini to be watched.
 
 ## Build and run from source
 

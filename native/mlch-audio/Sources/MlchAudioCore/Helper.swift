@@ -2,7 +2,7 @@ import Foundation
 
 /// The helper's protocol, one JSON object per line each way.
 ///
-/// In:  {"id": 1, "cmd": "status" | "download-model" | "warm" | "transcribe" | "tap-start" | "tap-stop" | "shutdown", ...}
+/// In:  {"id": 1, "cmd": "status" | "download-model" | "warm" | "transcribe" | "media-info" | "frames" | "extract-audio" | "tap-start" | "tap-stop" | "shutdown", ...}
 /// Out: {"id": 1, "ok": true, "result": {...}} or {"id": 1, "ok": false, "error": "..."}
 /// Events (no id): {"event": "model-progress", "fraction": 0.4, "phase": "downloading"}
 ///                 {"event": "chunk", "session": "...", "path": "/tmp/.../0001.wav", "at": <epoch ms>, "durationMs": 2400, "rms": 0.05}
@@ -77,6 +77,16 @@ public final class Helper: @unchecked Sendable {
             let started = Date()
             let text = try await transcriber.transcribe(wav: URL(fileURLWithPath: path))
             return ["text": text, "ms": Int(Date().timeIntervalSince(started) * 1000)]
+        case "media-info":
+            return try await Media.info(try Self.absolute(message["path"]))
+        case "frames":
+            let path = try Self.absolute(message["path"])
+            let out = try Self.absolute(message["out"])
+            return try await Media.frames(path, count: message["count"] as? Int ?? 8, maxSide: message["maxSide"] as? Int ?? 768, outDir: URL(fileURLWithPath: out, isDirectory: true))
+        case "extract-audio":
+            let path = try Self.absolute(message["path"])
+            let out = try Self.absolute(message["out"])
+            return try await Media.extractAudio(path, out: URL(fileURLWithPath: out), start: message["start"] as? Double ?? (message["start"] as? Int).map(Double.init), length: message["length"] as? Double ?? (message["length"] as? Int).map(Double.init))
         case "tap-start":
             return try startTap(message)
         case "tap-stop":
@@ -87,8 +97,13 @@ public final class Helper: @unchecked Sendable {
             stopAll()
             return [:]
         default:
-            throw HelperError("Unknown command. Known: status, download-model, warm, transcribe, tap-start, tap-stop, shutdown.")
+            throw HelperError("Unknown command. Known: status, download-model, warm, transcribe, media-info, frames, extract-audio, tap-start, tap-stop, shutdown.")
         }
+    }
+
+    static func absolute(_ value: Any?) throws -> String {
+        guard let path = value as? String, path.hasPrefix("/") else { throw HelperError("Give an absolute path.") }
+        return path
     }
 
     static let noPermission = "mlch can't hear the Mac's sound. Turn on mlch in System Settings > Privacy & Security > Screen & System Audio Recording, under System Audio Recording Only."

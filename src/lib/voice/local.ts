@@ -124,6 +124,24 @@ export async function transcribeLocalFile(file: string): Promise<string> {
   return typeof value.text === "string" ? value.text : "";
 }
 
+/** A video or recording as the helper reads it (AVFoundation): length, picture size, sound. */
+export async function mediaInfo(file: string): Promise<{ duration: number; audio: boolean; video: boolean; width?: number; height?: number }> {
+  const value = await audio("media-info", { path: file });
+  return { duration: Number(value.duration) || 0, audio: !!value.audio, video: !!value.video, ...(value.width ? { width: Number(value.width), height: Number(value.height) } : {}) };
+}
+
+/** Pictures spread through a video, as JPEG files in `out` (a fresh folder in the temporary folder). */
+export async function helperFrames(file: string, out: string, count: number, maxSide = 768): Promise<Array<{ path: string; at: number }>> {
+  const value = await audio("frames", { path: file, out, count, maxSide });
+  return Array.isArray(value.frames) ? (value.frames as Array<{ path: string; at: number }>) : [];
+}
+
+/** A video's sound (or part of it, from `start` for `length` seconds) as m4a at `out`. */
+export async function helperExtractAudio(file: string, out: string, part?: { start: number; length: number }): Promise<{ path: string; bytes: number }> {
+  const value = await audio("extract-audio", { path: file, out, ...(part ?? {}) });
+  return { path: String(value.path), bytes: Number(value.bytes) || 0 };
+}
+
 /** Whether the local model can be used right now. */
 export async function localReady(): Promise<boolean> {
   const s = state();

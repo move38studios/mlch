@@ -32,7 +32,10 @@ export const groqTranscriber: Transcriber = {
     const key = getCredential("groq");
     if (!key) throw new Error("Add a Groq API key in Settings to use the microphone.");
     const form = new FormData();
-    form.append("file", audio, "chunk.wav");
+    // Groq goes by the file's name: say what it really is (a recording's own type, m4a sound from a video).
+    const type = audio.type || "audio/wav";
+    const name = /mp4|m4a|aac/.test(type) ? "audio.m4a" : /mpeg|mp3/.test(type) ? "audio.mp3" : /ogg/.test(type) ? "audio.ogg" : /flac/.test(type) ? "audio.flac" : /webm/.test(type) ? "audio.webm" : "chunk.wav";
+    form.append("file", audio, name);
     form.append("model", GROQ_MODEL);
     form.append("response_format", "json");
     form.append("temperature", "0");

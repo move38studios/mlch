@@ -1269,7 +1269,7 @@ export function submitCommand(mulchId: string, instruction: string, options: { i
 }
 
 /** Digest a document or link already on the canvas into items around it. */
-export function submitIngest(mulchId: string, sourceId: string, label: string, content: string): void {
+export function submitIngest(mulchId: string, sourceId: string, label: string, content: string, options: { video?: boolean } = {}): void {
   enqueue(mulchId, {
     lane: "ingest",
     label,
@@ -1287,7 +1287,8 @@ export function submitIngest(mulchId: string, sourceId: string, label: string, c
             ? `This source is long (${Math.round(content.length / 1000)}k characters; the opening is below). Add at most 8 items: what it is, its main argument or structure, and the parts most relevant to this canvas. Its full text is searchable with search_mulch and read_source, so do not summarise it all.\n\n`
             : "") +
           `<source id="${sourceId}">\n${content.slice(0, LONG_SOURCE)}\n</source>`,
-        tools: ["add_nodes", "connect", "search_mulch", "read_source"],
+        // A video whose pictures weren't read (no Gemini) is looked at here.
+        tools: ["add_nodes", "connect", "search_mulch", "read_source", ...(options.video ? (["media_view"] as const) : [])],
       });
       if (added.length) requestEnrichment(mulchId, added.slice(0, 3));
     },

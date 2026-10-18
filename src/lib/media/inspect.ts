@@ -12,7 +12,8 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { imageForModel } from "@/lib/agent/files";
-import { desktopRequest } from "@/lib/desktop/server";
+import { desktopRequest, isDesktop } from "@/lib/desktop/server";
+import { helperFrames, mediaInfo } from "@/lib/voice/local";
 import { getTranscriber } from "@/lib/voice/transcriber";
 
 const run = promisify(execFile);
@@ -49,6 +50,11 @@ async function probe(file: string): Promise<{ duration?: number; width?: number;
   }
 }
 
+/** Pictures for a video of this length: one every few seconds, between 6 and 24. */
+function frameCount(duration: number): number {
+  return Math.max(6, Math.min(24, Math.ceil(duration / 5)));
+}
+
 async function videoFrames(file: string, duration: number, count = 6): Promise<ModelView["images"]> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mulch-frames-"));
   try {
@@ -82,11 +88,39 @@ export async function viewForModel(file: string, mime: string | undefined, model
   const kind = mediaClass(mime, file);
   if (kind === "image") return { text: "Image.", images: [await imageForModel(await fs.readFile(file))] };
   if (kind === "video") {
-    const info = await probe(file);
-    const duration = info.duration ?? 5;
-    const frames = await videoFrames(file, duration);
+    // The helper reads it with AVFoundation (no ffmpeg needed); ffmpeg when found is the fallback.
+    let info: { duration?: number; width?: number; height?: number; audio: boolean } = { audio: false };
+    let frames: ModelView["images"] = [];
+    let times: number[] = [];
+    if (isDesktop()) {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mulch-frames-"));
+      try {
+        info = await mediaInfo(file);
+        const taken = await helperFrames(file, dir, frameCount(info.duration ?? 0));
+        for (const frame of taken) {
+          frames.push(await imageForModel(await fs.readFile(frame.path)));
+          times.push(frame.at);
+        }
+      } catch {
+        frames = [];
+        times = [];
+      } finally {
+        await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+    if (!frames.length) {
+      const probed = await probe(file);
+      if (probed.duration) {
+        info = probed;
+        frames = await videoFrames(file, probed.duration, frameCount(probed.duration));
+      }
+    }
+    const length = info.duration ? `${info.duration.toFixed(1)}s` : "length unknown";
+    const at = times.length ? ` at ${times.map((t) => `${t.toFixed(1)}s`).join(", ")}` : "";
     return {
-      text: `Video: ${duration.toFixed(1)}s, ${info.width ?? "?"}x${info.height ?? "?"}, ${info.audio ? "with sound" : "no sound"}. ${frames.length} frames sampled evenly, in order.`,
+      text: frames.length
+        ? `Video: ${length}, ${info.width ?? "?"}x${info.height ?? "?"}, ${info.audio ? "with sound" : "no sound"}. ${frames.length} pictures spread through it, in order${at}.`
+        : "Video: no pictures could be taken from it here (the format can't be read on this Mac, and ffmpeg isn't installed). Say so; don't guess what it shows.",
       images: frames,
     };
   }

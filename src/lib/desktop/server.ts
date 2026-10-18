@@ -34,6 +34,8 @@ export type BridgeResult = { ok: true; value?: unknown } | { ok: false; error: s
 
 /** A key stored in the app, else the environment. Undefined when neither has one. */
 export function getCredential(name: CredentialName): string | undefined {
+  // Tests: run as if these keys weren't there (MLCH_TEST_NO_KEYS=gemini,groq).
+  if (process.env.MLCH_TEST_NO_KEYS?.split(",").includes(name)) return undefined;
   const stored = (globalThis as DesktopGlobals).__mlchCredentials?.[name];
   if (typeof stored === "string" && stored) return stored;
   const fromEnv = process.env[ENV_NAMES[name]];

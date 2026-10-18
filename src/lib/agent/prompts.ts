@@ -183,11 +183,11 @@ The person's own connectors and MCP servers (email, calendar, files, design tool
 
 export const fastPrompt = (settings: Settings) => lane(settings, "fast");
 export const callPrompt = (settings: Settings) => lane(settings, "call");
-export const commandPrompt = (settings: Settings) => lane(settings, "command") + BRIEF_RULE + READER_RULE + accessBlock(settings) + styleBlock(settings);
+export const commandPrompt = (settings: Settings) => lane(settings, "command") + BRIEF_RULE + READER_RULE + READING_RULE + accessBlock(settings) + styleBlock(settings);
 export const ingestPrompt = (settings: Settings) => lane(settings, "ingest");
 export const imagePrompt = (settings: Settings) => lane(settings, "image");
 export const folderPrompt = (settings: Settings) => lane(settings, "folder");
-export const researchPrompt = (settings: Settings) => lane(settings, "research") + READER_RULE + accessBlock(settings) + styleBlock(settings);
+export const researchPrompt = (settings: Settings) => lane(settings, "research") + READER_RULE + READING_RULE + accessBlock(settings) + styleBlock(settings);
 
 export function slowPrompt(settings: Settings, web: boolean): string {
   const kinds = settings.enrich.filter((e) => e !== "search" || web).map((e) => `- ${part(settings, `enrich:${e}`)}`);
@@ -217,6 +217,11 @@ function makerReaderRule(settings: Settings): string {
       : "Before you finish, read it as someone who has seen nothing else would, and fix every point.";
   return READER_RULE.replace(/\n- After writing it[^\n]*/, `\n- ${check}`);
 }
+
+/** Getting at what a thing holds: try the other ways before giving up, and say what was read. */
+const READING_RULE = `
+
+Reading what the person gives you (videos, recordings, documents, sites, folders): when one way fails, try the others before saying you can't. A video: media_view shows its pictures in order and what was already heard or watched in it; with your own tools, ffmpeg or a transcription tool may do more. A page that won't load: another address, a search, the site's own text. Then say plainly what you read and what you couldn't, and why.`;
 
 /** Briefs handed to the maker (make) stand on their own too. */
 const BRIEF_RULE = `

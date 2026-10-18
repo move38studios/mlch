@@ -3,6 +3,7 @@
 // actions the Next server cannot take from its utility process. The server has
 // already resolved and checked every path; main still accepts only an absolute,
 // existing target, and never throws, so a bad request cannot take main down.
+const os = require('node:os');
 const path = require('node:path');
 
 const DEFAULT_PICKER_TITLE = 'Choose a folder';
@@ -109,12 +110,26 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
         // mlch: the native audio helper (see main.cjs and lib/audio-helper.cjs).
         if (!audio) return fail('Local audio is not available.');
         const action = payload.action;
-        if (!['status', 'download', 'warm', 'transcribe', 'tap-start', 'tap-stop'].includes(action)) return fail('Unknown audio action.');
+        if (!['status', 'download', 'warm', 'transcribe', 'media-info', 'frames', 'extract-audio', 'tap-start', 'tap-stop'].includes(action)) return fail('Unknown audio action.');
         const request = { action };
-        if (action === 'transcribe') {
+        if (['transcribe', 'media-info', 'frames', 'extract-audio'].includes(action)) {
           const file = target(payload);
-          if (!file) return fail('Transcribing needs the full path of an audio file.');
+          if (!file) return fail('Reading a recording needs its full path.');
           request.path = file;
+        }
+        if (action === 'frames' || action === 'extract-audio') {
+          // Pictures and sound go only to a fresh place in the temporary folder.
+          const out = target({ path: payload.out });
+          const tmp = path.resolve(os.tmpdir());
+          if (!out || !(out + path.sep).startsWith(tmp + path.sep) || out === tmp) return fail('Pictures and sound go in the temporary folder.');
+          request.out = out;
+          if (action === 'frames') {
+            request.count = Number.isInteger(payload.count) ? Math.min(Math.max(payload.count, 1), 60) : 8;
+            request.maxSide = Number.isInteger(payload.maxSide) ? Math.min(Math.max(payload.maxSide, 128), 2048) : 768;
+          } else {
+            if (Number.isFinite(payload.start) && payload.start >= 0) request.start = payload.start;
+            if (Number.isFinite(payload.length) && payload.length > 0) request.length = payload.length;
+          }
         }
         if (action === 'tap-start') {
           const t = payload.target;

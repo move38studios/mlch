@@ -17,7 +17,7 @@ import { arrangeGroups, boundsOf, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/mulch/sizes";
 import { applyToMulch, atomicWriteFile, emit, getMulch, listMulches, mulchDir } from "@/lib/mulch/store";
 import { NODE_KINDS, type Mulch, type MulchNode, type MulchOp, type NodeKind, type NodeRef } from "@/lib/mulch/types";
-import { assetPath, isHttpUrl, isImage, readLink } from "@/lib/ingest/ingest";
+import { assetPath, isHttpUrl, isImage, readAssetText, readLink } from "@/lib/ingest/ingest";
 import { fetchFile, FILE_EXTENSION } from "@/lib/ingest/fetchFile";
 import { addFile, addLink } from "@/lib/ingest/place";
 import { videoEmbed } from "@/lib/ingest/video";
@@ -773,7 +773,10 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
   async function viewNode(id: string): Promise<{ text: string; images: NonNullable<AgentToolResult["images"]> }> {
     const node = (await getMulch(ctx.mulchId)).nodes[id];
     if (!node?.assetId) return { text: `${id} has no media file${node?.gen ? ` (generation ${node.gen.status})` : ""}.`, images: [] };
-    return viewForModel(assetPath(ctx.mulchId, node.assetId), node.mime, `/api/mulches/${ctx.mulchId}/model-view/${node.assetId}`);
+    const view = await viewForModel(assetPath(ctx.mulchId, node.assetId), node.mime, `/api/mulches/${ctx.mulchId}/model-view/${node.assetId}`);
+    // What was already heard or watched in it (saved beside the file when it was added).
+    const heard = node.kind === "media" ? await readAssetText(ctx.mulchId, node.assetId).catch(() => undefined) : undefined;
+    return heard ? { ...view, text: `${view.text}\n\nAlready read from it:\n${heard.slice(0, 20_000)}` } : view;
   }
 
   const handlers: Record<ToolName, (args: Record<string, unknown>) => Promise<AgentToolResult>> = {

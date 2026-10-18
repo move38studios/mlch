@@ -605,7 +605,7 @@ function getAudioHelper() {
   });
   return audioHelper;
 }
-async function audioRequest({ action, path: file, target, session }) {
+async function audioRequest({ action, path: file, target, session, out, count, maxSide, start, length }) {
   const helper = getAudioHelper();
   switch (action) {
     case 'status':
@@ -620,7 +620,14 @@ async function audioRequest({ action, path: file, target, session }) {
     case 'warm':
       return helper.request('warm', {}, { timeout: 55_000 });
     case 'transcribe':
-      return helper.request('transcribe', { path: file }, { timeout: 55_000 });
+      // A long recording takes minutes.
+      return helper.request('transcribe', { path: file }, { timeout: 14 * 60_000 });
+    case 'media-info':
+      return helper.request('media-info', { path: file }, { timeout: 30_000 });
+    case 'frames':
+      return helper.request('frames', { path: file, out, count, maxSide }, { timeout: 5 * 60_000 });
+    case 'extract-audio':
+      return helper.request('extract-audio', { path: file, out, ...(start !== undefined ? { start } : {}), ...(length !== undefined ? { length } : {}) }, { timeout: 14 * 60_000 });
     case 'tap-start':
       return helper.request('tap-start', { target, ...(session ? { session } : {}) });
     case 'tap-stop':

@@ -11,9 +11,8 @@ import { assetPath, extractFile, isImage, readLink, saveAsset, saveText } from "
 import { fetchFile, fetchImage, FILE_EXTENSION } from "./fetchFile";
 import { videoEmbed } from "./video";
 import { geminiAvailable, watchVideo } from "@/lib/media/gemini";
-import { localReady, transcribeLocalFile } from "@/lib/voice/local";
-import { getCredential } from "@/lib/desktop/server";
-import { groqTranscriber } from "@/lib/voice/transcriber";
+import { mediaInfo } from "@/lib/voice/local";
+import { readingNote, readVideoFile, transcribeMedia } from "@/lib/media/watch";
 
 const MEDIA_TYPES: Record<string, string> = {
   ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav", ".ogg": "audio/ogg", ".flac": "audio/flac", ".aac": "audio/aac",
@@ -25,16 +24,9 @@ export function mediaType(fileName: string): string | undefined {
   return MEDIA_TYPES[path.extname(fileName).toLowerCase()];
 }
 
-/**
- * What is said in a recording: on this Mac when local transcription is set up
- * (audio, and the sound of a video), else Groq for audio up to its 25 MB limit.
- */
-async function transcribeRecording(mulchId: string, assetId: string, mime: string, bytes: Buffer): Promise<string | undefined> {
-  if (await localReady().catch(() => false)) return transcribeLocalFile(assetPath(mulchId, assetId));
-  if (mime.startsWith("audio/") && getCredential("groq") && bytes.length <= 25 * 1024 * 1024) {
-    return groqTranscriber.transcribe(new Blob([new Uint8Array(bytes)], { type: mime }));
-  }
-  return undefined;
+/** A recording's length, when the helper can read it (for Groq's pieces). */
+async function lengthOf(file: string): Promise<number> {
+  return (await mediaInfo(file).catch(() => undefined))?.duration ?? 0;
 }
 
 /** Card text for a document: its opening, enough to recognise it. */
@@ -75,12 +67,41 @@ export async function addFile(mulchId: string, bytes: Buffer, fileName: string, 
     return node;
   }
   const mime = mediaType(fileName);
+  if (mime?.startsWith("video/")) {
+    // A video: played in place; Gemini watches it, or what is said is transcribed and the AI looks at its pictures.
+    const node = await addNode(mulchId, "media", at, { assetId, fileName: name, title: name, mime, text: "Watching…", ...extra });
+    void (async () => {
+      const reading = await readVideoFile(assetPath(mulchId, assetId), mime);
+      const note = readingNote(reading);
+      await saveText(mulchId, assetId, `${reading.text}${note ? `\n\n(${note})` : ""}`);
+      const said = reading.text.replace(/^Video[^\n]*\n*/, "").replace(/^What is said:\n/, "").trim();
+      await applyToMulch(mulchId, [{ op: "updateNode", id: node.id, patch: { text: [said ? excerpt(said) : "", note].filter(Boolean).join("\n\n") } }], "ingest");
+      submitIngest(
+        mulchId,
+        node.id,
+        `Watching ${name}`,
+        `Video: ${name} (item ${node.id})\n${note}\n\n${reading.text}` +
+          (reading.picturesUnread ? `\n\nIts pictures haven't been looked at yet: call media_view with item ${node.id} to see them in order, and use what is shown (on-screen text, products, people) as well as what is said.` : ""),
+        { video: reading.picturesUnread },
+      );
+    })().catch((error) => {
+      log.error("ingest", "video could not be read", { mulchId, fileName, error });
+      failed(mulchId, node.id, "This video could not be read.");
+    });
+    return node;
+  }
   if (mime) {
     // A recording: played in place; what is said is read like a document.
     const node = await addNode(mulchId, "media", at, { assetId, fileName: name, title: name, mime, text: "Transcribing…", ...extra });
     void (async () => {
-      const text = (await transcribeRecording(mulchId, assetId, mime, bytes))?.trim();
-      if (!text) return failed(mulchId, node.id, "Nothing could be transcribed. Local transcription (Settings) reads audio and video; Groq reads audio only.");
+      const file = assetPath(mulchId, assetId);
+      let text = "";
+      try {
+        text = (await transcribeMedia(file, await lengthOf(file), mime)).text.trim();
+      } catch (error) {
+        return failed(mulchId, node.id, `Nothing could be transcribed: ${error instanceof Error ? error.message : String(error)}.`);
+      }
+      if (!text) return failed(mulchId, node.id, "No speech was heard in this recording.");
       await saveText(mulchId, assetId, text);
       await applyToMulch(mulchId, [{ op: "updateNode", id: node.id, patch: { text: excerpt(text) } }], "ingest");
       submitIngest(mulchId, node.id, `Listening to ${name}`, `Recording: ${name}\n\nWhat is said:\n${text}`);

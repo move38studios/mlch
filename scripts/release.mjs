@@ -63,6 +63,8 @@ if (!flag("--upload-only")) {
   if (process.env.MLCH_UPDATE_URL) throw new Error("Unset MLCH_UPDATE_URL: official builds update from mlch.app.");
   if (!process.env.APPLE_KEYCHAIN_PROFILE) throw new Error("Set APPLE_KEYCHAIN_PROFILE (xcrun notarytool store-credentials) so the release is notarized.");
   run("npm", ["run", "check"]);
+  // The audio helper ships as built: build it from this commit.
+  run("node", ["scripts/build-native.mjs"]);
   run("npm", ["run", "dist"], { env: { ...process.env, MLCH_OFFICIAL: "1" } });
   // The staged app, driven for real: it starts, makes a mulch and shows it.
   run("node", ["scripts/electron-run.cjs", "scripts/scenarios/empty-mulch.cjs", "--app", "build/app", "--library", fs.mkdtempSync(path.join(os.tmpdir(), "mlch-release-"))]);
