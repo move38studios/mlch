@@ -183,11 +183,11 @@ The person's own connectors and MCP servers (email, calendar, files, design tool
 
 export const fastPrompt = (settings: Settings) => lane(settings, "fast");
 export const callPrompt = (settings: Settings) => lane(settings, "call");
-export const commandPrompt = (settings: Settings) => lane(settings, "command") + accessBlock(settings) + styleBlock(settings);
+export const commandPrompt = (settings: Settings) => lane(settings, "command") + BRIEF_RULE + READER_RULE + accessBlock(settings) + styleBlock(settings);
 export const ingestPrompt = (settings: Settings) => lane(settings, "ingest");
 export const imagePrompt = (settings: Settings) => lane(settings, "image");
 export const folderPrompt = (settings: Settings) => lane(settings, "folder");
-export const researchPrompt = (settings: Settings) => lane(settings, "research") + accessBlock(settings) + styleBlock(settings);
+export const researchPrompt = (settings: Settings) => lane(settings, "research") + READER_RULE + accessBlock(settings) + styleBlock(settings);
 
 export function slowPrompt(settings: Settings, web: boolean): string {
   const kinds = settings.enrich.filter((e) => e !== "search" || web).map((e) => `- ${part(settings, `enrich:${e}`)}`);
@@ -195,6 +195,33 @@ export function slowPrompt(settings: Settings, web: boolean): string {
 }
 
 /** How to hand files over depends on the harness, so it is not editable. */
+/**
+ * Everything written for someone to read assumes zero context (George, 2026-10-18: "imagine
+ * someone just opening this deck with 0 context"). In code, so it holds whatever the person
+ * did to the editable parts.
+ */
+const READER_RULE = `
+
+Anything you write for someone to read (a deck, a page, a document, a write-up, a table) is read cold: the reader has not seen this canvas, the conversation, the call, the sources or the files, and does not know the people or projects. So:
+- The title says what it is. The opening says what it is about (what the company or project is, in a sentence), for whom, when, and where the facts come from.
+- Every name, company, person, acronym, term and number is explained where it first appears ("DCBL, the agency that runs Loudbox's service", "31 companies we profiled"), or cut. Nothing points at what the reader wasn't shown ("the 31", "the call", "my post-its", "DCBL's update", "v4.3", "as discussed"). This holds even when the reader is named and may know some of it: a deck gets forwarded. If something must stay and you can't explain it, tell the person what is missing.
+- No canvas internals: no item ids, no "on the canvas", "the write-up", "the brief".
+- After writing it, the result has a cold reader's notes (someone who saw only the thing): fix every point and write it again (write_doc or write_artifact with \`replace\`) until it is clear. cold_read checks again.
+- Make only the formats asked for (no PDF or extra copy unless asked).`;
+
+/** The same for the maker: Claude has the cold reader through present_file and cold_read; Codex reads it itself. */
+function makerReaderRule(settings: Settings): string {
+  const check =
+    settings.harness === "claude"
+      ? "After present_file, its result has a cold reader's notes (someone who saw only the thing): fix every point in the same file; cold_read checks again."
+      : "Before you finish, read it as someone who has seen nothing else would, and fix every point.";
+  return READER_RULE.replace(/\n- After writing it[^\n]*/, `\n- ${check}`);
+}
+
+/** Briefs handed to the maker (make) stand on their own too. */
+const BRIEF_RULE = `
+- A brief for \`make\` stands on its own: who will read the result and what they don't know; the content in full sentences, or where to find it by file path (canvas files are in the mulch's assets and artifacts folders; never by item id); the formats asked for, nothing more. Never ask the maker to keep wording "verbatim" from notes written for the canvas: they were written with context the reader lacks.`;
+
 /** With access (Settings → AI, Permissions), the person's work runs with Claude Code's own tools on this Mac. */
 export function hasAccess(settings: Settings): boolean {
   return settings.access !== "sandboxed" && settings.agentSetup;
@@ -217,7 +244,7 @@ function makerReach(settings: Settings): string {
 }
 
 export function makerPrompt(settings: Settings): string {
-  return `${part(settings, "maker")}${makerReach(settings)}${styleBlock(settings, true)}
+  return `${part(settings, "maker")}${makerReach(settings)}${makerReaderRule(settings)}${styleBlock(settings, true)}
 
 Save finished files directly in the artifacts folder (not in a subfolder), with short lowercase names. Never overwrite a file that is already there; pick a new name.${
     settings.harness === "claude"

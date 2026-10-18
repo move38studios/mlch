@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { JobStatus } from "@/lib/mulch/events";
 import { settingsSchema } from "@/lib/settings";
-import { commandPrompt, DEFAULT_HOUSE_STYLE, EARLIER_MAX, earlierExchanges, fastPrompt, makerPrompt, PROMPT_DEFAULTS, slowPrompt } from "../prompts";
+import { commandPrompt, DEFAULT_HOUSE_STYLE, EARLIER_MAX, earlierExchanges, fastPrompt, makerPrompt, PROMPT_DEFAULTS, researchPrompt, slowPrompt } from "../prompts";
 
 describe("prompts", () => {
   it("uses the defaults when nothing is edited", () => {
@@ -25,9 +25,18 @@ describe("prompts", () => {
 
   it("keeps the hand-over instructions for the maker whatever the edit", () => {
     const settings = settingsSchema.parse({ harness: "codex", prompts: { maker: "Make it nice." }, style: "" });
-    expect(makerPrompt(settings)).toMatch(/^Make it nice\.\n\nYour shell and files work as in the person's Terminal[^\n]*\n\nSave finished files/);
+    expect(makerPrompt(settings)).toMatch(/^Make it nice\.\n\nYour shell and files work as in the person's Terminal[\s\S]*read cold[\s\S]*\n\nSave finished files/);
+    expect(makerPrompt(settings)).toContain("read it as someone who has seen nothing else would");
+    expect(makerPrompt(settingsSchema.parse({ harness: "claude" }))).toContain("After present_file, its result has a cold reader's notes");
     // Sandboxed: what the shell can't reach, so briefs don't ask for it.
     expect(makerPrompt(settingsSchema.parse({ harness: "codex", access: "sandboxed" }))).toContain("reach only package registries (no websites");
+  });
+
+  it("tells every writer the reader has no context, and briefs to the maker to stand alone", () => {
+    const command = commandPrompt(settingsSchema.parse({}));
+    expect(command).toContain("read cold");
+    expect(command).toContain("never by item id");
+    expect(researchPrompt(settingsSchema.parse({}))).toContain("No canvas internals");
   });
 
   it("gives instructions Claude Code's own tools unless sandboxed (and only on Claude)", () => {

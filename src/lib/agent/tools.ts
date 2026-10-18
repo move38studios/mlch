@@ -37,6 +37,8 @@ import { MAX_SLIDES, writtenArtifact } from "@/lib/artifacts/deck";
 import { artifactKindOf, type ArtifactKind } from "@/lib/artifacts/kind";
 import { deckProblems, pageProblems, type DeckMeasure, type PageMeasure } from "@/lib/artifacts/checks";
 import { hiddenEntry, imageForModel, resolveReadable } from "./files";
+import { log } from "@/lib/log";
+import { CLEAR, coldRead, coldReadNote, readableText } from "./coldRead";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime } from "./types";
 
 export type ToolName =
@@ -61,6 +63,7 @@ export type ToolName =
   | "make_pptx"
   | "make"
   | "present_file"
+  | "cold_read"
   | "preview_artifact"
   | "media_search"
   | "media_schema"
@@ -289,11 +292,14 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
   write_doc: {
     name: "write_doc",
     title: "Write document",
-    description: "Write a markdown document (summary, write-up, outline) and put it on the canvas as a write-up card, saved as a file in the canvas's docs folder.",
+    description:
+      "Write a markdown document (summary, write-up, outline) and put it on the canvas as a write-up card, saved as a file in the canvas's docs folder. " +
+      "`replace` with a write-up's id rewrites that one in place (after the cold reader's notes, or a revision asked for). The result says what a reader with no context could not follow.",
     inputShape: {
       title: z.string().max(120),
       markdown: z.string().max(100000),
       near: z.array(z.string()).max(6).optional(),
+      replace: z.string().max(80).optional(),
     },
     readOnly: false,
   },
@@ -575,6 +581,15 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
     inputShape: LONG_JOB_SHAPE,
     readOnly: true,
   },
+  cold_read: {
+    name: "cold_read",
+    title: "Read it cold",
+    description:
+      "Have a reader with no context (who has seen nothing but the thing itself) read a write-up, page, deck or document and list what they can't follow. " +
+      "Give an item id, or a file path in the artifacts folder. Writing one runs this already; use it to check again after a fix.",
+    inputShape: { id: z.string().max(80).optional(), path: z.string().max(300).optional() },
+    readOnly: true,
+  },
   present_file: {
     name: "present_file",
     title: "Put file on mulch",
@@ -698,6 +713,22 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
 
   async function commit(ops: MulchOp[]) {
     if (ops.length) await applyToMulch(ctx.mulchId, ops, origin);
+  }
+
+  /**
+   * The cold reader on what was just written (turns that have `cold_read`): its notes go back
+   * with the tool's result. Three times per thing at most, so a fix can't loop for ever.
+   */
+  const coldReads = new Map<string, number>();
+  async function coldCheck(key: string, content: string, fileName: string): Promise<string> {
+    if (!ctx.tools.includes("cold_read")) return "";
+    const count = (coldReads.get(key) ?? 0) + 1;
+    coldReads.set(key, count);
+    if (count > 3) return "\n\nCold reader: checked three times already; fix what is left without writing it again just for this.";
+    ctx.onActivity?.("Reading it cold");
+    const verdict = await coldRead(readableText(content, fileName));
+    log.info("agent", "cold read", { mulchId: ctx.mulchId, jobId: ctx.jobId, key, round: count, clear: verdict?.startsWith(CLEAR), points: verdict && !verdict.startsWith(CLEAR) ? verdict.split("\n").filter(Boolean).length : 0 });
+    return coldReadNote(verdict);
   }
 
   function resolver(mulch: Mulch, refs: Map<string, string>) {
@@ -899,8 +930,18 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
     },
 
     async write_doc(args) {
-      const { title, markdown, near } = args as { title: string; markdown: string; near?: string[] };
+      const { title, markdown, near, replace } = args as { title: string; markdown: string; near?: string[]; replace?: string };
       const mulch = await getMulch(ctx.mulchId);
+      if (replace) {
+        const node = mulch.nodes[replace];
+        if (node?.kind !== "writeup") return fail(`${replace} is not a write-up on the canvas. Leave out \`replace\` to write a new one.`);
+        if (isUserOwned(node) && !ctx.allowUserEdits) return fail(`${replace} belongs to the person; write a new one instead (leave out \`replace\`).`);
+        const text = withoutTitleHeading(markdown, title);
+        const ops: MulchOp[] = [{ op: "updateNode", id: replace, patch: { title, text, updatedAt: Date.now() } }];
+        if (node.docPath) await atomicWriteFile(path.join(mulchDir(ctx.mulchId), node.docPath), markdown.startsWith("#") ? markdown : `# ${title}\n\n${markdown}`);
+        await commit(ops);
+        return ok(`Rewrote write-up ${replace}.${await coldCheck(replace, `# ${title}\n\n${text}`, "doc.md")}`, `Revised "${title}"`, ops);
+      }
       const docs = path.join(mulchDir(ctx.mulchId), "docs");
       await fs.mkdir(docs, { recursive: true });
       let slug = slugify(title);
@@ -917,7 +958,7 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       ];
       await commit(ops);
       ctx.added.push(id);
-      return ok(`Wrote ${docPath} and added write-up ${id}.`, `Wrote "${title}"`, ops);
+      return ok(`Wrote ${docPath} and added write-up ${id}.${await coldCheck(id, `# ${title}\n\n${markdown}`, "doc.md")}`, `Wrote "${title}"`, ops);
     },
 
     async say(args) {
@@ -1007,11 +1048,11 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
         if (isUserOwned(node) && !ctx.allowUserEdits) return fail(`${replace} belongs to the person; save a new file instead (leave out \`replace\`).`);
         await atomicWriteFile(artifactFile(ctx.mulchId, replace), content);
         await commit([{ op: "updateNode", id: node.id, patch: { title, text: description, ...(artifactKind ? { artifactKind } : {}), updatedAt: Date.now() } }]);
-        return ok(`Replaced ${replace}${made}.${artifactKind ? " Check it with preview_artifact." : ""}`, `Revised ${title}`);
+        return ok(`Replaced ${replace}${made}.${artifactKind ? " Check it with preview_artifact." : ""}${await coldCheck(replace, content, replace)}`, `Revised ${title}`);
       }
       const docPath = await saveArtifact(ctx.mulchId, title, extension, Buffer.from(content));
       const id = await addArtifactCard(title, description, docPath, near, artifactKind);
-      return ok(`Saved ${docPath}${made} and added card ${id}.${artifactKind ? " Check it with preview_artifact." : ""}`, `Made ${title}`, []);
+      return ok(`Saved ${docPath}${made} and added card ${id}.${artifactKind ? " Check it with preview_artifact." : ""}${await coldCheck(docPath, content, docPath)}`, `Made ${title}`, []);
     },
 
     async make_pptx(args) {
@@ -1293,7 +1334,22 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const mulch = await getMulch(ctx.mulchId);
       if (Object.values(mulch.nodes).some((node) => node.docPath === docPath)) return ok(`${docPath} is already on the canvas.`, "Already there");
       const id = await addArtifactCard(title, description, docPath, near);
-      return ok(`Added card ${id} for ${docPath}.`, `Added ${title}`);
+      const text = /\.(html?|svg|md|txt)$/i.test(docPath) ? await fs.readFile(artifactFile(ctx.mulchId, docPath), "utf8").catch(() => "") : "";
+      return ok(`Added card ${id} for ${docPath}.${text ? await coldCheck(docPath, text, docPath) : ""}`, `Added ${title}`);
+    },
+
+    async cold_read(args) {
+      const { id, path: file } = args as { id?: string; path?: string };
+      const mulch = await getMulch(ctx.mulchId);
+      const node = id ? mulch.nodes[id] : undefined;
+      const docPath = node?.docPath ?? (file ? `artifacts/${file.replace(/^artifacts\//, "").split("/").pop()}` : undefined);
+      let text = "";
+      if (node && node.kind === "writeup") text = `# ${node.title ?? ""}\n\n${node.text}`;
+      else if (docPath && ARTIFACT_PATH.test(docPath) && /\.(html?|svg|md|txt)$/i.test(docPath)) text = await fs.readFile(artifactFile(ctx.mulchId, docPath), "utf8").catch(() => "");
+      if (!text) return fail("Give the id of a write-up, or a page, deck or text file in the artifacts folder (PowerPoint, Word and PDF can't be read here: read your source for them yourself, as a newcomer would).");
+      const verdict = await coldRead(readableText(text, docPath ?? "doc.md"));
+      if (!verdict) return fail("The cold reader couldn't run just now. Read it yourself as someone with no context would.");
+      return ok(coldReadNote(verdict).trim(), "Read it cold");
     },
 
     async list_files(args) {

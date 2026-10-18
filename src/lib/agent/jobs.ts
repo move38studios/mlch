@@ -754,7 +754,7 @@ export function submitCallNotes(mulchId: string, call: { startedAt: number; ende
           "Sections: a short summary (3-6 lines); Decisions; To-dos (who, what, by when if said); Open questions. Leave out a section with nothing in it. " +
           "Only what was said. Say who where it matters: \"Me\" for [me], the person's name when it was said, else \"them\"; never the bracket tags. Write in the language of the call. " +
           `${call.transcriptId ? `Connect the notes to the transcript ${call.transcriptId} (label "notes of"). ` : ""}Do not add other items. Finish with say.\n</instruction>`,
-        tools: ["write_doc", "connect", "say"],
+        tools: ["write_doc", "connect", "say", "cold_read"],
         brief: "Call notes",
         ownSetup: true,
       });
@@ -970,12 +970,12 @@ const COMMAND_TOOLS: ToolName[] = [
   "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say", "tell", "add_file",
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
-  "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "link_to", "save_note", "research", "read_page",
+  "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "link_to", "save_note", "research", "read_page", "cold_read",
 ];
 
 const RESEARCH_TOOLS: ToolName[] = [
   "read_page", "add_nodes", "connect", "arrange", "write_artifact", "preview_artifact", "write_doc", "say", "tell", "add_file", "get_mulch", "search_mulch",
-  "search_all_mulches", "read_source", "link_to",
+  "search_all_mulches", "read_source", "link_to", "cold_read",
 ];
 
 /**
@@ -1361,7 +1361,7 @@ export function submitMake(mulchId: string, brief: string, options: LongOptions 
           `<mulch>\n${describeMulch(mulch, { textLimit: 2000 })}\n</mulch>\n\n` +
           `Working folder (scratch): ${workspace.cwd}\nSave finished files in: ${workspace.writable[0]}\n` +
           `Canvas files (images, documents) are in: ${path.join(mulchDir(mulchId), "assets")}\n\n${conversationBlock(await callTranscript(mulchId, { maxChars: 40_000 }))}<brief>\n${brief}\n</brief>${await relatedElsewhere(mulchId, brief)}`,
-        tools: ["get_mulch", "view_image", "present_file", "preview_artifact", "say", "search_all_mulches", "read_source"],
+        tools: ["get_mulch", "view_image", "present_file", "preview_artifact", "say", "tell", "search_all_mulches", "read_source", "cold_read"],
         workspace,
         webAccess: true,
         ownSetup: true,
