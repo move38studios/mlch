@@ -56,7 +56,7 @@ module.exports = async ({ page, base, shot }) => {
   assert.ok(jobs.every((j) => j.state === 'done'), 'all done');
   // Each selected-card instruction kept what it was about, and its cards landed near it.
   const now = (await api(`/api/mulches/${mulch.id}`)).mulch;
-  for (const [id, , x] of areas) {
+  for (const [id] of areas) {
     const job = jobs.find((j) => j.retry.near?.includes(`n-${id}`));
     assert.ok(job, `instruction about n-${id}`);
     const added = (job.resultIds ?? []).map((r) => now.nodes[r]).filter(Boolean);
