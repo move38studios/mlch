@@ -79,7 +79,7 @@ describe("mulch store", () => {
     await store.setJob(mulch.id, { id: "j1", lane: "long", state: "running", label: "Deck", retry, startedAt: 1 });
     await store.setJob(mulch.id, { id: "j2", lane: "command", state: "done", label: "Summary", retry: { kind: "command", input: "sum" }, unseen: true, resultIds: ["n1"] });
     await store.setJob(mulch.id, { id: "j3", lane: "fast", state: "done", label: "Capturing" });
-    expect((await store.listMulches())[0].activity).toEqual({ working: 1, unseen: 1, failed: 0 });
+    expect((await store.listMulches())[0].activity).toEqual({ working: 1, unseen: 1, failed: 0, lastAt: 1 });
     await new Promise((resolve) => setTimeout(resolve, 600)); // jobs.json is written after a short pause
     const saved = JSON.parse(fs.readFileSync(path.join(library, mulch.id, "jobs.json"), "utf8")) as Array<{ id: string }>;
     expect(saved.map((job) => job.id)).toEqual(["j1", "j2"]); // capture is not kept
@@ -88,9 +88,24 @@ describe("mulch store", () => {
     const fresh = await import("../store");
     const jobs = await fresh.getJobs(mulch.id);
     expect(jobs.find((job) => job.id === "j1")).toMatchObject({ state: "failed", unseen: true, error: "Stopped when mlch quit." });
-    expect((await fresh.listMulches())[0].activity).toEqual({ working: 0, unseen: 1, failed: 1 });
+    expect((await fresh.listMulches())[0].activity).toMatchObject({ working: 0, unseen: 1, failed: 1 });
     await fresh.markJobsSeen(mulch.id, ["j1", "j2"]);
-    expect((await fresh.listMulches())[0].activity).toEqual({ working: 0, unseen: 0, failed: 0 });
+    expect((await fresh.listMulches())[0].activity).toMatchObject({ working: 0, unseen: 0, failed: 0 });
+    // Paused work and a connector card waiting count too.
+    await fresh.setJob(mulch.id, { id: "j4", lane: "command", state: "paused", label: "Long", retry: { kind: "command", input: "x" }, finishedAt: 5, approvals: [{ id: "a", server: "s", tool: "t", input: {}, at: 5 }] });
+    expect((await fresh.listMulches())[0].activity).toMatchObject({ paused: 1, waiting: 1 });
+  });
+
+  it("keeps focus mode per mulch", async () => {
+    const store = await import("../store");
+    const one = await store.createMulch("One");
+    await store.applyToMulch(one.id, [{ op: "addNode", node: { id: "n", kind: "idea", x: 0, y: 0, text: "x", origin: "user", createdAt: 1 } }], "user");
+    await store.setFocusMode(one.id, true);
+    expect((await store.listMulches()).find((m) => m.id === one.id)?.focus).toBe(true);
+    expect((await store.focusModes()).has(one.id)).toBe(true);
+    await store.setFocusMode(one.id, false);
+    expect((await store.listMulches()).find((m) => m.id === one.id)?.focus).toBeUndefined();
+    expect((await store.focusModes()).has(one.id)).toBe(false);
   });
 
   it("keeps a closed message closed when the job saves itself again", async () => {

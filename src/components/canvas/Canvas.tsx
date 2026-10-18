@@ -317,8 +317,9 @@ function CanvasInner({ mulch }: { mulch: Mulch }) {
     [onConnect],
   );
 
-  const onSelectionChange = useCallback(({ edges }: OnSelectionChangeParams) => {
+  const onSelectionChange = useCallback(({ nodes, edges }: OnSelectionChangeParams) => {
     setSelectedEdges(new Set(edges.map((edge) => edge.id)));
+    useCanvasUi.setState({ selectedIds: nodes.filter((node) => !node.id.startsWith(GROUP_PREFIX)).map((node) => node.id) });
   }, []);
 
   const onDelete = useCallback(

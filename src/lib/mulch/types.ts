@@ -10,6 +10,8 @@
  * node, otherwise the per-kind fallback in sizes.ts.
  */
 
+import type { JobActivity } from "./events";
+
 export type NodeKind =
   /** A point from speech or typing. */
   | "idea"
@@ -159,8 +161,10 @@ export interface MulchSummary {
   createdAt: number;
   updatedAt: number;
   nodeCount: number;
-  /** The person's instructions and long work: running, finished unseen, failed unseen. */
-  activity?: { working: number; unseen: number; failed: number };
+  /** The person's instructions and long work: running, finished unseen, failed unseen, paused, waiting. */
+  activity?: JobActivity;
+  /** Focus mode: the list of other mulches is closed and their notifications wait while this one is open. */
+  focus?: boolean;
   /** Archived: out of the list, kept on disk, can be restored. */
   archivedAt?: number;
   /** Last opened by the person. */

@@ -21,7 +21,7 @@ vi.mock("../server/harnesses", () => ({
       const step = script.shift() ?? "finish";
       if (step === "out-of-steps") yield { type: "error", code: "step_limit", message: "The agent stopped after reaching its step limit for one message." };
       // Like Claude Code: a stopped turn just ends.
-      if (step === "until-stopped") await new Promise((resolve) => params.signal.addEventListener("abort", resolve, { once: true }));
+      if (step === "until-stopped" && !params.signal.aborted) await new Promise((resolve) => params.signal.addEventListener("abort", resolve, { once: true }));
     },
   }),
 }));
@@ -92,5 +92,43 @@ describe("instructions and long work run for a period", () => {
     const job = jobs.submitCommand(mulch.id, "Quick one");
     await state(job.id, "done");
     expect(await jobs.continueJob(mulch.id, job.id)).toBeUndefined();
+  });
+
+});
+
+describe("instructions and long work run side by side", () => {
+  it("up to 10 in one mulch, and the cap across mulches; more wait, and start as others finish", { timeout: 20_000 }, async () => {
+    const { store, jobs, mulch } = await setup();
+    process.env.MLCH_PERIOD_MS = "60000";
+    process.env.MLCH_WORK_TOTAL = "12";
+    try {
+      const other = await store.createMulch("Other");
+      for (let i = 0; i < 20; i++) script.push("until-stopped");
+      const here = Array.from({ length: 11 }, (_, i) => jobs.submitCommand(mulch.id, `Thing ${i}`));
+      const there = Array.from({ length: 3 }, (_, i) => jobs.submitCommand(other.id, `Other ${i}`));
+      const states = async (id: string) => (await store.getJobs(id)).filter((job) => job.retry).map((job) => job.state);
+      await until(async () => (await states(mulch.id)).filter((s) => s === "running").length === 10 || undefined);
+      expect((await states(mulch.id)).filter((s) => s === "queued")).toHaveLength(1);
+      // 10 here and 2 there make 12, the cap in all.
+      await until(async () => (await states(other.id)).filter((s) => s === "running").length === 2 || undefined);
+      expect((await states(other.id)).filter((s) => s === "queued")).toHaveLength(1);
+      // One stops: a waiting one starts (here or there).
+      jobs.cancelJob(mulch.id, here[0].id);
+      await until(async () => [...(await states(mulch.id)), ...(await states(other.id))].filter((s) => s === "queued").length === 1 || undefined);
+      jobs.cancelJobs(mulch.id);
+      jobs.cancelJobs(other.id);
+      void there;
+    } finally {
+      delete process.env.MLCH_WORK_TOTAL;
+    }
+  });
+
+  it("an instruction given with cards selected is about them", async () => {
+    const { store, jobs, mulch, state } = await setup();
+    await store.applyToMulch(mulch.id, [{ op: "addNode", node: { id: "n-a", kind: "idea", x: 0, y: 0, text: "Pricing per seat", origin: "user", createdAt: 1 } }], "user");
+    const job = jobs.submitCommand(mulch.id, "Find counterarguments", { about: ["n-a", "gone"] });
+    await state(job.id, "done");
+    expect(turns.find((turn) => turn.prompt.includes("Find counterarguments"))?.prompt).toMatch(/<selected>[\s\S]*n-a \[idea\][\s\S]*Pricing per seat[\s\S]*<\/selected>/);
+    expect((await store.getJobs(mulch.id)).find((j) => j.id === job.id)?.retry?.near).toEqual(["n-a", "gone"]);
   });
 });

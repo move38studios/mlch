@@ -18,9 +18,9 @@ import type { AgentHarnessStatus, AgentUserSetup, AgentWorkspace, HarnessEvent, 
 import type { JobLane, JobRetry, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
-import { applyToMulch, emit, getJobs, getMulch, keepWhile, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
+import { applyToMulch, emit, focusModes, getJobs, getMulch, keepWhile, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
 import { desktopRequest } from "@/lib/desktop/server";
-import type { MulchNode } from "@/lib/mulch/types";
+import type { Mulch, MulchNode } from "@/lib/mulch/types";
 import { modelFor, readSettings, type Lane, type Settings } from "@/lib/settings";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -60,9 +60,20 @@ const PAUSING: ReadonlySet<JobLane> = new Set(["command", "long"]);
  * quick by design. Instructions and long work have no step limit; their period bounds them.
  */
 const QUICK_STEPS = 40;
-/** Long work (making, research) at once: per mulch, and in all (it all runs on one subscription). */
-const LONG_PER_MULCH = 2;
-const LONG_TOTAL = 3;
+/** The person's instructions and long work running at once in one mulch, together. */
+const WORK_PER_MULCH = 10;
+/**
+ * …and in all mulches: each is its own Claude Code or Codex process, so the Mac
+ * sets the limit. A Claude Code turn peaked at about 300 MB (measured 2026-10-18);
+ * these may use about half the memory: 1.5 per GB (36 on a 24 GB Mac, at least
+ * WORK_PER_MULCH). More wait as queued.
+ */
+const WORK_TOTAL_PER_GB = 1.5;
+function workTotal(): number {
+  return Number(process.env.MLCH_WORK_TOTAL) || Math.max(WORK_PER_MULCH, Math.floor((os.totalmem() / 2 ** 30) * WORK_TOTAL_PER_GB));
+}
+const isWork = (lane: JobLane) => lane === "command" || lane === "long";
+const workRunning = (entry: MulchJobs) => entry.running.command.length + entry.running.long.length;
 /** The space held on the canvas for a long job's result. */
 const RESULT_SIZE = { w: NODE_WIDTH.artifact, h: 220 };
 /** Status is re-read at most this often before a job (a probe costs a CLI start). */
@@ -461,11 +472,11 @@ function findRunning(mulchId: string, jobId: string): Running | undefined {
 function canStart(mulchId: string, lane: JobLane): boolean {
   const entry = jobsFor(mulchId);
   if (lane === "slow" && entry.paused) return false;
-  if (lane !== "long") return entry.running[lane].length === 0;
-  if (entry.running.long.length >= LONG_PER_MULCH) return false;
+  if (!isWork(lane)) return entry.running[lane].length === 0;
+  if (workRunning(entry) >= WORK_PER_MULCH) return false;
   let total = 0;
-  for (const other of state().mulches.values()) total += other.running.long.length;
-  return total < LONG_TOTAL;
+  for (const other of state().mulches.values()) total += workRunning(other);
+  return total < workTotal();
 }
 
 function pump(mulchId: string, lane: JobLane): void {
@@ -473,9 +484,12 @@ function pump(mulchId: string, lane: JobLane): void {
   while (entry.queues[lane].length && canStart(mulchId, lane)) start(mulchId, entry.queues[lane].shift()!);
 }
 
-/** A long slot came free: any mulch may use it. */
-function pumpLong(): void {
-  for (const mulchId of state().mulches.keys()) pump(mulchId, "long");
+/** A slot for instructions and long work came free: any mulch may use it. */
+function pumpWork(): void {
+  for (const mulchId of state().mulches.keys()) {
+    pump(mulchId, "command");
+    pump(mulchId, "long");
+  }
 }
 
 function start(mulchId: string, { work, job }: Queued): void {
@@ -538,7 +552,7 @@ function start(mulchId: string, { work, job }: Queued): void {
       await checkpoint(mulchId, "job", work.label).catch((error) => log.error("history", "checkpoint failed", { mulchId, error }));
       entry.running[lane] = entry.running[lane].filter((r) => r !== running);
       pump(mulchId, lane);
-      if (lane === "long") pumpLong();
+      if (isWork(lane)) pumpWork();
     }
   })();
 }
@@ -776,7 +790,7 @@ function captureCall(mulchId: string, raw: TranscriptSegment[]): void {
         prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<call_so_far>\n${await callTranscript(mulchId, { minutes: 6, before: segments[0]?.at })}\n</call_so_far>\n\n<new_conversation>\n${text}\n</new_conversation>`,
         tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
         origin: `speech:${job.id}`,
-        onHandOff: (instruction) => submitCommand(mulchId, instruction, segments.map((segment) => segment.id)),
+        onHandOff: (instruction) => submitCommand(mulchId, instruction, { inputIds: segments.map((segment) => segment.id) }),
       });
       if (added.length) requestEnrichment(mulchId, added);
     },
@@ -857,7 +871,7 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
         tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
         origin: `speech:${job.id}`,
         onHandOff: (instruction) =>
-          segments.some((segment) => segment.source === "speech") ? submitSpokenCommand(mulchId, instruction, segments) : submitCommand(mulchId, instruction, segments.map((segment) => segment.id)),
+          segments.some((segment) => segment.source === "speech") ? submitSpokenCommand(mulchId, instruction, segments) : submitCommand(mulchId, instruction, { inputIds: segments.map((segment) => segment.id) }),
       });
       if (added.length) requestEnrichment(mulchId, added);
     },
@@ -900,7 +914,7 @@ function releaseSpoken(mulchId: string): void {
   submitCommand(
     mulchId,
     said ? `${spoken.instruction}\n\nThey went on (this may finish or change the instruction; anything else is thinking to capture as items): "${said}"` : spoken.instruction,
-    [...spoken.from, ...spoken.after.map((segment) => segment.id)],
+    { inputIds: [...spoken.from, ...spoken.after.map((segment) => segment.id)] },
   );
 }
 
@@ -1155,8 +1169,9 @@ const ranHere = new Set<string>();
 let activityTimer: ReturnType<typeof setTimeout> | undefined;
 
 function notify(mulchId: string, note: { ids?: string[]; title: string; body?: string; failed?: boolean }): void {
-  void getMulch(mulchId)
-    .then((mulch) => desktopRequest("notify", { mulchId, ids: note.ids ?? [], title: note.title, body: note.body ?? mulch.title, failed: !!note.failed }))
+  void Promise.all([getMulch(mulchId), focusModes()])
+    // Mulches in focus mode: while one is open, main holds back notifications from the others.
+    .then(([mulch, focus]) => desktopRequest("notify", { mulchId, ids: note.ids ?? [], title: note.title, body: note.body ?? mulch.title, failed: !!note.failed, quietIn: [...focus].slice(0, 200) }))
     .catch(() => {});
 }
 
@@ -1203,12 +1218,22 @@ onFinished((record) => {
   if (record.review && record.status !== "cancelled") submitReview(record.mulchId, record);
 });
 
-export function submitCommand(mulchId: string, instruction: string, inputIds?: string[], again?: JobStatus): JobStatus {
+/** What the person had selected when they gave an instruction: what it is about, and where its results go. */
+function selectedBlock(mulch: Mulch, about: string[] | undefined): string {
+  const ids = (about ?? []).filter((id) => mulch.nodes[id]);
+  if (!ids.length) return "";
+  const picked = { ...mulch, nodes: Object.fromEntries(ids.map((id) => [id, mulch.nodes[id]])), edges: {}, groups: {} };
+  const lines = describeMulch(picked, { textLimit: 1500 }).split("\n").filter((line) => ids.some((id) => line.startsWith(`${id} [`)));
+  return `<selected>\nThe person had these items selected when they gave the instruction. It is about them unless it says otherwise; put what you add near them.\n${lines.join("\n")}\n</selected>\n\n`;
+}
+
+export function submitCommand(mulchId: string, instruction: string, options: { inputIds?: string[]; about?: string[]; again?: JobStatus } = {}): JobStatus {
+  const { inputIds, about, again } = options;
   return enqueue(mulchId, {
     lane: "command",
     label: shorten(instruction, 60),
     inputIds,
-    retry: { kind: "command", input: instruction },
+    retry: { kind: "command", input: instruction, ...(about?.length ? { near: about } : {}) },
     async run(job, signal) {
       const mulch = await getMulch(mulchId); // a missing mulch fails the job here
       await runTurn({
@@ -1220,7 +1245,7 @@ export function submitCommand(mulchId: string, instruction: string, inputIds?: s
         prompt:
           `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\n${conversationBlock(await callTranscript(mulchId))}` +
           earlierExchanges(await getJobs(mulchId), job.id) +
-          `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
+          `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n${selectedBlock(mulch, about)}<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
         // An instruction can be the first thing on a canvas: it names it then.
         tools: withKeyTools([...COMMAND_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])]),
         // The person asked: every linked folder, including ones kept for when they ask.
@@ -1450,7 +1475,7 @@ export async function continueJob(mulchId: string, jobId: string): Promise<JobSt
   if (kind === "make") return submitMake(mulchId, input, { near, title }, job);
   if (kind === "research") return submitResearch(mulchId, input, { near, title }, job);
   if (kind === "callNotes") return submitCallNotes(mulchId, JSON.parse(input) as { startedAt: number; endedAt: number; transcriptId?: string }, job);
-  if (kind === "command") return submitCommand(mulchId, input, old.inputIds, job);
+  if (kind === "command") return submitCommand(mulchId, input, { inputIds: old.inputIds, about: near, again: job });
   resuming.delete(job.id);
   return undefined;
 }
@@ -1465,5 +1490,5 @@ export async function retryJob(mulchId: string, jobId: string): Promise<JobStatu
   if (kind === "research") return submitResearch(mulchId, input, { near, title });
   if (kind === "folder") return submitFolder(mulchId, input);
   if (kind === "callNotes") return submitCallNotes(mulchId, JSON.parse(input) as { startedAt: number; endedAt: number; transcriptId?: string });
-  return submitCommand(mulchId, input);
+  return submitCommand(mulchId, input, { about: near });
 }

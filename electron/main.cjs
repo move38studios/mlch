@@ -235,9 +235,20 @@ function openShareLink(link) {
   window.loadURL(url.href).catch(log);
 }
 
-/** A finished job, unless the person is looking at that mulch. Clicking opens it at the results. */
-function notifyJob({ mulchId, ids, title, body }) {
+/** The mulch open in the window, if one is and the window is on screen. */
+function openMulchId() {
+  if (!window || window.isDestroyed() || !window.isVisible() || window.isMinimized()) return undefined;
+  try { return new URL(window.webContents.getURL()).pathname.match(/^\/n\/([^/]+)$/)?.[1]; } catch { return undefined; }
+}
+
+/**
+ * A finished job, unless the person is looking at that mulch, or has a mulch in
+ * focus mode open (`quietIn`): then other mulches wait. Clicking opens it at the results.
+ */
+function notifyJob({ mulchId, ids, title, body, quietIn = [] }) {
   if (lookingAt(mulchId) || !Notification.isSupported()) return;
+  const here = openMulchId();
+  if (here && here !== mulchId && quietIn.includes(here)) return;
   const notification = new Notification({ title: title || 'mlch', body });
   shownNotifications.add(notification);
   notification.on('click', () => { shownNotifications.delete(notification); showMulch(mulchId, ids).catch(log); });

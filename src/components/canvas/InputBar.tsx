@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { useMulch } from "@/lib/mulch/client";
+import { useCanvasUi } from "./ui";
 import { CallButton, MicButton, TranscriptStrip } from "./Mic";
 import { HoldToTalk } from "./HoldToTalk";
 
@@ -30,7 +31,7 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
     if (!value || sending) return;
     setSending(true);
     try {
-      if (instruction) await post(`/api/mulches/${mulchId}/command`, { instruction: value });
+      if (instruction) await post(`/api/mulches/${mulchId}/command`, { instruction: value, about: useCanvasUi.getState().selectedIds });
       else await post(`/api/mulches/${mulchId}/input`, { text: value });
       setText("");
     } catch (error) {

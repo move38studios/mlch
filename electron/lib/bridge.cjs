@@ -36,6 +36,8 @@ function bridgePayload(payload) {
     ...(Array.isArray(payload?.ids) ? { ids: payload.ids.filter(id => typeof id === 'string').slice(0, 20) } : {}),
     ...(typeof payload?.body === 'string' ? { body: payload.body } : {}),
     ...(typeof payload?.failed === 'boolean' ? { failed: payload.failed } : {}),
+    // mlch: mulches in focus mode, whose window holds back other mulches' notifications.
+    ...(Array.isArray(payload?.quietIn) ? { quietIn: payload.quietIn.filter(id => typeof id === 'string').slice(0, 200) } : {}),
     ...(Number.isInteger(payload?.working) ? { working: payload.working } : {}),
     ...(Number.isInteger(payload?.unseen) ? { unseen: payload.unseen } : {}),
     // mlch: the native audio helper (main checks each again).

@@ -94,7 +94,8 @@ function createServerMessageHandler({ shell, dialog, fs, getWindow, render, noti
         const mulchId = typeof payload.mulchId === 'string' && /^[a-z0-9-]{1,64}$/i.test(payload.mulchId) ? payload.mulchId : undefined;
         if (!mulchId) return fail('A notification needs a mulch.');
         const ids = Array.isArray(payload.ids) ? payload.ids.filter(id => typeof id === 'string' && /^[\w-]{1,64}$/.test(id)).slice(0, 20) : [];
-        notify({ mulchId, ids, title: text(payload.title), body: text(payload.body), failed: payload.failed === true });
+        const quietIn = Array.isArray(payload.quietIn) ? payload.quietIn.filter(id => typeof id === 'string' && /^[a-z0-9-]{1,64}$/i.test(id)).slice(0, 200) : [];
+        notify({ mulchId, ids, title: text(payload.title), body: text(payload.body), failed: payload.failed === true, quietIn });
         return { ok: true };
       }
       case 'activity': {

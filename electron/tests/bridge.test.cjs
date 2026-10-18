@@ -198,7 +198,9 @@ test('main shows job notifications, keeps the activity count, and makes previews
   const { handle, calls } = main();
   const ask = async (type, payload) => (await handle({ type: 'bridge', id: 1, request: { type, payload } })).result;
   assert.deepEqual(await ask('notify', { mulchId: '20261007-1256-3bd7bd', ids: ['n-1', '../x', 7], title: 'Deck', body: 'Forests' }), { ok: true });
-  assert.deepEqual(calls.notified, [{ mulchId: '20261007-1256-3bd7bd', ids: ['n-1'], title: 'Deck', body: 'Forests', failed: false }]);
+  assert.deepEqual(calls.notified, [{ mulchId: '20261007-1256-3bd7bd', ids: ['n-1'], title: 'Deck', body: 'Forests', failed: false, quietIn: [] }]);
+  await ask('notify', { mulchId: '20261007-1256-3bd7bd', title: 'Deck', quietIn: ['20261007-1300-aaaaaa', '../x', 3] });
+  assert.deepEqual(calls.notified[1].quietIn, ['20261007-1300-aaaaaa']);
   assert.deepEqual(await ask('notify', { mulchId: '../etc', title: 'x' }), { ok: false, error: 'A notification needs a mulch.' });
   assert.deepEqual(await ask('activity', { working: 2, unseen: -1 }), { ok: true });
   assert.deepEqual(calls.activity, [{ working: 2, unseen: 0 }]);
@@ -212,11 +214,11 @@ test('main shows job notifications, keeps the activity count, and makes previews
 
 test('thumbnail, notify and activity requests reach main with their fields', async () => {
   const { bridge, posted } = client();
-  void bridge.request('notify', { mulchId: 'm1', ids: ['a', 3], title: 'Deck', body: 'Forests', failed: false, extra: 1 });
+  void bridge.request('notify', { mulchId: 'm1', ids: ['a', 3], title: 'Deck', body: 'Forests', failed: false, quietIn: ['m2', 4], extra: 1 });
   void bridge.request('activity', { working: 1, unseen: 2 });
   void bridge.request('thumbnail', { path: '/a.pptx', size: 800 });
   assert.deepEqual(posted.map(m => m.request), [
-    { type: 'notify', payload: { mulchId: 'm1', ids: ['a'], title: 'Deck', body: 'Forests', failed: false } },
+    { type: 'notify', payload: { mulchId: 'm1', ids: ['a'], title: 'Deck', body: 'Forests', failed: false, quietIn: ['m2'] } },
     { type: 'activity', payload: { working: 1, unseen: 2 } },
     { type: 'thumbnail', payload: { path: '/a.pptx', size: 800 } },
   ]);

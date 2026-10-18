@@ -19,6 +19,7 @@ import { ArtifactViewer } from "./ArtifactViewer";
 import { Canvas } from "./Canvas";
 import { InputBar } from "./InputBar";
 import { JobStatus } from "./JobStatus";
+import { Elsewhere, ElsewhereCount, useElsewhere } from "./Elsewhere";
 import { SidePanel } from "./SidePanel";
 import { Conversation, unreadMessages, useConversation, useConversationOpener } from "./Conversation";
 
@@ -267,6 +268,7 @@ export function MulchView({ id }: { id: string }) {
   const error = useMulch((s) => s.error);
 
   useEffect(() => connect(id), [connect, id]);
+  const elsewhere = useElsewhere(id);
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [preview, setPreview] = useState<Mulch>();
@@ -325,6 +327,7 @@ export function MulchView({ id }: { id: string }) {
               <ArrowLeft size={16} strokeWidth={1.75} />
             </Link>
             <Title />
+            <ElsewhereCount view={elsewhere} />
           </div>
           {!connected && mulch && <span className="pointer-events-auto text-xs text-ink-3">Reconnecting</span>}
           <div className="flex-1" />
@@ -346,6 +349,7 @@ export function MulchView({ id }: { id: string }) {
             </div>
           )}
         </header>
+        {mulch && !preview && <Elsewhere view={elsewhere} />}
         {historyOpen && <HistoryBar mulchId={id} onPreview={onPreview} onClose={closeHistory} />}
         <Notice />
       </div>

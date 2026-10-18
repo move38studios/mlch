@@ -1,5 +1,5 @@
 import { handle } from "@/lib/http";
-import { archiveMulch, getMulch, trashMulch } from "@/lib/mulch/store";
+import { archiveMulch, getMulch, setFocusMode, trashMulch } from "@/lib/mulch/store";
 import { deleteShare, readShares } from "@/lib/share/shares";
 import { log } from "@/lib/log";
 import { dropMulch } from "@/lib/search";
@@ -20,11 +20,15 @@ async function deleteShares(id: string): Promise<void> {
   }
 }
 
-/** PATCH {archived, stopShares?}: archive or restore; archiving can turn off its share links. */
+/** PATCH {archived, stopShares?}: archive or restore; archiving can turn off its share links. PATCH {focus}: focus mode on or off. */
 export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as { archived?: unknown; stopShares?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { archived?: unknown; stopShares?: unknown; focus?: unknown };
   return handle(async () => {
+    if (typeof body.focus === "boolean") {
+      await setFocusMode(id, body.focus);
+      return { ok: true };
+    }
     if (body.archived === true && body.stopShares === true) await deleteShares(id);
     await archiveMulch(id, body.archived === true);
     return { ok: true };

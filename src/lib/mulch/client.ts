@@ -45,6 +45,8 @@ interface MulchState {
   setPulse(ids: string[]): void;
   /** Stop, retry, or mark finished jobs seen. */
   jobAction(action: "cancel" | "retry" | "continue" | "seen" | "dismiss-message" | "keep-message" | "allow" | "deny", payload: { jobId?: string; ids?: string[]; approvalId?: string }): Promise<void>;
+  /** The person's work changed in another mulch (the list of other mulches refreshes). */
+  elsewhereAt?: number;
   /** A view move from the agent. */
   view?: { action: ViewAction; at: number };
   /** Ids of nodes added by others since the last time the canvas looked (for entrance animation). */
@@ -111,6 +113,9 @@ export const useMulch = create<MulchState>((set, get) => {
         return;
       case "paused":
         set({ paused: event.paused });
+        return;
+      case "elsewhere":
+        set({ elsewhereAt: Date.now() });
         return;
       case "say":
         set({ say: { text: event.text, at: Date.now() } });

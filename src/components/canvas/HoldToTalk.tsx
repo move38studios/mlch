@@ -6,6 +6,7 @@ import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import { Recorder } from "@/lib/voice/recorder";
 import { useVoice } from "./Mic";
+import { useCanvasUi } from "./ui";
 
 /** A tap shorter than this is not a hold (⌥ is also pressed on its way to other shortcuts). */
 const MIN_HOLD_MS = 300;
@@ -59,7 +60,7 @@ export function HoldToTalk({ mulchId }: { mulchId: string }) {
       setState("sending");
       const instruction = (await Promise.all(current.chunks)).filter(Boolean).join(" ").trim();
       if (instruction) {
-        await fetch(`/api/mulches/${mulchId}/command`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instruction }) });
+        await fetch(`/api/mulches/${mulchId}/command`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instruction, about: useCanvasUi.getState().selectedIds }) });
       }
       setState("idle");
     };

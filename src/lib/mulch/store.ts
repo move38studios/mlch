@@ -160,14 +160,40 @@ export async function listMulches(): Promise<MulchSummary[]> {
   return summaries.filter((s): s is MulchSummary => !!s).sort((a, b) => recent(b) - recent(a));
 }
 
-/** Archived (archived.json), last opened (opened.json) and how many share links it has (shares.json, kept by share/shares.ts). */
-async function sideFacts(dir: string): Promise<{ archivedAt?: number; openedAt?: number; shares?: number }> {
+/** Archived (archived.json), last opened (opened.json), how many share links it has (shares.json, kept by share/shares.ts), focus mode (focus.json). */
+async function sideFacts(dir: string): Promise<{ archivedAt?: number; openedAt?: number; shares?: number; focus?: boolean }> {
   const read = async (name: string) => JSON.parse(await fs.readFile(path.join(dir, name), "utf8").catch(() => "null")) as unknown;
-  const [archived, opened, shares] = await Promise.all([read("archived.json"), read("opened.json"), read("shares.json")]);
+  const [archived, opened, shares, focus] = await Promise.all([read("archived.json"), read("opened.json"), read("shares.json"), read("focus.json")]);
   const at = (archived as { at?: number } | null)?.at;
   const openedAt = (opened as { at?: number } | null)?.at;
   const count = Array.isArray(shares) ? shares.length : 0;
-  return { ...(at ? { archivedAt: at } : {}), ...(openedAt ? { openedAt } : {}), ...(count ? { shares: count } : {}) };
+  return { ...(at ? { archivedAt: at } : {}), ...(openedAt ? { openedAt } : {}), ...(count ? { shares: count } : {}), ...(focus ? { focus: true } : {}) };
+}
+
+/** Mulches in focus mode, read from their folders once, then kept here. */
+let focusCache: { root: string; modes: Promise<Set<string>> } | undefined;
+export function focusModes(): Promise<Set<string>> {
+  const root = libraryDir();
+  // Read again when the library moved (Settings, Library).
+  if (focusCache?.root !== root) focusCache = { root, modes: readFocusModes(root) };
+  return focusCache.modes;
+}
+async function readFocusModes(root: string): Promise<Set<string>> {
+  const ids = (await fs.readdir(root).catch(() => [] as string[])).filter(isMulchId);
+  const on = await Promise.all(ids.map((id) => fs.stat(path.join(root, id, "focus.json")).then(() => id, () => undefined)));
+  return new Set(on.filter((id): id is string => !!id));
+}
+
+/** Focus mode for one mulch: the list of other mulches closed, their notifications held while it is open. */
+export async function setFocusMode(id: string, on: boolean): Promise<void> {
+  const dir = mulchDir(id);
+  if (!existsSync(dir)) throw new MulchNotFoundError(id);
+  const file = path.join(dir, "focus.json");
+  if (on) await atomicWriteFile(file, JSON.stringify({ at: Date.now() }));
+  else await fs.rm(file, { force: true });
+  const modes = await focusModes();
+  if (on) modes.add(id);
+  else modes.delete(id);
 }
 
 /** The person opened it (for the list's order). */
@@ -385,7 +411,24 @@ export async function setJob(id: string, job: JobStatus): Promise<void> {
   if (job.retry) {
     saveKeptJobs(id, entry);
     for (const hook of state().jobChanged) hook(id, job);
+    tellElsewhere(id);
   }
+}
+
+/** Other open mulches' windows refresh their list of other mulches (at most every half second). */
+let elsewhereTimer: ReturnType<typeof setTimeout> | undefined;
+const changedElsewhere = new Set<string>();
+function tellElsewhere(id: string): void {
+  changedElsewhere.add(id);
+  if (elsewhereTimer) return;
+  elsewhereTimer = setTimeout(() => {
+    elsewhereTimer = undefined;
+    const changed = new Set(changedElsewhere);
+    changedElsewhere.clear();
+    for (const [openId, entry] of state().open) {
+      if ([...changed].some((other) => other !== openId)) broadcast(entry, { type: "elsewhere" });
+    }
+  }, 500);
 }
 
 export async function getJobs(id: string): Promise<JobStatus[]> {

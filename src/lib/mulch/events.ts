@@ -58,18 +58,36 @@ export interface JobStatus {
   anchor?: { x: number; y: number; w: number; h: number };
 }
 
-/** Kept jobs that count for the mulch list and the Dock badge. */
-export function jobActivity(jobs: Iterable<JobStatus>): { working: number; unseen: number; failed: number } {
+export interface JobActivity {
+  working: number;
+  unseen: number;
+  failed: number;
+  /** Paused (time ran out), waiting for "keep going". */
+  paused?: number;
+  /** A connector card waiting for Allow or Deny. */
+  waiting?: number;
+  /** When the person's work last ran or finished. */
+  lastAt?: number;
+}
+
+/** Kept jobs that count for the mulch list, the list of other mulches and the Dock badge. */
+export function jobActivity(jobs: Iterable<JobStatus>): JobActivity {
   let working = 0;
   let unseen = 0;
   let failed = 0;
+  let paused = 0;
+  let waiting = 0;
+  let lastAt = 0;
   for (const job of jobs) {
     if (!job.retry) continue;
     if (job.state === "queued" || job.state === "running") working++;
+    else if (job.state === "paused") paused++;
     else if (job.unseen && job.state === "done") unseen++;
     else if (job.unseen && job.state === "failed") failed++;
+    if (job.approvals?.length) waiting++;
+    lastAt = Math.max(lastAt, job.finishedAt ?? 0, job.startedAt ?? 0);
   }
-  return { working, unseen, failed };
+  return { working, unseen, failed, ...(paused ? { paused } : {}), ...(waiting ? { waiting } : {}), ...(lastAt ? { lastAt } : {}) };
 }
 
 export type ServerEvent =
@@ -78,6 +96,8 @@ export type ServerEvent =
   | { type: "ops"; batch: OpBatch }
   | { type: "transcript"; segment: TranscriptSegment }
   | { type: "job"; job: JobStatus }
+  /** The person's work changed in another mulch: the list of other mulches is out of date. */
+  | { type: "elsewhere" }
   /** Enrichment paused or resumed. */
   | { type: "paused"; paused: boolean }
   /** A short status line from the agent (its `reply` tool). */
