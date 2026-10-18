@@ -287,3 +287,13 @@ export function withPlayer(html: string): string {
   const player = `<div id="mlch-counter" aria-hidden="true"></div>\n<script>\n${PLAYER_JS}\n</script>\n`;
   return /<\/body>/i.test(withStyle) ? withStyle.replace(/<\/body>/i, `${player}</body>`) : `${withStyle}\n${player}`;
 }
+
+/** A deck mlch built with an older player gets today's (the viewer's slide bar, a typed slide number). */
+export function currentPlayer(html: string): string {
+  if (!html.includes("window.__mlchDeck") || html.includes("mlchDeckSlide")) return html;
+  const start = html.indexOf("<script>\n(function () {\n  var W = ");
+  if (start < 0) return html;
+  const end = html.indexOf("</script>", start);
+  if (end < 0) return html;
+  return `${html.slice(0, start)}<script>\n${PLAYER_JS}\n${html.slice(end)}`;
+}

@@ -198,3 +198,17 @@ describe("the player for a deck the maker wrote", () => {
     expect(withPlayer(deck.replace("</body>", "<script>own()</script></body>"))).not.toContain("__mlchDeck");
   });
 });
+
+describe("decks built before the slide bar", () => {
+  it("are served with today's player; anything else is left alone", async () => {
+    const { buildDeck, currentPlayer } = await import("../deck");
+    const today = buildDeck({ title: "T", slides: ["<h1>A</h1>", "<h1>B</h1>"] });
+    const old = today.replace(/mlchDeckSlide[^;]*;/, "").replace("mlchDeckSlide", "");
+    expect(old.includes("mlchDeckSlide")).toBe(false);
+    const served = currentPlayer(old);
+    expect(served).toContain("mlchDeckSlide");
+    expect(served).toContain("<h1>B</h1>");
+    expect(currentPlayer(today)).toBe(today);
+    expect(currentPlayer("<html><body>page</body></html>")).toBe("<html><body>page</body></html>");
+  });
+});
