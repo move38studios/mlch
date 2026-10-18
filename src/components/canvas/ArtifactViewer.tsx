@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, FolderOpen, Link2, Loader2, Maximize, X } from "lucide-react";
+import { Check, FolderOpen, Link2, Loader2, Maximize, MessageSquare, X } from "lucide-react";
+import { commentsOn, useComments } from "./Comments";
 import { desktop } from "@/lib/desktop/client";
 import { shareArtifact } from "./share";
 import { useMulch } from "@/lib/mulch/client";
@@ -30,6 +31,29 @@ export function ArtifactViewer() {
   const sharingOn = useSharingOn();
   const src = node?.docPath && mulchId ? `/api/mulches/${mulchId}/${node.docPath}` : undefined;
   const kind = useArtifactKind(node, src);
+  // The slide showing (the deck player says), for a comment on it.
+  const [slide, setSlide] = useState<number>();
+  const [count, setCount] = useState<number>();
+  useEffect(() => {
+    setSlide(undefined);
+    setCount(undefined);
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow) return;
+      const data = event.data as { mlchDeckSlide?: unknown; mlchDeckCount?: unknown } | null;
+      const n = data?.mlchDeckSlide;
+      if (typeof n === "number" && Number.isInteger(n) && n > 0 && n < 1000) setSlide(n);
+      const total = data?.mlchDeckCount;
+      if (typeof total === "number" && Number.isInteger(total) && total > 0 && total < 1000) {
+        setCount(total);
+        // The bar under the deck counts; the deck's own counter steps aside.
+        frame.current?.contentWindow?.postMessage({ mlchDeckCounter: false }, "*");
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [viewerId]);
+  const showComments = useComments((s) => s.show);
+  const openComments = useMulch((s) => (viewerId ? commentsOn(s.mulch, viewerId).filter((c) => !c.resolvedAt).length : 0));
 
   useEffect(() => {
     if (!viewerId) return;
@@ -82,6 +106,18 @@ export function ArtifactViewer() {
             <Maximize size={14} strokeWidth={1.75} /> Present
           </button>
         )}
+        <button
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            showComments({ nodeId: node.id, x: box.right - 300, y: box.bottom + 6, ...(kind === "deck" && slide ? { at: { slide } } : {}) });
+          }}
+          className={BUTTON}
+          aria-label="Comments"
+          title="Comments"
+        >
+          <MessageSquare size={14} strokeWidth={1.75} />
+          {openComments > 0 && <span className="tabular-nums">{openComments}</span>}
+        </button>
         {desktop() && (
           <>
             {sharingOn && <button onClick={() => void share()} disabled={sharing === "busy"} className={BUTTON}>
@@ -108,6 +144,53 @@ export function ArtifactViewer() {
           className={`flex-1 min-w-0 h-full border-0 ${kind === "deck" ? "bg-black" : "bg-white"} ${presenting ? "" : "rounded-xl max-sm:rounded-none"}`}
         />
       </div>
+      {!presenting && kind === "deck" && count && count > 1 && slide && (
+        <SlideBar slide={slide} count={count} go={(n) => frame.current?.contentWindow?.postMessage({ mlchDeckGo: n }, "*")} />
+      )}
+    </div>
+  );
+}
+
+/** Where you are in a deck, and a way to jump: a hairline with a mark; click or drag along it. */
+function SlideBar({ slide, count, go }: { slide: number; count: number; go: (n: number) => void }) {
+  const bar = useRef<HTMLDivElement>(null);
+  const at = (clientX: number) => {
+    const box = bar.current?.getBoundingClientRect();
+    if (!box) return slide;
+    return Math.min(count, Math.max(1, Math.floor(((clientX - box.left) / box.width) * count) + 1));
+  };
+  const [hover, setHover] = useState<number>();
+  return (
+    <div className="no-drag shrink-0 h-8 px-4 flex items-center gap-3 text-white/45 text-[11.5px] tabular-nums">
+      <div
+        ref={bar}
+        className="group relative flex-1 h-full cursor-pointer"
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          go(at(event.clientX));
+        }}
+        onPointerMove={(event) => {
+          setHover(at(event.clientX));
+          if (event.buttons) go(at(event.clientX));
+        }}
+        onPointerLeave={() => setHover(undefined)}
+        role="slider"
+        aria-label="Slide"
+        aria-valuemin={1}
+        aria-valuemax={count}
+        aria-valuenow={slide}
+      >
+        <div className="absolute inset-x-0 top-1/2 h-px bg-white/20 group-hover:h-0.5 transition-[height] motion-reduce:transition-none" />
+        <div className="absolute top-1/2 -translate-y-1/2 h-0.5 group-hover:h-1 rounded-full bg-white/85" style={{ left: `${((slide - 1) / count) * 100}%`, width: `${Math.max(100 / count, 0.6)}%` }} />
+        {hover !== undefined && hover !== slide && (
+          <div className="absolute -top-3 -translate-x-1/2 text-white/70 pointer-events-none" style={{ left: `${((hover - 0.5) / count) * 100}%` }}>
+            {hover}
+          </div>
+        )}
+      </div>
+      <span>
+        {slide} / {count}
+      </span>
     </div>
   );
 }

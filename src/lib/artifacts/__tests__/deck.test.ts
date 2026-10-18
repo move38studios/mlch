@@ -184,3 +184,17 @@ describe("preview problems", () => {
     expect(problems[3]).toContain('"fine print" (10px)');
   });
 });
+
+describe("the player for a deck the maker wrote", () => {
+  it("is added to mlch's format only, and the slides are numbered", async () => {
+    const { withPlayer } = await import("../deck");
+    const deck = `<!doctype html><html><head><meta name="mlch:kind" content="deck"><style>.slide{}</style></head><body><div class="deck"><section class="slide intro">A</section><section class="slide">B</section></div></body></html>`;
+    const played = withPlayer(deck);
+    expect(played).toContain('<section class="slide intro" data-slide="1">');
+    expect(played).toContain('data-slide="2"');
+    expect(played).toContain("__mlchDeck");
+    expect(withPlayer(played)).toBe(played);
+    expect(withPlayer(deck.replace('<meta name="mlch:kind" content="deck">', ""))).not.toContain("__mlchDeck");
+    expect(withPlayer(deck.replace("</body>", "<script>own()</script></body>"))).not.toContain("__mlchDeck");
+  });
+});

@@ -65,6 +65,7 @@ export type ToolName =
   | "present_file"
   | "cold_read"
   | "screenshot_page"
+  | "resolve_comment"
   | "preview_artifact"
   | "media_search"
   | "media_schema"
@@ -583,6 +584,13 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
       "Give a complete brief: what to make, for whom, the format, and which mulch items it should draw on.",
     inputShape: LONG_JOB_SHAPE,
     readOnly: true,
+  },
+  resolve_comment: {
+    name: "resolve_comment",
+    title: "Close a comment",
+    description: "Close one of the person's comments (from <your_turn>) once you acted on it, saying in a few words what you did (or why nothing was done).",
+    inputShape: { id: z.string().max(80), outcome: z.string().min(1).max(500) },
+    readOnly: false,
   },
   screenshot_page: {
     name: "screenshot_page",
@@ -1357,6 +1365,16 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const id = await addArtifactCard(title, description, docPath, near);
       const text = /\.(html?|svg|md|txt)$/i.test(docPath) ? await fs.readFile(artifactFile(ctx.mulchId, docPath), "utf8").catch(() => "") : "";
       return ok(`Added card ${id} for ${docPath}.${text ? await coldCheck(docPath, text, docPath) : ""}`, `Added ${title}`);
+    },
+
+    async resolve_comment(args) {
+      const { id, outcome } = args as { id: string; outcome: string };
+      const comment = (await getMulch(ctx.mulchId)).comments?.[id];
+      if (!comment) return fail(`No comment ${id}. The open ones are listed in <your_turn>.`);
+      if (comment.resolvedAt) return ok(`${id} was already closed.`, "Comment already closed");
+      const ops: MulchOp[] = [{ op: "updateComment", id, patch: { resolvedAt: Date.now(), resolution: outcome.trim(), jobId: ctx.jobId } }];
+      await commit(ops);
+      return ok(`Closed ${id}.`, "Closed a comment", ops);
     },
 
     async screenshot_page(args) {

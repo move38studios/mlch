@@ -82,6 +82,17 @@ export function applyOp(mulch: Mulch, op: MulchOp): Mulch {
     }
     case "setTitle":
       return { ...mulch, title: op.title };
+    case "addComment":
+      if (mulch.comments?.[op.comment.id]) return mulch;
+      return { ...mulch, comments: { ...mulch.comments, [op.comment.id]: definedOnly(op.comment) as typeof op.comment } };
+    case "updateComment": {
+      const comment = mulch.comments?.[op.id];
+      if (!comment) return mulch;
+      return { ...mulch, comments: { ...mulch.comments, [op.id]: merge(comment, op.patch) } };
+    }
+    case "removeComment":
+      if (!mulch.comments?.[op.id]) return mulch;
+      return { ...mulch, comments: without(mulch.comments, op.id) };
     default:
       return mulch;
   }
@@ -156,6 +167,16 @@ function invertOp(state: Mulch, op: MulchOp): MulchOp[] {
     }
     case "setTitle":
       return [{ op: "setTitle", title: state.title }];
+    case "addComment":
+      return state.comments?.[op.comment.id] ? [] : [{ op: "removeComment", id: op.comment.id }];
+    case "updateComment": {
+      const comment = state.comments?.[op.id];
+      return comment ? [{ op: "updateComment", id: op.id, patch: previousValues(comment, op.patch) }] : [];
+    }
+    case "removeComment": {
+      const comment = state.comments?.[op.id];
+      return comment ? [{ op: "addComment", comment }] : [];
+    }
     default:
       return [];
   }

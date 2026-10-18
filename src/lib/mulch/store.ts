@@ -264,7 +264,8 @@ export async function openMulch(id: string): Promise<OpenMulch> {
       mulch,
       transcript,
       jobs: new Map((await readKeptJobs(dir)).map((job) => [job.id, job])),
-      paused: false,
+      // Quiet (the AI adds nothing unasked) is kept with the mulch.
+      paused: existsSync(path.join(dir, "quiet.json")),
       listeners: new Set(),
     };
     s.open.set(id, entry);
@@ -431,6 +432,17 @@ function tellElsewhere(id: string): void {
   }, 500);
 }
 
+/** Whether a mulch is Quiet: the AI adds nothing unasked (no enrichment, dropped files not digested). */
+export function isQuiet(id: string): boolean {
+  const open = state().open.get(id);
+  if (open) return open.paused;
+  try {
+    return existsSync(path.join(mulchDir(id), "quiet.json"));
+  } catch {
+    return false;
+  }
+}
+
 export async function getJobs(id: string): Promise<JobStatus[]> {
   return [...(await openMulch(id)).jobs.values()];
 }
@@ -459,9 +471,13 @@ export function onJobChanged(hook: (id: string, job: JobStatus) => void): void {
   hooks.push(hook);
 }
 
+/** Quiet or Live: kept in quiet.json, told to open windows. */
 export async function setPaused(id: string, paused: boolean): Promise<void> {
   const entry = await openMulch(id);
   entry.paused = paused;
+  const file = path.join(mulchDir(id), "quiet.json");
+  if (paused) await atomicWriteFile(file, JSON.stringify({ at: Date.now() }));
+  else await fs.rm(file, { force: true });
   broadcast(entry, { type: "paused", paused });
 }
 

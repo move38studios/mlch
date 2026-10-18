@@ -18,7 +18,7 @@ import type { AgentHarnessStatus, AgentUserSetup, AgentWorkspace, HarnessEvent, 
 import type { JobLane, JobRetry, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
-import { applyToMulch, emit, focusModes, getJobs, getMulch, keepWhile, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
+import { applyToMulch, emit, focusModes, getJobs, getMulch, isQuiet, keepWhile, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
 import { desktopRequest } from "@/lib/desktop/server";
 import type { Mulch, MulchNode } from "@/lib/mulch/types";
 import { modelFor, readSettings, type Lane, type Settings } from "@/lib/settings";
@@ -40,6 +40,7 @@ import { cliFailed, prepareCli } from "./server/cli";
 import "@/lib/share/shares";
 import { exaAvailable } from "@/lib/search/exa";
 import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
+import { lastTurnAt, yourTurn } from "./turn";
 
 /** Sources longer than this are read in part; the rest is found by search. */
 const LONG_SOURCE = 60_000;
@@ -474,9 +475,14 @@ function findRunning(mulchId: string, jobId: string): Running | undefined {
   return undefined;
 }
 
+/** Quiet holds what the AI would do unasked: enrichment, and digesting dropped files (not the person's own work). */
+function held(mulchId: string, queued: Queued): boolean {
+  if (!isQuiet(mulchId)) return false;
+  return queued.work.lane === "slow" || (queued.work.lane === "ingest" && !queued.work.retry);
+}
+
 function canStart(mulchId: string, lane: JobLane): boolean {
   const entry = jobsFor(mulchId);
-  if (lane === "slow" && entry.paused) return false;
   if (!isWork(lane)) return entry.running[lane].length === 0;
   if (workRunning(entry) >= WORK_PER_MULCH) return false;
   let total = 0;
@@ -486,7 +492,11 @@ function canStart(mulchId: string, lane: JobLane): boolean {
 
 function pump(mulchId: string, lane: JobLane): void {
   const entry = jobsFor(mulchId);
-  while (entry.queues[lane].length && canStart(mulchId, lane)) start(mulchId, entry.queues[lane].shift()!);
+  for (;;) {
+    const index = entry.queues[lane].findIndex((queued) => !held(mulchId, queued));
+    if (index < 0 || !canStart(mulchId, lane)) return;
+    start(mulchId, entry.queues[lane].splice(index, 1)[0]);
+  }
 }
 
 /** A slot for instructions and long work came free: any mulch may use it. */
@@ -924,6 +934,8 @@ function releaseSpoken(mulchId: string): void {
 }
 
 export function requestEnrichment(mulchId: string, ids: string[]): void {
+  // Quiet: nothing is added unasked, and going Live again doesn't catch up on it.
+  if (isQuiet(mulchId)) return;
   const entry = jobsFor(mulchId);
   entry.pendingEnrich.push(...ids);
   if (entry.queues.slow.length) return;
@@ -970,7 +982,7 @@ const COMMAND_TOOLS: ToolName[] = [
   "get_mulch", "add_nodes", "connect", "update_node", "remove_nodes", "arrange", "write_doc", "say", "tell", "add_file",
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
-  "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "link_to", "save_note", "research", "read_page", "cold_read", "screenshot_page",
+  "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "link_to", "save_note", "research", "read_page", "cold_read", "screenshot_page", "resolve_comment",
 ];
 
 const RESEARCH_TOOLS: ToolName[] = [
@@ -1241,6 +1253,12 @@ export function submitCommand(mulchId: string, instruction: string, options: { i
     retry: { kind: "command", input: instruction, ...(about?.length ? { near: about } : {}) },
     async run(job, signal) {
       const mulch = await getMulch(mulchId); // a missing mulch fails the job here
+      // The person's turn: their comments, notes, edits and removals since their last instruction.
+      const turn = await yourTurn(mulch, lastTurnAt(await getJobs(mulchId), job.id));
+      if (turn.commentIds.length) {
+        const now = Date.now();
+        await applyToMulch(mulchId, turn.commentIds.filter((id) => !mulch.comments?.[id]?.sentAt).map((id) => ({ op: "updateComment", id, patch: { sentAt: now, jobId: job.id } })), `agent:${job.id}`);
+      }
       await runTurn({
         mulchId,
         job,
@@ -1250,7 +1268,7 @@ export function submitCommand(mulchId: string, instruction: string, options: { i
         prompt:
           `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\n${conversationBlock(await callTranscript(mulchId))}` +
           earlierExchanges(await getJobs(mulchId), job.id) +
-          `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n${selectedBlock(mulch, about)}<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
+          `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n${turn.block}${selectedBlock(mulch, about)}<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
         // An instruction can be the first thing on a canvas: it names it then.
         tools: withKeyTools([...COMMAND_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])]),
         // The person asked: every linked folder, including ones kept for when they ask.
@@ -1431,11 +1449,15 @@ export function submitFolder(mulchId: string, folder: string): JobStatus {
   });
 }
 
+/** Quiet stops enrichment at once; Live lets what was held run. */
 export function setEnrichmentPaused(mulchId: string, paused: boolean): void {
   const entry = jobsFor(mulchId);
   entry.paused = paused;
   if (paused) for (const running of entry.running.slow) running.controller.abort();
-  else pump(mulchId, "slow");
+  else {
+    pump(mulchId, "slow");
+    pump(mulchId, "ingest");
+  }
 }
 
 export function cancelJobs(mulchId: string): void {

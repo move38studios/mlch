@@ -58,7 +58,8 @@ const PLAYER_CSS = `html, body { margin: 0; height: 100%; overflow: hidden; touc
  */
 const PLAYER_JS = `(function () {
   var W = ${SLIDE_WIDTH}, H = ${SLIDE_HEIGHT};
-  var stage = document.getElementById("mlch-deck");
+  // A deck built here has its stage; one made by the maker in mlch's format: the slides' own container.
+  var stage = document.getElementById("mlch-deck") || (document.querySelector("[data-slide]") || {}).parentElement;
   var counter = document.getElementById("mlch-counter");
   if (!stage) return;
   var slides = Array.prototype.slice.call(stage.querySelectorAll("[data-slide]"));
@@ -100,6 +101,8 @@ const PLAYER_JS = `(function () {
       counter.style.display = still || slides.length < 2 ? "none" : "";
     }
     if (!fromAddress) { try { history.replaceState(null, "", "#" + (n + 1)); } catch (e) {} }
+    // mlch's viewer learns which slide is showing and how many there are (its slide bar, comments).
+    try { if (parent !== window) parent.postMessage({ mlchDeckSlide: n + 1, mlchDeckCount: slides.length }, "*"); } catch (e) {}
   }
   function fromHash() {
     var m = /^#(\\d+)$/.exec(location.hash);
@@ -133,11 +136,31 @@ const PLAYER_JS = `(function () {
     for (var c = el.firstChild; c; c = c.nextSibling) if (c.nodeType === 3 && c.nodeValue.trim()) return true;
     return false;
   }
+  // The viewer's slide bar moves the deck.
+  window.addEventListener("message", function (e) {
+    var go = e.data && e.data.mlchDeckGo;
+    if (typeof go === "number") show(go - 1);
+    // mlch's viewer shows its own counter under the deck.
+    if (e.data && e.data.mlchDeckCounter === false && counter) counter.style.setProperty("visibility", "hidden", "important");
+  });
+  // A slide number typed, then Enter, goes there.
+  var typed = "", typedAt = 0;
   document.addEventListener("keydown", function (e) {
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
     var t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     var k = e.key, next;
+    if (/^[0-9]$/.test(k)) {
+      typed = (Date.now() - typedAt < 1500 ? typed : "") + k;
+      typedAt = Date.now();
+      return;
+    }
+    if (k === "Enter" && typed && Date.now() - typedAt < 3000) {
+      e.preventDefault();
+      show(Number(typed) - 1);
+      typed = "";
+      return;
+    }
     if (k === "ArrowRight" || k === "ArrowDown" || k === "PageDown" || k === "Enter" || (k === " " && !e.shiftKey)) next = index + 1;
     else if (k === "ArrowLeft" || k === "ArrowUp" || k === "PageUp" || (k === " " && e.shiftKey)) next = index - 1;
     else if (k === "Home") next = 0;
@@ -247,4 +270,20 @@ export function writtenArtifact(title: string, extension: string, args: { conten
   if (slides?.length) return { problem: "`slides` make a deck: use kind \"deck\" with slides, or kind \"page\" with the whole page in `content`." };
   if (content === undefined) return { problem: "A page is written whole in `content` (a complete HTML document). For slides, use kind \"deck\" with `slides`." };
   return { content: withKindMeta(content, "page"), kind: "page" };
+}
+
+/**
+ * The player, added to a deck the maker wrote in mlch's format (one `<section class="slide">` per
+ * slide, `<meta name="mlch:kind" content="deck">`, no script of its own), so it moves like the
+ * others (keys, click, swipe, the viewer's slide bar). Anything else is left as it is.
+ */
+export function withPlayer(html: string): string {
+  if (html.includes("__mlchDeck") || /<script\b/i.test(html)) return html;
+  if (!/<meta[^>]+name=["']mlch:kind["'][^>]+content=["']deck["']/i.test(html)) return html;
+  let n = 0;
+  const marked = html.replace(/<section\b([^>]*\bclass=["'][^"']*\bslide\b[^"']*["'][^>]*)>/gi, (_all, attrs: string) => `<section${attrs.replace(/\sdata-slide=["'][^"']*["']/i, "")} data-slide="${++n}">`);
+  if (n < 2 || n > MAX_SLIDES) return html;
+  const withStyle = marked.replace(/<head([^>]*)>/i, (all) => `${all}\n<style>\n${PLAYER_CSS}\n</style>`);
+  const player = `<div id="mlch-counter" aria-hidden="true"></div>\n<script>\n${PLAYER_JS}\n</script>\n`;
+  return /<\/body>/i.test(withStyle) ? withStyle.replace(/<\/body>/i, `${player}</body>`) : `${withStyle}\n${player}`;
 }

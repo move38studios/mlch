@@ -20,6 +20,7 @@ import { Canvas } from "./Canvas";
 import { InputBar } from "./InputBar";
 import { JobStatus } from "./JobStatus";
 import { Elsewhere, ElsewhereCount, useElsewhere } from "./Elsewhere";
+import { CommentPanel } from "./Comments";
 import { SidePanel } from "./SidePanel";
 import { Conversation, unreadMessages, useConversation, useConversationOpener } from "./Conversation";
 
@@ -352,6 +353,7 @@ export function MulchView({ id }: { id: string }) {
         {mulch && !preview && <Elsewhere view={elsewhere} />}
         {historyOpen && <HistoryBar mulchId={id} onPreview={onPreview} onClose={closeHistory} />}
         <Notice />
+        <CommentPanel />
       </div>
       <Conversation />
     </main>

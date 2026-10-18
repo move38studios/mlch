@@ -11,6 +11,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteFile, mulchDir } from "@/lib/mulch/store";
+import { withPlayer } from "./deck";
 
 export const ARTIFACT_EXTENSIONS = ["html", "svg", "md", "csv", "json", "txt", "pptx", "pdf", "docx", "xlsx", "png", "jpg"] as const;
 export const ARTIFACT_PATH = new RegExp(`^artifacts\\/[a-z0-9][a-z0-9._-]*\\.(${ARTIFACT_EXTENSIONS.join("|")})$`);
@@ -94,6 +95,13 @@ export async function adoptArtifact(mulchId: string, file: string): Promise<stri
     const existing = new Set(await fs.readdir(dir));
     for (let i = 2; existing.has(name); i++) name = `${base}-${i}.${ext}`;
     await fs.rename(resolved, path.join(dir, name));
+  }
+  // A deck the maker wrote in mlch's format gets the player.
+  if (ext === "html") {
+    const file = path.join(dir, name);
+    const html = await fs.readFile(file, "utf8").catch(() => undefined);
+    const played = html ? withPlayer(html) : undefined;
+    if (html && played && played !== html) await fs.writeFile(file, played);
   }
   return `artifacts/${name}`;
 }

@@ -152,6 +152,27 @@ export interface Mulch {
   nodes: Record<string, MulchNode>;
   edges: Record<string, MulchEdge>;
   groups: Record<string, MulchGroup>;
+  /** The person's comments on items, waiting for their next turn (absent in older mulches). */
+  comments?: Record<string, MulchComment>;
+}
+
+/**
+ * A comment the person left on an item (a card, a slide of a deck, a passage). It never acts by
+ * itself: it goes with the person's next instruction, and the AI closes it with what it did.
+ */
+export interface MulchComment {
+  id: string;
+  nodeId: string;
+  text: string;
+  /** Where in the item: a slide of a deck, or the words it is about. */
+  at?: { slide?: number; quote?: string };
+  createdAt: number;
+  /** Sent to the AI with an instruction (the job). */
+  sentAt?: number;
+  jobId?: string;
+  /** Closed by the AI, with what came of it. */
+  resolvedAt?: number;
+  resolution?: string;
 }
 
 /** What the home screen lists. */
@@ -191,7 +212,10 @@ export type MulchOp =
   | { op: "updateGroup"; id: string; patch: GroupPatch }
   /** Nodes in it stay where they are and leave the group. */
   | { op: "removeGroup"; id: string }
-  | { op: "setTitle"; title: string };
+  | { op: "setTitle"; title: string }
+  | { op: "addComment"; comment: MulchComment }
+  | { op: "updateComment"; id: string; patch: Patch<Omit<MulchComment, "id" | "nodeId" | "createdAt">> }
+  | { op: "removeComment"; id: string };
 
 /** A batch of ops as logged and broadcast. */
 export interface OpBatch {

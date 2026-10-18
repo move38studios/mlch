@@ -12,6 +12,7 @@ import { videoEmbed, type VideoEmbed } from "@/lib/ingest/video";
 import { formatDateTime } from "@/lib/format";
 import { useResolvedRef } from "./refs";
 import { shareArtifact } from "./share";
+import { CommentControl } from "./Comments";
 import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import type { MulchNode, MulchOp } from "@/lib/mulch/types";
@@ -353,6 +354,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
   const style = KIND_STYLES[node.kind];
   const editing = useCanvasUi((s) => s.editingId === node.id);
   const readOnly = useCanvasUi((s) => s.readOnly);
+  const comments = useCanvasUi((s) => s.comments);
   const setEditing = useCanvasUi((s) => s.setEditing);
   const setOpen = useCanvasUi((s) => s.setOpen);
   const setViewer = useCanvasUi((s) => s.setViewer);
@@ -405,6 +407,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
         else if (readOnly && (long || clipped)) setOpen(node.id);
       }}
     >
+      {!readOnly && comments && <CommentControl nodeId={node.id} selected={!!selected} />}
       {editing ? (
         // In a card of a chosen height, text typed past the bottom scrolls inside the card.
         <div className={node.fixedH ? "nowheel h-full overflow-y-auto px-4 py-3" : "px-4 py-3"}>

@@ -15,6 +15,8 @@ interface CanvasUi {
   /** Artifact shown full-window over the canvas. */
   viewerId?: string;
   setViewer(id?: string): void;
+  /** Comments on cards (off on mlch.app's landing canvas, which has nothing behind it). */
+  comments: boolean;
   /** Cards selected on the canvas: an instruction given now is about them. */
   selectedIds: string[];
   /** Looking at a past checkpoint: nothing can be changed. */
@@ -26,6 +28,7 @@ interface CanvasUi {
 export const useCanvasUi = create<CanvasUi>((set) => ({
   readOnly: false,
   selectedIds: [],
+  comments: true,
   setEditing: (editingId) => set({ editingId }),
   setOpen: (openId, options) => set({ openId, openEditing: !!options?.edit }),
   setViewer: (viewerId) => set({ viewerId }),

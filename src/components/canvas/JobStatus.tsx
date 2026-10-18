@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play, RotateCcw, Square, X } from "lucide-react";
+import { Pause, RotateCcw, Square, X } from "lucide-react";
 import { Scribble } from "@/components/brand/Scribble";
 import { useMulch } from "@/lib/mulch/client";
 import type { JobStatus as Job } from "@/lib/mulch/events";
@@ -216,13 +216,15 @@ export function JobStatus({ mulchId }: { mulchId: string }) {
           )}
         </div>
       )}
+      {/* Live: the AI adds as you go. Quiet: nothing unasked (speech still becomes cards, instructions still act). */}
       <button
         onClick={() => post("pause", { paused: !paused })}
-        className={`inline-flex items-center gap-1.5 rounded-lg px-2 h-7 hover:bg-paper-2 ${paused ? "bg-amber text-ink font-medium hover:bg-amber" : "hover:text-ink"}`}
-        title={paused ? "Resume enrichment" : "Pause enrichment"}
+        className="inline-flex items-center gap-1.5 rounded-lg px-2 h-7 hover:bg-paper-2 hover:text-ink"
+        aria-pressed={!paused}
+        aria-label={paused ? "Quiet" : "Live"}
       >
-        {paused ? <Play size={12} strokeWidth={2} /> : <Pause size={12} strokeWidth={2} />}
-        {paused ? "Enrichment paused" : "Enrichment"}
+        <span className={`h-2 w-2 rounded-full ${paused ? "border-[1.5px] border-ink-3" : "bg-ink"}`} />
+        {paused ? "Quiet" : "Live"}
       </button>
     </div>
   );

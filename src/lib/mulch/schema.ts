@@ -101,6 +101,29 @@ const groupPatch = z.object({
   userTouched: nullable(z.boolean()),
 });
 
+const commentAt = z.object({ slide: z.number().int().min(1).max(500).optional(), quote: z.string().max(1000).optional() });
+
+const comment = z.object({
+  id,
+  nodeId: id,
+  text: z.string().min(1).max(4000),
+  at: commentAt.optional(),
+  createdAt: num,
+  sentAt: num.optional(),
+  jobId: id.optional(),
+  resolvedAt: num.optional(),
+  resolution: z.string().max(2000).optional(),
+});
+
+const commentPatch = z.object({
+  text: z.string().min(1).max(4000).optional(),
+  at: nullable(commentAt),
+  sentAt: nullable(num),
+  jobId: nullable(id),
+  resolvedAt: nullable(num),
+  resolution: nullable(z.string().max(2000)),
+});
+
 export const opSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("addNode"), node }),
   z.object({ op: z.literal("updateNode"), id, patch: nodePatch }),
@@ -112,6 +135,9 @@ export const opSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("updateGroup"), id, patch: groupPatch }),
   z.object({ op: z.literal("removeGroup"), id }),
   z.object({ op: z.literal("setTitle"), title: z.string().max(200) }),
+  z.object({ op: z.literal("addComment"), comment }),
+  z.object({ op: z.literal("updateComment"), id, patch: commentPatch }),
+  z.object({ op: z.literal("removeComment"), id }),
 ]);
 
 export const opsRequestSchema = z.object({

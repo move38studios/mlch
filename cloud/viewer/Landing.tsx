@@ -88,7 +88,7 @@ export function Landing() {
   useEffect(() => {
     const phone = window.matchMedia("(max-width: 640px)").matches;
     useMulch.setState({ id: LANDING_ID, mulch: seed(phone), connected: true });
-    useCanvasUi.setState({ readOnly: false });
+    useCanvasUi.setState({ readOnly: false, comments: false });
     // A phone opens on the first card, readable; the rest is below.
     if (phone) {
       const focus = setTimeout(() => useMulch.getState().setFocus({ ids: ["logo", "note"] }), 500);

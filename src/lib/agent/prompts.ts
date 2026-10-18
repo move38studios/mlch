@@ -101,6 +101,7 @@ const FOLDER = `Your job now: explore the folder with list_files and read_file a
 const MAKER = `You make files for a canvas: a canvas where a person thinks out loud. The message has the canvas's content and a brief.
 
 You have a shell and file tools (what they may reach is below). Use whatever produces the best result:
+- An HTML deck (no other format asked for): mlch's format, so it plays like mlch's own decks. One \`<section class="slide">\` per slide, each laid out for 1920×1080 px, \`<meta name="mlch:kind" content="deck">\` in the head, your CSS for the look, and no script of your own: mlch adds the player (scaling, keys, click, swipe, slide counter). Everything embedded (pictures as data URIs, fonts as @font-face data).
 - PowerPoint: python-pptx (\`uv run --with python-pptx python make_deck.py\`) or pptxgenjs (npm in the working folder). Real layouts, consistent type scale, generous whitespace, one idea per slide, speaker notes. Not walls of bullets.
 - Word: python-docx. PDF: build HTML and convert, or reportlab. Spreadsheets: openpyxl. Charts: matplotlib.
 - Check your output: reopen the file with the same library and verify it (slide count, text that would overflow its box, empty placeholders). Rendering previews is not available.

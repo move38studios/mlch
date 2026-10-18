@@ -216,7 +216,10 @@ export function plainNote(text: string): string {
 export async function sharedMulch(mulch: Mulch, linkedOf: LinkedOf = linkedContent): Promise<{ mulch: Mulch; files: Linked["files"] }> {
   const files: Linked["files"] = [];
   const nodes = Object.fromEntries(await Promise.all(Object.entries(mulch.nodes).map(async ([id, node]) => [id, await sharedNode(node, linkedOf, files)] as const)));
-  return { mulch: { ...mulch, nodes }, files };
+  // Comments are the person's own notes to the AI: never shared.
+  const { comments: _comments, ...rest } = mulch;
+  void _comments;
+  return { mulch: { ...rest, nodes }, files };
 }
 
 async function sharedNode(node: MulchNode, linkedOf: LinkedOf, files: Linked["files"]): Promise<MulchNode> {
@@ -231,7 +234,7 @@ async function sharedNode(node: MulchNode, linkedOf: LinkedOf, files: Linked["fi
 
 async function sharedOps(ops: MulchOp[], files: Linked["files"]): Promise<MulchOp[]> {
   return Promise.all(
-    ops.map(async (op) => {
+    ops.filter((op) => !op.op.endsWith("Comment")).map(async (op) => {
       if (op.op === "addNode") return { ...op, node: await sharedNode(op.node, linkedContent, files) };
       // A link card's target stays private in its changes too.
       if (op.op === "updateNode" && op.patch.ref) {
@@ -373,9 +376,17 @@ async function forward(mulchId: string, batch: OpBatch): Promise<void> {
     sender = api.liveSender(record);
     s.senders.set(record.id, sender);
   }
-  const files = batch.ops.flatMap((op) => (op.op === "addNode" ? filesOf(op.node) : op.op === "updateNode" && (op.patch.assetId || op.patch.docPath) ? [op.patch.assetId ? `assets/${op.patch.assetId}` : "", op.patch.docPath ?? ""].filter(Boolean) : []));
+  const files = batch.ops.flatMap((op) =>
+    op.op === "addNode"
+      ? filesOf(op.node)
+      : op.op === "updateNode"
+        ? [op.patch.assetId ? `assets/${op.patch.assetId}` : "", op.patch.poster ? `assets/${op.patch.poster}` : "", op.patch.docPath ?? ""].filter(Boolean)
+        : [],
+  );
   const linkedFiles: Linked["files"] = [];
   const ops = await sharedOps(batch.ops, linkedFiles);
+  // Only comments changed: nothing to send.
+  if (!ops.length) return;
   if (files.length || linkedFiles.length) await upload(record, mulchId, [...files, ...linkedFiles]);
   sender.send({ ...batch, ops });
   if (sender.stopped) {

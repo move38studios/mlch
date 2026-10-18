@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { useMulch } from "@/lib/mulch/client";
 import { useCanvasUi } from "./ui";
+import { pendingTurn } from "./turn";
 import { CallButton, MicButton, TranscriptStrip } from "./Mic";
 import { HoldToTalk } from "./HoldToTalk";
 
@@ -23,11 +24,15 @@ async function post(path: string, body: unknown): Promise<void> {
 export function InputBar({ mulchId, children }: { mulchId: string; children?: React.ReactNode }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  // Comments and notes since the last instruction go with the next one; with nothing typed, they are the instruction.
+  const pending = useMulch((s) => pendingTurn(s.mulch, s.jobs).label);
 
   async function send(forceInstruction = false) {
     let value = text.trim();
-    const instruction = forceInstruction || value.startsWith("/");
+    const typedNothing = !value && !!pending;
+    const instruction = forceInstruction || value.startsWith("/") || typedNothing;
     if (value.startsWith("/")) value = value.slice(1).trim();
+    if (typedNothing) value = pending;
     if (!value || sending) return;
     setSending(true);
     try {
@@ -45,6 +50,19 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 w-[min(700px,calc(100%-360px))] min-w-[380px]">
       <HoldToTalk mulchId={mulchId} />
       <TranscriptStrip />
+      {pending && (
+        <div className="flex justify-center mb-1.5">
+          <button
+            onClick={() => void send(true)}
+            disabled={sending}
+            className="float rounded-full h-7 px-3 text-[12.5px] text-ink-2 hover:text-ink inline-flex items-center gap-1.5"
+            title="Send"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-ink" />
+            {pending}
+          </button>
+        </div>
+      )}
       <div className="float flex items-center gap-2 rounded-2xl pl-2 pr-2 py-2">
         <MicButton mulchId={mulchId} />
         <CallButton mulchId={mulchId} />
@@ -65,7 +83,7 @@ export function InputBar({ mulchId, children }: { mulchId: string; children?: Re
         />
         <button
           onClick={() => void send()}
-          disabled={!text.trim() || sending}
+          disabled={(!text.trim() && !pending) || sending}
           aria-label="Send"
           title="Send"
           className="shrink-0 h-10 w-10 grid place-items-center rounded-xl bg-ink text-white disabled:bg-paper-2 disabled:text-ink-3"
