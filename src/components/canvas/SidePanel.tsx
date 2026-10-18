@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ExternalLink, FolderOpen, Link2, Pencil, X } from "lucide-react";
+import { Check, Copy, ExternalLink, FolderOpen, Link2, Pencil, X } from "lucide-react";
+import { shareArtifact } from "./share";
+import { useSharingOn } from "@/components/settings/Sharing";
 import { desktop } from "@/lib/desktop/client";
 import { useMulch } from "@/lib/mulch/client";
 import { KIND_STYLES } from "./kinds";
@@ -224,6 +226,7 @@ export function SidePanel() {
             Done
           </button>
         )}
+        {node.kind === "writeup" && !readOnly && mulchId && draft === undefined && <WriteupActions mulchId={mulchId} node={node} />}
         {revealable && (
           <button onClick={reveal} className="p-1.5 rounded-lg hover:bg-paper-2 text-ink-2 hover:text-ink" title="Show in Finder" aria-label="Show in Finder">
             <FolderOpen size={15} strokeWidth={1.75} />
@@ -276,5 +279,43 @@ export function SidePanel() {
         {mulchId && <LinkedFrom mulchId={mulchId} itemId={node.id} />}
       </div>
     </aside>
+  );
+}
+
+/** A write-up (a call's transcript or notes too) on its own: copied as text, or shared as a page. */
+function WriteupActions({ mulchId, node }: { mulchId: string; node: MulchNode }) {
+  const [copied, setCopied] = useState(false);
+  const [sharing, setSharing] = useState<"idle" | "busy" | "copied">("idle");
+  const sharingOn = useSharingOn();
+  const BUTTON = "h-7 px-2 rounded-lg text-[12.5px] text-ink-2 hover:bg-paper-2 hover:text-ink inline-flex items-center gap-1.5";
+  return (
+    <>
+      <button
+        onClick={async () => {
+          await navigator.clipboard.writeText(`${node.title ? `${node.title}\n\n` : ""}${node.text}`);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }}
+        className={BUTTON}
+      >
+        {copied ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={1.75} />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+      {sharingOn && desktop() && (
+        <button
+          onClick={async () => {
+            setSharing("busy");
+            const ok = await shareArtifact(mulchId, node.id);
+            setSharing(ok ? "copied" : "idle");
+            if (ok) setTimeout(() => setSharing("idle"), 3000);
+          }}
+          disabled={sharing === "busy"}
+          className={BUTTON}
+        >
+          {sharing === "copied" ? <Check size={13} strokeWidth={2.25} /> : <Link2 size={13} strokeWidth={1.75} />}
+          {sharing === "busy" ? "Sharing" : sharing === "copied" ? "Link copied" : "Share"}
+        </button>
+      )}
+    </>
   );
 }

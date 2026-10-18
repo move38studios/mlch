@@ -22,6 +22,7 @@ import { log } from "@/lib/log";
 import { resolveRef } from "@/lib/links/links";
 import { desktopRequest } from "@/lib/desktop/server";
 import { hasThumbnail } from "@/lib/artifacts/thumbnails";
+import { writeupPage } from "./writeupPage";
 import { archiveMulch, atomicWriteFile, createMulch, applyToMulch, getMulch, isMulchId, mulchDir, onAfterApply, peekMulch } from "@/lib/mulch/store";
 import { libraryDir } from "@/lib/desktop/server";
 import { newClientId } from "@/lib/mulch/ids";
@@ -274,18 +275,24 @@ async function uploadPreview(record: ShareRecord, mulchId: string, docPath: stri
 export async function shareArtifact(mulchId: string, nodeId: string): Promise<ShareView> {
   const mulch = await getMulch(mulchId);
   const node = mulch.nodes[nodeId];
-  if (!node?.docPath) throw new ShareError(400, "Only a made file can be shared on its own.");
+  if (!node?.docPath && node?.kind !== "writeup") throw new ShareError(400, "Only a made file or a write-up can be shared on its own.");
+  // A write-up (a call's transcript or notes too) is shared as a page made from it, refreshed each time.
+  let docPath = node.docPath!;
+  if (node.kind === "writeup") {
+    docPath = `${(node.docPath ?? `docs/${node.id}.md`).replace(/\.md$/, "")}.html`;
+    await atomicWriteFile(path.join(mulchDir(mulchId), docPath), writeupPage(node.title || "Write-up", node.text));
+  }
   const records = await readShares(mulchId);
-  let record = records.find((r) => r.kind === "artifact" && r.docPath === node.docPath);
+  let record = records.find((r) => r.kind === "artifact" && r.docPath === docPath);
   if (!record) {
     const { api, server } = await newShares();
-    const share = await api.create({ kind: "artifact", title: node.title || path.basename(node.docPath), entry: node.docPath });
-    record = { ...share, kind: "artifact", server, docPath: node.docPath, createdAt: Date.now() };
+    const share = await api.create({ kind: "artifact", title: node.title || path.basename(docPath), entry: docPath });
+    record = { ...share, kind: "artifact", server, docPath, createdAt: Date.now() };
     await writeShares(mulchId, [...records, record]);
   }
   state().uploaded.delete(record.id);
-  await upload(record, mulchId, [node.docPath, ...(await htmlCompanions(mulchId, node.docPath))]);
-  await uploadPreview(record, mulchId, node.docPath);
+  await upload(record, mulchId, [docPath, ...(await htmlCompanions(mulchId, docPath))]);
+  await uploadPreview(record, mulchId, docPath);
   log.info("share", "Shared a file", { mulchId, shareId: record.id });
   return viewOf(record);
 }

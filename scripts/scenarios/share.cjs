@@ -17,7 +17,8 @@ module.exports = async ({ app, page, base, shot }) => {
 
   // Shares go to the own server (address in Settings, key through the desktop shell as the page saves it).
   const server = process.env.MLCH_OWN_SERVER || 'http://localhost:8788';
-  assert.equal((await api('/api/account', 'POST', { action: 'mode', mode: 'own', server })).status, 200);
+  const moded = await api('/api/account', 'POST', { action: 'mode', mode: 'own', server });
+  assert.equal(moded.status, 200, JSON.stringify(moded));
   assert.ok(await page.evaluate(async () => (await window.mlchDesktop.credentials.write({ shareKey: 'dev-key' })).ok));
   await page.waitForTimeout(300);
 
@@ -64,13 +65,29 @@ module.exports = async ({ app, page, base, shot }) => {
   assert.match(response.headers.get('content-security-policy') ?? '', /sandbox/);
   assert.match(await response.text(), /Seat pricing/);
 
+  // A write-up (a call's transcript, say) on its own, as a page.
+  await api(`/api/mulches/${mulch.id}/ops`, 'POST', { clientId: 's', ops: [
+    { op: 'addNode', node: { id: 'w', kind: 'writeup', x: 600, y: 220, title: 'Call, 18 Oct', text: '**Me** (10:00) Per seat.\n\n**Them** (10:01) Agreed.', docPath: 'docs/call.md', origin: 'speech:call', createdAt: Date.now() } },
+    // A comment never goes to a shared canvas.
+    { op: 'addComment', comment: { id: 'c-1', nodeId: 'a', text: 'Private note to the AI', createdAt: Date.now() } },
+  ] });
+  const writeup = await api(`/api/mulches/${mulch.id}/shares`, 'POST', { kind: 'artifact', nodeId: 'w' });
+  assert.equal(writeup.status, 200, JSON.stringify(writeup));
+  const writtenPage = await (await fetch(`${writeup.share.url}docs/call.html`)).text();
+  assert.match(writtenPage, /<strong>Me<\/strong> \(10:00\) Per seat\./);
+  // Sharing the canvas again sends a fresh snapshot: still without the comment.
+  assert.equal((await api(`/api/mulches/${mulch.id}/shares`, 'POST', { kind: 'mulch' })).status, 200);
+  const snapshot = await (await fetch(`${share.url}snapshot.json`)).json();
+  assert.ok(snapshot.nodes.w, 'the write-up is on the shared canvas');
+  assert.equal(snapshot.comments, undefined, 'comments are not shared');
+
   // Open in mlch: a copy as a new mulch.
   const manifestUrl = share.manifestUrl;
   const opened = await api('/api/import', 'POST', { manifest: manifestUrl });
   assert.equal(opened.status, 200, JSON.stringify(opened));
   const copy = (await api(`/api/mulches/${opened.mulchId}`)).mulch;
   assert.equal(copy.title, 'Pricing call');
-  assert.equal(Object.keys(copy.nodes).length, 4);
+  assert.equal(Object.keys(copy.nodes).length, 5);
   assert.ok(fs.existsSync(path.join(library, opened.mulchId, 'artifacts', 'deck.html')), 'files come along');
 
   // Stop, then delete.
