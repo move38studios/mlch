@@ -14,6 +14,11 @@ Order agreed 2026-10-13: **docs/PLAN-3.md**, a small public release (fixes from 
 2. **Your Claude Code and Codex setup: what's left.** Built 2026-10-15 (docs/research/connectors.md). Still to do: ChatGPT apps in Codex, the person's setup in Codex making turns (`codex exec`), a Dock badge while a connector card waits.
 3. **Settings → AI stuck on "Preparing Claude Code" after launch.** Opening Settings soon after launch can show it in red forever; switching to Codex and back shows the right state. A race between the CLI check at launch and the panel's status. (Noted 2026-10-15.)
 
+## From testing (George, 2026-10-18, on the MLCH dev board)
+
+- **Selecting many cards or an area to delete.** "No way to select multiple / full area on the canvas to delete." Today: shift-drag draws a selection box and ⌘-click adds cards (React Flow's defaults), but nothing shows that; dragging the empty canvas pans.
+- **Markdown on post-its.** "Markdown (bold etc) not rendered on a postit, but rendered in the detailed postit editor (side)." Notes render as plain text on the canvas (`kinds.ts`: no `markdown` for `note`); the side panel renders markdown.
+
 ## When the problem shows up
 
 - **Mulches from a newer mlch in an older build.** Official builds, forks and builds from source can open the same library. If a release changes the mulch format (always with a migration), an older build or a fork may misread a migrated mulch. Then: write the format version in each mulch and open a newer one read-only in an older build, saying it was saved by a newer mlch. (Noted 2026-10-14.)
