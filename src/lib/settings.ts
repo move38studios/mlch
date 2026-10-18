@@ -43,6 +43,13 @@ export const settingsSchema = z.object({
    * Off: mlch's own tools only. docs/research/connectors.md.
    */
   agentSetup: z.boolean().default(true),
+  /**
+   * What instructions, research and making may do on this Mac: auto (the CLI's own tools, a
+   * classifier approves each action and asks the person when it cannot decide), ask (anything
+   * the person's rules don't allow asks first), sandboxed (writes only in the mulch, network only
+   * to package registries, instructions without a shell).
+   */
+  access: z.enum(["auto", "ask", "sandboxed"]).default("auto"),
   /** When the person confirmed using their own subscription (ms), per AI. */
   subscriptionConsent: z.object({ claude: z.number().optional(), codex: z.number().optional() }).default({}),
   enrich: z.array(z.enum(ENRICHMENTS)).default([...ENRICHMENTS]),

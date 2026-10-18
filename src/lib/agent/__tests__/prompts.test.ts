@@ -25,7 +25,15 @@ describe("prompts", () => {
 
   it("keeps the hand-over instructions for the maker whatever the edit", () => {
     const settings = settingsSchema.parse({ harness: "codex", prompts: { maker: "Make it nice." }, style: "" });
-    expect(makerPrompt(settings)).toMatch(/^Make it nice\.\n\nSave finished files/);
+    expect(makerPrompt(settings)).toMatch(/^Make it nice\.\n\nYour shell and files work as in the person's Terminal[^\n]*\n\nSave finished files/);
+    // Sandboxed: what the shell can't reach, so briefs don't ask for it.
+    expect(makerPrompt(settingsSchema.parse({ harness: "codex", access: "sandboxed" }))).toContain("reach only package registries (no websites");
+  });
+
+  it("gives instructions Claude Code's own tools unless sandboxed (and only on Claude)", () => {
+    expect(commandPrompt(settingsSchema.parse({ harness: "claude" }))).toContain("Claude Code's own tools on this Mac");
+    expect(commandPrompt(settingsSchema.parse({ harness: "claude", access: "sandboxed" }))).not.toContain("Claude Code's own tools on this Mac");
+    expect(commandPrompt(settingsSchema.parse({ harness: "codex" }))).not.toContain("Claude Code's own tools on this Mac");
   });
 
   it("starts with mlch's house style; a cleared one is none, the maker gets file places", () => {

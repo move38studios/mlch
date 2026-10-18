@@ -165,6 +165,15 @@ export interface HarnessTurnParams {
   /** Thinking effort, already checked against the model's own levels. */
   effort?: string;
   /**
+   * mlch: the CLI's own tools on this Mac (shell, files, network), not sandboxed, with the
+   * person's setup: "auto" (a classifier decides each action; what it cannot decide is asked
+   * through `userSetup.approve`) or "ask" (anything their rules don't allow is asked). Absent:
+   * only our tools, or the sandboxed `workspace`.
+   */
+  access?: "auto" | "ask";
+  /** mlch: where a turn with `access` works (relative paths, scratch files). */
+  cwd?: string;
+  /**
    * mlch: most model round-trips in this turn (Claude Code's maxTurns). Absent: no
    * limit; the job's time period bounds it. Codex has no such limit.
    */

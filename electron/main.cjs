@@ -17,6 +17,9 @@ const { visibleBounds } = require('./lib/window-state.cjs');
 const { createServerMessageHandler } = require('./lib/bridge-main.cjs');
 const { audioHelperPath, createAudioHelper } = require('./lib/audio-helper.cjs');
 const { spawn } = require('node:child_process');
+const { loginShellPath } = require('./lib/shell-path.cjs');
+// Asked at once, while Electron starts (the shell takes most of a second).
+const shellPath = loginShellPath().catch(() => undefined);
 
 const root = path.resolve(__dirname, '..');
 let backend, window, credentialStore, diagnostics;
@@ -969,6 +972,8 @@ else {
     // A packaged app gets its icon from the bundle; in development, set it here.
     if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, 'icon.png'));
     diagnostics = createDiagnostics(app.getPath('logs'), redactor);
+    // The tools the person's Terminal finds (ffmpeg, uv, node), for the server and the AI it runs.
+    process.env.PATH = (await shellPath) || process.env.PATH;
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
       redactor.add(values); backend?.post({ type: 'secrets', values });
     });

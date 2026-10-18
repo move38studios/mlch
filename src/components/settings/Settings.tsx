@@ -24,6 +24,7 @@ interface SettingsData {
   transcription: "groq" | "local";
   agentAuth: Record<AgentHarnessId, AuthMode>;
   agentSetup: boolean;
+  access: "auto" | "ask" | "sandboxed";
   subscriptionConsent: Partial<Record<AgentHarnessId, number>>;
 }
 interface SettingsView {
@@ -340,6 +341,22 @@ export function Settings() {
               <input type="checkbox" checked={settings.agentSetup} onChange={(e) => void update({ agentSetup: e.target.checked }).then(loadStatus)} className="mt-0.5" />
               <span>Use my Claude Code and Codex setup for instructions, research and making: CLAUDE.md and AGENTS.md, MCP servers, connectors, plugins</span>
             </label>
+          )}
+          {settings && (
+            <div className="mt-3 flex items-center gap-3">
+              <span className="w-28 text-[14px]">Permissions</span>
+              <select
+                value={settings.agentSetup ? settings.access : "sandboxed"}
+                disabled={!settings.agentSetup}
+                onChange={(e) => void update({ access: e.target.value as SettingsData["access"] })}
+                className={FIELD}
+                aria-label="Permissions"
+              >
+                <option value="auto">Auto</option>
+                <option value="ask">Ask me</option>
+                <option value="sandboxed">Sandboxed</option>
+              </select>
+            </div>
           )}
           {active && settings && (
             <div className="mt-5 space-y-2">

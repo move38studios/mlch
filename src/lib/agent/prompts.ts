@@ -100,7 +100,7 @@ const FOLDER = `Your job now: explore the folder with list_files and read_file a
 
 const MAKER = `You make files for a canvas: a canvas where a person thinks out loud. The message has the canvas's content and a brief.
 
-You have a shell and file tools in a sandbox: you can write only in the working folder and the artifacts folder, and reach only package registries. Use whatever produces the best result:
+You have a shell and file tools (what they may reach is below). Use whatever produces the best result:
 - PowerPoint: python-pptx (\`uv run --with python-pptx python make_deck.py\`) or pptxgenjs (npm in the working folder). Real layouts, consistent type scale, generous whitespace, one idea per slide, speaker notes. Not walls of bullets.
 - Word: python-docx. PDF: build HTML and convert, or reportlab. Spreadsheets: openpyxl. Charts: matplotlib.
 - Check your output: reopen the file with the same library and verify it (slide count, text that would overflow its box, empty placeholders). Rendering previews is not available.
@@ -183,11 +183,11 @@ The person's own connectors and MCP servers (email, calendar, files, design tool
 
 export const fastPrompt = (settings: Settings) => lane(settings, "fast");
 export const callPrompt = (settings: Settings) => lane(settings, "call");
-export const commandPrompt = (settings: Settings) => lane(settings, "command") + styleBlock(settings);
+export const commandPrompt = (settings: Settings) => lane(settings, "command") + accessBlock(settings) + styleBlock(settings);
 export const ingestPrompt = (settings: Settings) => lane(settings, "ingest");
 export const imagePrompt = (settings: Settings) => lane(settings, "image");
 export const folderPrompt = (settings: Settings) => lane(settings, "folder");
-export const researchPrompt = (settings: Settings) => lane(settings, "research") + styleBlock(settings);
+export const researchPrompt = (settings: Settings) => lane(settings, "research") + accessBlock(settings) + styleBlock(settings);
 
 export function slowPrompt(settings: Settings, web: boolean): string {
   const kinds = settings.enrich.filter((e) => e !== "search" || web).map((e) => `- ${part(settings, `enrich:${e}`)}`);
@@ -195,8 +195,29 @@ export function slowPrompt(settings: Settings, web: boolean): string {
 }
 
 /** How to hand files over depends on the harness, so it is not editable. */
+/** With access (Settings → AI, Permissions), the person's work runs with Claude Code's own tools on this Mac. */
+export function hasAccess(settings: Settings): boolean {
+  return settings.access !== "sandboxed" && settings.agentSetup;
+}
+
+/** What the turn's own tools may do, for instructions and research (Codex instructions have none of their own). */
+function accessBlock(settings: Settings): string {
+  if (!hasAccess(settings) || settings.harness !== "claude") return "";
+  return `\n\nYou also have Claude Code's own tools on this Mac, as the person has them in Terminal: a shell, reading and writing files, the web. Use them when they do the job better than mlch's tools: run a script or ffmpeg, take screenshots of web pages with a headless browser, convert or inspect a file, read a project. Scratch files go in the working folder (your current directory). To put a file on the canvas, add_file with its path. ${
+    settings.access === "auto" ? "Actions are checked as you go; some may be refused or wait for the person's OK." : "Actions the person hasn't allowed wait for their OK."
+  } If one is refused, do the rest and say what you would have done. Don't change the person's files outside the working folder unless the instruction asks for it.`;
+}
+
+/** What the maker's shell may reach. */
+function makerReach(settings: Settings): string {
+  if (!hasAccess(settings)) return "\n\nYour shell runs in a sandbox: you can write only in the working folder and the artifacts folder, and reach only package registries (no websites: screenshots and pages must come from the canvas's files).";
+  return `\n\nYour shell and files work as in the person's Terminal on this Mac, with the network (websites included, e.g. a headless browser for screenshots). ${
+    settings.access === "auto" ? "Actions are checked as you go; some may be refused." : "Actions the person hasn't allowed may wait for their OK."
+  } Write only in the working folder and the artifacts folder unless the brief says otherwise. If something can't be done, finish the rest and say exactly what is missing and why.`;
+}
+
 export function makerPrompt(settings: Settings): string {
-  return `${part(settings, "maker")}${styleBlock(settings, true)}
+  return `${part(settings, "maker")}${makerReach(settings)}${styleBlock(settings, true)}
 
 Save finished files directly in the artifacts folder (not in a subfolder), with short lowercase names. Never overwrite a file that is already there; pick a new name.${
     settings.harness === "claude"

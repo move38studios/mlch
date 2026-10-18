@@ -34,8 +34,8 @@ export function codexExecArgs(params: HarnessTurnParams): string[] {
     "sandbox_workspace_write.network_access=true",
     "-c",
     "project_doc_max_bytes=0",
-    "-c",
-    'approval_policy="never"',
+    // mlch: auto (Settings → AI): what the sandbox doesn't allow goes to Codex's auto review; it can't ask the person here.
+    ...(params.access === "auto" ? ["-c", 'approval_policy="on-request"', "-c", 'approvals_reviewer="auto_review"'] : ["-c", 'approval_policy="never"']),
     "-c",
     `web_search="${params.webAccess ? "live" : "disabled"}"`,
     ...(params.model && params.model !== "default" ? ["--model", params.model] : []),

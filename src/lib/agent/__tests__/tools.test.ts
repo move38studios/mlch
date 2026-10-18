@@ -167,3 +167,14 @@ describe("mulch tools", () => {
     expect(outside.problems.length).toBe(1);
   });
 });
+
+describe("names of fetched files", () => {
+  it("keep their own name, else the caption's first words, else the page's host", async () => {
+    const { fileStem } = await import("../tools");
+    expect(fileStem("https://example.com/files/Q3%20report.pdf")).toBe("Q3 report");
+    expect(fileStem("https://api.microlink.io/?url=https://www.motion.com&screenshot=true", 'Motion homepage: "Make ads that win"')).toBe("motion-homepage-make-ads-that-win");
+    expect(fileStem("https://api.microlink.io/?url=https://www.motion.com&screenshot=true")).toBe("motion.com");
+    expect(fileStem("https://shots.example/render/12345")).toBe("shots.example");
+    expect(fileStem("not a url")).toBe("file");
+  });
+});

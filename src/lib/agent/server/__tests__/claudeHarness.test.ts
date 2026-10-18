@@ -957,6 +957,33 @@ describe("the person's own Claude Code setup", () => {
     expect(options.env).not.toHaveProperty("ANTHROPIC_API_KEY");
   });
 
+  it("with access runs Claude Code's own tools unsandboxed, in auto mode or asking; their tools ask through the card", async () => {
+    const asked: unknown[] = [];
+    const approving = { connectors: true, approve: async (request: unknown) => (asked.push(request), true) };
+    const workspace = { cwd: "/lib/m1/work", writable: ["/lib/m1/artifacts"], readDenied: ["/Users/x/.ssh"], networkDomains: ["pypi.org"], env: {} };
+    const run = async (extra: Record<string, unknown>) => {
+      const { query, made } = fakeQueries({ messages: recorded });
+      await collect(harness({ query }).runTurn(params({ userSetup: approving, ...extra })));
+      return made[0].options;
+    };
+    const auto = await run({ access: "auto", cwd: "/lib/m1/work" });
+    const ask = await run({ access: "ask", workspace });
+    const sandboxed = await run({ workspace });
+    expect(auto).toMatchObject({ permissionMode: "auto", cwd: "/lib/m1/work" });
+    expect(auto.tools).toEqual(expect.arrayContaining(["Bash", "Write", "WebFetch"]));
+    expect(auto.sandbox).toBeUndefined();
+    expect(auto.hooks).toBeUndefined();
+    expect(ask).toMatchObject({ permissionMode: "default", cwd: "/lib/m1/work" });
+    expect(ask.sandbox).toBeUndefined();
+    expect(sandboxed.sandbox).toMatchObject({ enabled: true, network: { allowedDomains: ["pypi.org"] } });
+    // A Claude Code tool its rules didn't settle: the person's card, with what it is about.
+    const decision = await auto.canUseTool!("Bash", { command: "ffmpeg -i a.mp4", timeout: 5 }, { signal: new AbortController().signal } as never);
+    expect(decision).toMatchObject({ behavior: "allow" });
+    expect(asked).toEqual([{ server: "Claude Code", tool: "Bash", input: { command: "ffmpeg -i a.mp4" } }]);
+    // Without access the same tool is refused, as before.
+    expect(await sandboxed.canUseTool!("Bash", {}, { signal: new AbortController().signal } as never)).toMatchObject({ behavior: "deny" });
+  });
+
   it("without connectors keeps their settings but no MCP servers of theirs", async () => {
     const { query, made } = fakeQueries({ messages: recorded });
     await collect(harness({ query }).runTurn(params({ userSetup: { connectors: false } })));

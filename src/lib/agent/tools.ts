@@ -131,6 +131,27 @@ function nodeLine(node: MulchNode, textLimit: number): string {
 }
 
 /** Compact text form of the canvas for prompts and get_mulch. */
+/**
+ * A file name for something fetched from `url`: its own name, or (a screenshot service, an
+ * address with no file name) the caption's first words, or the site's host.
+ */
+export function fileStem(url: string, caption?: string): string {
+  let parsed: URL | undefined;
+  try {
+    parsed = new URL(url);
+  } catch {
+    parsed = undefined;
+  }
+  const own = parsed ? path.basename(decodeURIComponent(parsed.pathname)).replace(/\.[^.]*$/, "") : "";
+  if (own && !/^(file|image|screenshot|download|render|api|index|\d+)$/i.test(own)) return own.slice(0, 80);
+  const words = (caption ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean).slice(0, 6).join("-");
+  if (words) return words.slice(0, 60);
+  // A screenshot service names the page it took in a parameter.
+  const inner = parsed && [...parsed.searchParams.values()].find((value) => /^https?:\/\//.test(value));
+  const host = (inner ? new URL(inner).hostname : parsed?.hostname ?? "").replace(/^www\./, "");
+  return host || "file";
+}
+
 export function describeMulch(mulch: Mulch, options: { textLimit?: number; maxNodes?: number } = {}): string {
   const textLimit = options.textLimit ?? 220;
   const nodes = Object.values(mulch.nodes).sort((a, b) => a.createdAt - b.createdAt);
@@ -925,9 +946,12 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
           const got = await fetchFile(url);
           if ("error" in got) return fail(`${got.error} Nothing was added.`);
           bytes = got.bytes;
-          fileName = `${path.basename(new URL(url).pathname).replace(/\.[^.]*$/, "") || "file"}${got.extension}`;
+          fileName = `${fileStem(url, caption)}${got.extension}`;
         } else {
-          const resolved = resolveReadable(ctx.readRoot ?? os.homedir(), file!);
+          // The mulch's own folder (the work folder a turn writes in, its artifacts) is always readable.
+          const own = mulchDir(ctx.mulchId);
+          const inOwn = path.isAbsolute(file!) && path.resolve(file!).startsWith(own + path.sep) ? path.resolve(file!) : undefined;
+          const resolved = inOwn ?? resolveReadable(ctx.readRoot ?? os.homedir(), file!);
           if (!resolved || !FILE_EXTENSION.test(resolved)) return fail(`${file}: not a file you may read that the canvas can hold (pictures, PDF, Word, audio, video in your home folder; private places excluded).`);
           const read = await fs.readFile(resolved).catch(() => undefined);
           if (!read) return fail(`${file}: not found.`);

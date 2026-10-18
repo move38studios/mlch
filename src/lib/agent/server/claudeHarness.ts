@@ -228,6 +228,8 @@ export function buildClaudeTools(runtime: AgentToolRuntime) {
 
 /** mlch: Claude Code's own tools for a making turn (always sandboxed, see workspaceOptions). */
 export const CLAUDE_WORKSPACE_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep"] as const;
+/** mlch: Claude Code's own tools with `access` (auto or ask): as the person has them in Terminal. */
+export const CLAUDE_ACCESS_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "TodoWrite", "WebSearch", "WebFetch"] as const;
 
 /** Absolute paths in permission rules start with `//`. */
 const rulePath = (dir: string) => `/${dir.replace(/\/+$/, "")}/**`;
@@ -304,15 +306,32 @@ export function mcpToolFlags(statuses: McpServerStatus[]): McpToolFlags {
 
 const DECLINED = "The person declined this. Don't try it again unless they ask; tell them what you would have done instead.";
 
+/** What a Claude Code tool call is about, as short strings for the person's card. */
+function toolSummary(input: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of ["command", "description", "file_path", "path", "pattern", "url", "query", "prompt"]) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) out[key] = value.length > 600 ? `${value.slice(0, 600)}…` : value;
+  }
+  return out;
+}
+
 /**
  * mlch: what a turn may do beyond its allow rules. The person's MCP servers
  * (anything not ours, `source !== "sdk"`): tools marked read-only run, others
  * ask the person (`approve`); without connectors or a way to ask, they are
  * refused. Everything else is refused, as `dontAsk` would.
  */
-export function connectorPermissions(setup: AgentUserSetup, toolFlags: () => Promise<McpToolFlags>): CanUseTool {
+export function connectorPermissions(setup: AgentUserSetup, toolFlags: () => Promise<McpToolFlags>, access?: "auto" | "ask"): CanUseTool {
   return async (toolName, input, options) => {
     const server = options.mcpServer;
+    // mlch: with access, Claude Code's own tools that its rules (or auto mode) didn't settle ask the person.
+    if (!server && access) {
+      if (!setup.approve) return { behavior: "deny", message: `${toolName} needs the person's OK, and they can't be asked here.` };
+      if (options.signal.aborted) return { behavior: "deny", message: "The work was stopped.", interrupt: true };
+      const allowed = await setup.approve({ server: "Claude Code", tool: toolName, input: toolSummary(input) });
+      return allowed ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: DECLINED };
+    }
     if (!server || server.source === "sdk") {
       return { behavior: "deny", message: `${toolName} isn't available in mlch. Use mlch's tools, or the person's connectors.` };
     }
@@ -344,13 +363,16 @@ export function buildClaudeOptions(input: {
   const { params } = input;
   // "default" lets Claude Code pick the plan's default model.
   const model = params.model === "default" ? undefined : params.model || CLAUDE_DEFAULT_MODEL;
-  // mlch: a making turn gets Claude Code's own tools inside its OS sandbox.
+  // mlch: a making turn gets Claude Code's own tools inside its OS sandbox; with access
+  // (the person's setup only), its tools as in Terminal, no sandbox, auto mode or asking.
   const workspace = params.workspace;
-  const nativeTools = workspace ? [...CLAUDE_WORKSPACE_TOOLS] : [];
   const setup = params.userSetup;
+  const access = setup ? params.access : undefined;
+  const nativeTools: string[] = access ? [...CLAUDE_ACCESS_TOOLS] : workspace ? [...CLAUDE_WORKSPACE_TOOLS] : [];
+  const sandboxed = workspace && !access;
   return {
     pathToClaudeCodeExecutable: input.bin,
-    cwd: workspace?.cwd ?? input.cwd,
+    cwd: workspace?.cwd ?? (access ? params.cwd : undefined) ?? input.cwd,
     env: workspace ? { ...input.env, ...workspace.env } : input.env,
     ...(setup
       ? {
@@ -358,7 +380,7 @@ export function buildClaudeOptions(input: {
           settingSources: ["user"],
           strictMcpConfig: !setup.connectors,
           ...(input.overrides ? { settings: input.overrides } : {}),
-          hooks: { PreToolUse: [workspaceEditHook(workspace)] },
+          ...(access ? {} : { hooks: { PreToolUse: [workspaceEditHook(workspace)] } }),
         }
       : {
           // No user/project settings: no CLAUDE.md, hooks, plugins, or apiKeyHelper.
@@ -368,8 +390,8 @@ export function buildClaudeOptions(input: {
         }),
     // No built-in tools: no shell, files, sub-agents or skills. Web search and
     // fetch only when asked; shell and files only in a sandboxed workspace.
-    tools: [...nativeTools, ...(params.webAccess ? CLAUDE_WEB_TOOLS : [])],
-    ...(workspace ? workspaceOptions(workspace) : {}),
+    tools: [...new Set([...nativeTools, ...(params.webAccess ? CLAUDE_WEB_TOOLS : [])])],
+    ...(sandboxed ? workspaceOptions(workspace) : {}),
     mcpServers: {
       [CLAUDE_MCP_SERVER_NAME]: createSdkMcpServer({
         name: CLAUDE_MCP_SERVER_NAME,
@@ -380,11 +402,14 @@ export function buildClaudeOptions(input: {
     allowedTools: [
       ...params.tools.definitions.map((definition) => claudeToolName(definition.name)),
       ...(params.webAccess ? CLAUDE_WEB_TOOLS : []),
-      ...(workspace ? workspaceAllowRules(workspace) : []),
+      ...(sandboxed ? workspaceAllowRules(workspace) : []),
     ],
     // Our tools run without asking; anything else is denied, or (the person's
     // setup) decided by canUseTool: their connectors read freely and ask to act.
-    ...(setup && input.canUseTool ? { permissionMode: "default" as const, canUseTool: input.canUseTool } : { permissionMode: "dontAsk" as const }),
+    // With access: auto mode (a classifier settles each action, canUseTool when it can't) or asking.
+    ...(setup && input.canUseTool
+      ? { permissionMode: access === "auto" ? ("auto" as const) : ("default" as const), canUseTool: input.canUseTool }
+      : { permissionMode: "dontAsk" as const }),
     systemPrompt: params.systemPrompt,
     model,
     thinking: { type: "adaptive", display: "summarized" },
@@ -915,7 +940,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     }
     let flags: Promise<McpToolFlags> | undefined;
     const canUseTool = params.userSetup
-      ? connectorPermissions(params.userSetup, () => (flags ??= q.mcpServerStatus().then(mcpToolFlags)))
+      ? connectorPermissions(params.userSetup, () => (flags ??= q.mcpServerStatus().then(mcpToolFlags)), params.access)
       : undefined;
     const q = deps.query({
       prompt: input(),

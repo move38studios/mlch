@@ -384,7 +384,12 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     spec.ownSetup && settings.agentSetup
       ? { connectors: true, approve: (request) => askApproval(spec.mulchId, spec.job, request, spec.signal) }
       : undefined;
+  // The person's work runs as their own CLI does (Settings → AI, Permissions), with their setup.
+  const access = userSetup && settings.access !== "sandboxed" ? settings.access : undefined;
+  const cwd = access ? (spec.workspace?.cwd ?? path.join(mulchDir(spec.mulchId), "work")) : undefined;
+  if (cwd) await fs.mkdir(cwd, { recursive: true }).catch(() => {});
   const events: AsyncIterable<HarnessEvent> = harness.runTurn({
+    ...(access ? { access, cwd } : {}),
     ...(sessionId ? { sessionId } : {}),
     history: [],
     prompt: continued?.prompt ?? spec.prompt,
