@@ -47,6 +47,7 @@ describe("shared artifacts", () => {
     const html = await page.text();
     expect(html).toContain("<h1>Deck</h1>");
     expect(html.startsWith('<link rel="icon" type="image/png" href="data:image/png;base64,')).toBe(true); // the sandbox allows only data: images
+    expect(html).toContain("<script data-mlch-links>"); // web links open in a new tab
     const csp = directives(page.headers.get("Content-Security-Policy"));
     expect(csp.sandbox).toBe("allow-scripts"); // opaque origin: no cookies, storage or same-origin access
     expect(csp["default-src"]).toBe("'none'");

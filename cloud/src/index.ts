@@ -171,7 +171,7 @@ async function serveFile(env: Env, request: Request, id: string, path: string): 
   // A shared page's sandbox allows only data: images, so the tab icon goes in as one (unless the page has its own);
   // web links open in a new tab.
   if (html) {
-    const page = withLinks(withFavicon(await object.text()));
+    const page = withFavicon(withLinks(await object.text()));
     headers.set("Content-Length", String(new TextEncoder().encode(page).length));
     return new Response(request.method === "HEAD" ? null : page, { headers });
   }
