@@ -30,7 +30,7 @@ module.exports = async ({ app, page, base, shot }) => {
   // A deck as an older maker wrote it: plain links, no target.
   fs.writeFileSync(path.join(dir, 'reading.html'), bundle.exports.buildDeck({ title: 'Reading', slides: [
     '<h1 style="font-size:100px;margin:100px">One</h1><p style="font-size:60px;margin:100px"><a id="ext" href="https://en.wikipedia.org/wiki/Homeostat">Homeostat</a></p>',
-    '<h1 style="font-size:100px;margin:100px">Two</h1>',
+    '<h1 style="font-size:100px;margin:100px">Two</h1><p style="font-size:60px;margin:100px"><a id="ext2" href="https://mitpress.mit.edu/9780262521123/vehicles/">Vehicles</a></p>',
   ] }));
   fs.writeFileSync(path.join(dir, 'page.html'), `<!doctype html><html><head><meta name="mlch:kind" content="page"><title>Page</title></head><body>
 <p><a id="toc" href="#far">To the end</a></p><p><a id="out" href="https://arxiv.org/abs/2601.16087" target="_blank">Paper</a></p>
@@ -50,12 +50,18 @@ module.exports = async ({ app, page, base, shot }) => {
   const bar = page.getByRole('slider', { name: 'Slide' });
   await bar.waitFor({ timeout: 15_000 });
   const deck = page.frameLocator('iframe[title="Reading"]').last();
-  // The double-click that opened the viewer counts as a click for 5 s; it mustn't open the file's links.
-  await page.waitForTimeout(5200);
+  // Right after opening it.
   await deck.locator('#ext').click();
   await page.waitForTimeout(800);
   assert.deepEqual(await opened(), ['https://en.wikipedia.org/wiki/Homeostat'], 'the deck link opens in the browser');
   assert.equal(await bar.getAttribute('aria-valuenow'), '1', 'the slide stays');
+  // Right after the slide bar.
+  const box = await bar.boundingBox();
+  await page.mouse.click(box.x + box.width * 0.9, box.y + box.height / 2);
+  await page.waitForFunction(() => document.querySelector('[role="slider"][aria-label="Slide"]')?.getAttribute('aria-valuenow') === '2', null, { timeout: 5000 });
+  await deck.locator('#ext2').click();
+  await page.waitForTimeout(800);
+  assert.equal((await opened()).at(-1), 'https://mitpress.mit.edu/9780262521123/vehicles/', 'a link right after the slide bar opens');
   await shot('deck-link');
   await page.getByRole('button', { name: 'Close' }).first().click();
   await page.locator('iframe[title="Reading"][sandbox*="popups"]').waitFor({ state: 'detached' });
@@ -65,13 +71,13 @@ module.exports = async ({ app, page, base, shot }) => {
   const before = (await opened()).length;
   await page.locator('.react-flow__node[data-id="n-page"]').dblclick({ position: { x: 150, y: 60 } });
   const doc = page.frameLocator('iframe[title="Page"]').last();
-  await page.waitForTimeout(5200);
+  await page.waitForTimeout(1000);
+  assert.deepEqual((await opened()).slice(before), [], 'nothing opens unasked');
   await doc.locator('#toc').click();
   await page.waitForTimeout(500);
   const scrolled = await page.locator('iframe[title="Page"]').last().evaluate((frame) => frame.contentWindow ? 'opaque' : 'none').catch(() => 'opaque');
   console.log('after anchor', scrolled, (await opened()).slice(before));
   assert.deepEqual((await opened()).slice(before), [], 'the anchor opens nothing, and nothing opens unasked');
-  await page.waitForTimeout(1100);
   await doc.locator('#out').click();
   await page.waitForTimeout(800);
   assert.ok((await opened()).includes('https://arxiv.org/abs/2601.16087'), 'the page link opens in the browser');

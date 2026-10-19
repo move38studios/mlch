@@ -44,6 +44,8 @@ export interface MlchDesktop {
   setCallState?(state: { mulchId: string } | null): Promise<void>;
   /** A PNG (base64) of part of the window, 1200 px wide: a shared link's preview. */
   capture?(rect: { x: number; y: number; width: number; height: number }): Promise<string | null>;
+  /** A web link clicked in a made file shown in `rect`: opened in the browser if the last mouse press was there, just now and after `after` (ms). */
+  openLink?(url: string, rect: { x: number; y: number; width: number; height: number }, after: number): Promise<boolean>;
   /** Open at login: read it, or set it. */
   openAtLogin?(value?: boolean): Promise<boolean>;
   /** Menu commands meant for the page ("zoom-in", "zoom-out", "zoom-fit", "stop-call"). */

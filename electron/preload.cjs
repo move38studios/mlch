@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('mlchDesktop', {
   /** Open at login: read it, or set it with a boolean. */
   openAtLogin: (value) => ipcRenderer.invoke('desktop:login-item', value),
   capture: (rect) => ipcRenderer.invoke('desktop:capture', rect),
+  /** A web link clicked in a made file shown in `rect`: main opens it in the browser if the last press was there, after `after`. */
+  openLink: (url, rect, after) => ipcRenderer.invoke('desktop:open-link', url, rect, after),
   onMenu: (callback) => {
     const listener = (_event, command) => callback(command);
     ipcRenderer.on('desktop:menu', listener);

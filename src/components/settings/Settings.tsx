@@ -226,19 +226,18 @@ export function Settings() {
     void loadSettings();
     void loadStatus();
   }, [loadSettings, loadStatus]);
-  // A CLI still being found or downloaded (right after launch): ask again until it settles. Any other
-  // problem in the first minute (a status read while the CLI was still being set up) is asked again too,
-  // and everything when the window comes back to the front.
+  // While an AI shows a problem (a CLI still being found or downloaded right after launch, a status read
+  // while it was being set up, a sign-in elsewhere), ask again while the window is visible, and
+  // everything when the window comes back to the front.
   const settling = !!harnesses?.some((h) => /^(Getting .* ready|Downloading )/.test(h.problem ?? ""));
   const troubled = !!harnesses?.some((h) => h.problem);
-  const [openedAt] = useState(() => Date.now());
   useEffect(() => {
     if (!settling && !troubled) return;
     const timer = setInterval(() => {
-      if (settling || Date.now() - openedAt < 60_000) void loadStatus();
-    }, settling ? 2000 : 4000);
+      if (document.visibilityState === "visible") void loadStatus().catch(() => undefined);
+    }, settling ? 2000 : 5000);
     return () => clearInterval(timer);
-  }, [settling, troubled, openedAt, loadStatus]);
+  }, [settling, troubled, loadStatus]);
   useEffect(() => {
     const again = () => void loadStatus();
     window.addEventListener("focus", again);

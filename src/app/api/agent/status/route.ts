@@ -2,7 +2,11 @@ import { guardAgent, handle } from "@/lib/http";
 import { getHarness } from "@/lib/agent/server/harnesses";
 import { cliStatus, prepareCli } from "@/lib/agent/server/cli";
 import { AGENT_HARNESS_IDS } from "@/lib/agent/types";
+import { log } from "@/lib/log";
 import { readSettings } from "@/lib/settings";
+
+/** The last problem each AI's status showed, so a new one is logged once. */
+const lastProblem = new Map<string, string | undefined>();
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +18,10 @@ export async function GET(request: Request) {
     // The AI in use is fetched if this Mac has no usable install; the other only when asked (POST).
     void prepareCli((await readSettings()).harness, { download: true });
     const harnesses = await Promise.all(AGENT_HARNESS_IDS.map((id) => getHarness(id).getStatus()));
+    for (const status of harnesses) {
+      if (lastProblem.get(status.id) !== status.problem) log.info("agent", status.problem ? "Status shows a problem" : "Status fine", { harness: status.id, problem: status.problem });
+      lastProblem.set(status.id, status.problem);
+    }
     return { harnesses: harnesses.map((status) => ({ ...status, ...(cliStatus(status.id) ? { cli: cliStatus(status.id) } : {}) })) };
   });
 }

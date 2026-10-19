@@ -19,16 +19,28 @@ const BUTTON = "no-drag h-8 px-2.5 rounded-lg text-[13px] text-white/80 hover:bg
  * Present (full screen) where the browser can do it; a page scrolls, edge to
  * edge on a phone. Esc leaves full screen, then closes.
  */
-/** A click counts for the browser for 5 s; one on this page (opening the viewer) mustn't count for the file. */
+/** In a browser, a click counts for 5 s; one on this page (opening the viewer, the slide bar) mustn't count for the file. */
 const ACTIVATION_MS = 5000;
 let ownInputAt = 0;
+let ownPressAt = 0;
 if (typeof window !== "undefined") {
   for (const type of ["pointerdown", "keydown"]) window.addEventListener(type, () => (ownInputAt = Date.now()), true);
+  window.addEventListener("pointerdown", () => (ownPressAt = Date.now()), true);
 }
 
-/** A web link clicked in the file: a new tab, only right after a click in the file itself. */
-function openLink(value: unknown) {
-  if (typeof value !== "string" || !/^https?:\/\//i.test(value)) return;
+/**
+ * A web link clicked in the file: a new tab, only right after a click in the file itself. In the app, main
+ * knows where the mouse was pressed, so it checks that it was on the file; in a browser, the page's activation.
+ */
+function openLink(value: unknown, frame: HTMLIFrameElement | null, shownAt: number) {
+  if (typeof value !== "string" || !/^https?:\/\//i.test(value) || !frame) return;
+  const open = desktop()?.openLink;
+  if (open) {
+    // A press on this page (outside the file) comes after main saw it; one on the file never reaches this page.
+    const { x, y, width, height } = frame.getBoundingClientRect();
+    void open(value, { x, y, width, height }, Math.max(shownAt, ownPressAt)).catch(() => undefined);
+    return;
+  }
   if (!navigator.userActivation?.isActive || Date.now() - ownInputAt < ACTIVATION_MS) return;
   window.open(value, "_blank", "noopener,noreferrer");
 }
@@ -39,6 +51,8 @@ export function ArtifactViewer() {
   const mulchId = useMulch((s) => s.id);
   const node = useMulch((s) => (viewerId ? s.mulch?.nodes[viewerId] : undefined));
   const frame = useRef<HTMLIFrameElement>(null);
+  // When the file was shown: a press before it (opening the viewer) wasn't on it.
+  const shownAt = useRef(0);
   const stage = useRef<HTMLDivElement>(null);
   const [presenting, setPresenting] = useState(false);
   const [sharing, setSharing] = useState<"idle" | "busy" | "copied">("idle");
@@ -55,7 +69,7 @@ export function ArtifactViewer() {
       if (event.source !== frame.current?.contentWindow) return;
       const data = event.data as { mlchDeckSlide?: unknown; mlchDeckCount?: unknown; mlchOpenLink?: unknown } | null;
       // A web link clicked in it: a new tab (the browser, in the app).
-      if (data?.mlchOpenLink !== undefined) openLink(data.mlchOpenLink);
+      if (data?.mlchOpenLink !== undefined) openLink(data.mlchOpenLink, frame.current, shownAt.current);
       const n = data?.mlchDeckSlide;
       if (typeof n === "number" && Number.isInteger(n) && n > 0 && n < 1000) setSlide(n);
       const total = data?.mlchDeckCount;
@@ -156,7 +170,10 @@ export function ArtifactViewer() {
           src={src}
           sandbox="allow-scripts"
           title={node.title ?? "Artifact"}
-          onLoad={() => frame.current?.focus()}
+          onLoad={() => {
+            shownAt.current = Date.now();
+            frame.current?.focus();
+          }}
           className={`flex-1 min-w-0 h-full border-0 ${kind === "deck" ? "bg-black" : "bg-white"} ${presenting ? "" : "rounded-xl max-sm:rounded-none"}`}
         />
       </div>

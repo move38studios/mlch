@@ -114,6 +114,8 @@ async function chooseLibrary() {
   if (window) await window.loadURL(new URL('/settings', origin).href);
   return { ok: true, value: target };
 }
+/** The person's last mouse press in the window ({ x, y, at }), for links in made files. */
+let lastPress;
 function openExternal(url) { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(log); }
 // Video players a card may load in a frame (src/lib/ingest/video.ts PLAYER_ORIGINS).
 const PLAYER_ORIGINS = new Set(['https://www.youtube.com', 'https://player.vimeo.com']);
@@ -665,13 +667,16 @@ async function createWindow() {
   for (const event of ['resize', 'move', 'maximize', 'unmaximize']) current.on(event, () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveBounds, 300); });
   current.on('close', saveBounds);
   if (saved?.maximized) current.maximize();
-  // New windows go to the browser: the app's own links, and web links clicked in made files (the viewer opens them
-  // after a real click, src/lib/artifacts/links.ts). At most one a second, so nothing can flood the browser.
+  // New windows (the app's own links) go to the browser, at most one a second.
   let lastOpened = 0;
   current.webContents.setWindowOpenHandler(({ url }) => {
     const now = Date.now();
     if (now - lastOpened >= 1000) { lastOpened = now; openExternal(url); }
     return { action: 'deny' };
+  });
+  // Where the person last pressed the mouse, for links clicked in made files (desktop:open-link).
+  current.webContents.on('before-mouse-event', (_event, mouse) => {
+    if (mouse.type === 'mouseDown') lastPress = { x: mouse.x, y: mouse.y, at: Date.now() };
   });
   current.webContents.on('will-navigate', (event, url) => {
     try { if (new URL(url).origin === origin) return; } catch {}
@@ -842,6 +847,20 @@ function registerBridge() {
   ipcMain.handle('desktop:call-state', guarded((state) => {
     callState = state && typeof state.mulchId === 'string' ? { mulchId: state.mulchId } : undefined;
     void refreshTray();
+  }));
+  // A web link clicked in a made file (src/lib/artifacts/links.ts): the file can't open windows, the viewer asks here
+  // with where the file is shown and since when nothing else was pressed (`after`: it was shown, or the page saw its
+  // own press). Opened only when the person's last mouse press was on the file, just now, once.
+  ipcMain.handle('desktop:open-link', guarded((url, rect, after) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url) || !rect || ![rect.x, rect.y, rect.width, rect.height, after].every(Number.isFinite)) return false;
+    const press = lastPress;
+    if (!press || Date.now() - press.at > 3000 || press.at <= after) return false;
+    const zoom = window?.webContents.getZoomFactor() ?? 1;
+    const inside = press.x >= rect.x * zoom && press.x <= (rect.x + rect.width) * zoom && press.y >= rect.y * zoom && press.y <= (rect.y + rect.height) * zoom;
+    if (!inside) return false;
+    lastPress = undefined;
+    openExternal(url);
+    return true;
   }));
   // A picture of the canvas for a shared link's preview (Slack, iMessage): the part of the window the page names.
   ipcMain.handle('desktop:capture', guarded(async (rect) => {
