@@ -665,7 +665,14 @@ async function createWindow() {
   for (const event of ['resize', 'move', 'maximize', 'unmaximize']) current.on(event, () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveBounds, 300); });
   current.on('close', saveBounds);
   if (saved?.maximized) current.maximize();
-  current.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: 'deny' }; });
+  // New windows go to the browser: the app's own links, and web links clicked in made files (the viewer opens them
+  // after a real click, src/lib/artifacts/links.ts). At most one a second, so nothing can flood the browser.
+  let lastOpened = 0;
+  current.webContents.setWindowOpenHandler(({ url }) => {
+    const now = Date.now();
+    if (now - lastOpened >= 1000) { lastOpened = now; openExternal(url); }
+    return { action: 'deny' };
+  });
   current.webContents.on('will-navigate', (event, url) => {
     try { if (new URL(url).origin === origin) return; } catch {}
     event.preventDefault(); openExternal(url);

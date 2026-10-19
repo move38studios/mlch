@@ -22,6 +22,8 @@ export interface JobRetry {
   input: string;
   near?: string[];
   title?: string;
+  /** A comment acted on by itself ("do it now"): not the person's turn, nothing else goes with it. */
+  comment?: string;
 }
 
 export interface JobStatus {

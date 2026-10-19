@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageSquare, X } from "lucide-react";
+import { ArrowUp, MessageSquare, X } from "lucide-react";
 import { create } from "zustand";
 import { newClientId } from "@/lib/mulch/ids";
 import { useMulch } from "@/lib/mulch/client";
@@ -9,8 +9,9 @@ import type { Mulch, MulchComment } from "@/lib/mulch/types";
 
 /**
  * Comments on items: the person's notes to the AI on a card, a slide or a
- * made file. They never act by themselves: they go with the next instruction
- * (lib/agent/turn.ts), and the AI closes each with what it did.
+ * made file. They wait for the next instruction (lib/agent/turn.ts) unless the
+ * person says to act on one now (⌘↩ or its arrow: it goes by itself), and the
+ * AI closes each with what it did.
  */
 
 export const useComments = create<{
@@ -29,6 +30,17 @@ export function commentsOn(mulch: Mulch | undefined, nodeId: string): MulchComme
 export function unsentComments(mulch: Mulch | undefined): MulchComment[] {
   return Object.values(mulch?.comments ?? {}).filter((comment) => !comment.sentAt && !comment.resolvedAt && mulch?.nodes[comment.nodeId]);
 }
+
+/** Act on a comment now, by itself: one already there, or a new one (the server adds it). */
+async function doNow(mulchId: string, comment: Pick<MulchComment, "id"> & Partial<Pick<MulchComment, "nodeId" | "text" | "at">>): Promise<void> {
+  const response = await fetch(`/api/mulches/${mulchId}/command`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment }) });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    useMulch.setState({ notice: { level: "error", message: data.error || `Request failed (${response.status})`, at: Date.now() } });
+  }
+}
+
+const NOW_LABEL = "Do it now";
 
 function clock(at: number): string {
   return new Date(at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -96,6 +108,12 @@ export function CommentPanel() {
     apply([{ op: "addComment", comment: { id: newClientId("c"), nodeId: node.id, text: value, ...(open.at ? { at: open.at } : {}), createdAt: Date.now() } }]);
     setText("");
   };
+  const now = () => {
+    const value = text.trim();
+    if (!value) return;
+    void doNow(mulch.id, { id: newClientId("c"), nodeId: node.id, text: value, ...(open.at ? { at: open.at } : {}) });
+    setText("");
+  };
   const width = 300;
   const left = Math.max(8, Math.min(open.x, window.innerWidth - width - 8));
   const top = Math.max(60, Math.min(open.y, window.innerHeight - 320));
@@ -107,6 +125,11 @@ export function CommentPanel() {
             <li key={comment.id} className={`group/comment rounded-lg px-2.5 py-1.5 ${comment.resolvedAt ? "bg-paper-2 text-ink-3" : "bg-paper-2 text-ink"}`}>
               <div className="flex items-start gap-1.5">
                 <p className="flex-1 whitespace-pre-wrap break-words leading-snug">{comment.text}</p>
+                {!comment.sentAt && !comment.resolvedAt && (
+                  <button onClick={() => void doNow(mulch.id, { id: comment.id })} className="shrink-0 p-0.5 rounded text-ink-3 opacity-0 group-hover/comment:opacity-100 hover:text-ink" aria-label={NOW_LABEL} title={NOW_LABEL}>
+                    <ArrowUp size={12} strokeWidth={2} />
+                  </button>
+                )}
                 {!comment.sentAt && !comment.resolvedAt && (
                   <button onClick={() => apply([{ op: "removeComment", id: comment.id }])} className="shrink-0 p-0.5 rounded text-ink-3 opacity-0 group-hover/comment:opacity-100 hover:text-ink" aria-label="Delete" title="Delete">
                     <X size={12} strokeWidth={2} />
@@ -122,23 +145,37 @@ export function CommentPanel() {
           ))}
         </ul>
       )}
-      <textarea
-        autoFocus
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            add();
-          }
-          if (event.key === "Escape") show(undefined);
-        }}
-        rows={2}
-        placeholder="Comment"
-        aria-label="Comment"
-        className="w-full resize-none rounded-lg bg-chrome border border-line px-2.5 py-1.5 outline-none focus:border-ink-3 field-sizing-content max-h-40 placeholder:text-ink-3"
-      />
+      <div className="relative">
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              now();
+            } else if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              add();
+            }
+            if (event.key === "Escape") show(undefined);
+          }}
+          rows={2}
+          placeholder="Comment"
+          aria-label="Comment"
+          className="w-full resize-none rounded-lg bg-chrome border border-line px-2.5 py-1.5 outline-none focus:border-ink-3 field-sizing-content max-h-40 placeholder:text-ink-3 pr-8"
+        />
+        <button
+          onClick={now}
+          disabled={!text.trim()}
+          className="absolute right-1.5 bottom-2.5 h-6 w-6 rounded-full inline-flex items-center justify-center bg-ink text-white disabled:bg-paper-2 disabled:text-ink-3"
+          aria-label={NOW_LABEL}
+          title={`${NOW_LABEL} (⌘↩)`}
+        >
+          <ArrowUp size={13} strokeWidth={2.25} />
+        </button>
+      </div>
     </div>
   );
 }

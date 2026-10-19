@@ -24,7 +24,7 @@ module.exports = async ({ app, page, base, shot }) => {
 
   const mulch = (await api('/api/mulches', 'POST', {})).mulch;
   fs.mkdirSync(path.join(library, mulch.id, 'artifacts'), { recursive: true });
-  fs.writeFileSync(path.join(library, mulch.id, 'artifacts', 'deck.html'), '<!doctype html><title>Deck</title><body style="font:40px system-ui;padding:60px"><h1>Seat pricing</h1><p>One idea per slide.</p></body>');
+  fs.writeFileSync(path.join(library, mulch.id, 'artifacts', 'deck.html'), '<!doctype html><title>Deck</title><body style="font:40px system-ui;padding:60px"><h1>Seat pricing</h1><p>One idea per slide.</p><p><a id="out" href="https://example.com/seat">Source</a> <a id="in" href="#top">Top</a></p><script>setTimeout(function () { parent.postMessage({ mlchOpenLink: "https://example.com/unasked" }, "*"); }, 300);</script></body>');
   await api(`/api/mulches/${mulch.id}/ops`, 'POST', { clientId: 's', ops: [
     { op: 'setTitle', title: 'Pricing call' },
     { op: 'addNode', node: node('a', 'Per seat, not per minute', { x: 0, y: 0 }) },
@@ -64,6 +64,31 @@ module.exports = async ({ app, page, base, shot }) => {
   const response = await fetch(`${deck.share.url}artifacts/deck.html`);
   assert.match(response.headers.get('content-security-policy') ?? '', /sandbox/);
   assert.match(await response.text(), /Seat pricing/);
+  assert.match(response.headers.get('etag') ?? '', /-l1"$/, 'served HTML is tagged with what serving adds');
+  // In a browser, its web link opens in a new tab after a click in it, and nothing opens unasked.
+  const browser = await require('playwright-core').chromium.launch({ channel: 'chrome' });
+  try {
+    const context = await browser.newContext();
+    const tabs = [];
+    context.on('page', (tab) => tabs.push(tab));
+    const tab = await context.newPage();
+    await context.route(/example\.com/, (route) => route.fulfill({ body: 'ok' }));
+    await tab.goto(deck.share.url);
+    const file = tab.frameLocator('iframe');
+    await tab.waitForTimeout(1500);
+    assert.equal(tabs.length, 1, 'nothing opens unasked');
+    await file.locator('#in').click();
+    await tab.waitForTimeout(1000);
+    assert.equal(tabs.length, 1, 'a link within the file opens nothing');
+    await file.locator('#out').click();
+    for (const end = Date.now() + 5000; tabs.length < 2 && Date.now() < end; ) await tab.waitForTimeout(100);
+    assert.equal(tabs.length, 2, 'the web link opens a new tab');
+    await tabs[1].waitForLoadState().catch(() => {});
+    assert.equal(tabs[1].url(), 'https://example.com/seat');
+    assert.ok(tab.url().startsWith(deck.share.url), 'the share stays');
+  } finally {
+    await browser.close();
+  }
 
   // A write-up (a call's transcript, say) on its own, as a page.
   await api(`/api/mulches/${mulch.id}/ops`, 'POST', { clientId: 's', ops: [

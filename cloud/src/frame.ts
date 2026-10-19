@@ -2,8 +2,8 @@
  * The page a shared made file (an HTML deck or page, an SVG) opens in: the file
  * in a sandboxed frame filling the window, as in the app. A deck letterboxes its
  * own slides (src/lib/artifacts/deck.ts) and gets Full screen where the browser
- * can do it (not on an iPhone); a page scrolls, edge to edge. The file itself
- * stays at /s/<id>/<entry>.
+ * can do it (not on an iPhone); a page scrolls, edge to edge; web links clicked
+ * in it open in a new tab. The file itself stays at /s/<id>/<entry>.
  */
 
 import type { ArtifactKind } from "../../src/lib/artifacts/kind";
@@ -57,6 +57,17 @@ export function framePage(title: string, entry: string, nonce: string, kind: Art
     if (go && go.catch) go.catch(() => {});
   });
   document.addEventListener("fullscreenchange", () => frame.focus());
+  // A web link clicked in the file (src/lib/artifacts/links.ts): a new tab, only right after a click in the file
+  // (a click here, as on Full screen, counts for the browser for 5 s and mustn't count for the file).
+  let ownInputAt = 0;
+  for (const type of ["pointerdown", "keydown"]) window.addEventListener(type, () => (ownInputAt = Date.now()), true);
+  window.addEventListener("message", (event) => {
+    const url = event.source === frame.contentWindow && event.data && event.data.mlchOpenLink;
+    if (typeof url !== "string" || !(url.startsWith("https://") || url.startsWith("http://"))) return;
+    if (navigator.userActivation ? !navigator.userActivation.isActive : false) return;
+    if (Date.now() - ownInputAt < 5000) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  });
 </script>
 </body>
 </html>

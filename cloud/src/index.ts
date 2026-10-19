@@ -18,6 +18,7 @@ import { accountRoutes, accountsOn, mayCreate, recordShare } from "./accounts";
 import { adminRoutes } from "./admin";
 import type { OpBatch } from "../../src/lib/mulch/types";
 import { artifactKindOf } from "../../src/lib/artifacts/kind";
+import { withLinks } from "../../src/lib/artifacts/links";
 
 export { ShareRoom, CreateLimiter } from "./room";
 
@@ -147,6 +148,9 @@ async function previewMeta(env: Env, id: string, title: string, kind: ShareKind)
 }
 
 /** The mlch icon as the tab icon of a shared page that has none. */
+/** Bumped when what serving adds to shared HTML changes, so browsers fetch it again. */
+const HTML_SERVED = "l1";
+
 export function withFavicon(html: string): string {
   if (/<link[^>]+rel=["']?(shortcut )?icon/i.test(html)) return html;
   const link = `<link rel="icon" type="image/png" href="${FAVICON_DATA_URL}">`;
@@ -156,16 +160,20 @@ export function withFavicon(html: string): string {
 
 async function serveFile(env: Env, request: Request, id: string, path: string): Promise<Response> {
   if (!validPath(path)) return notFound();
-  const object = await env.SHARES.get(r2Key.file(id, path), { onlyIf: request.headers });
+  const html = mimeOf(path).startsWith("text/html");
+  // HTML is changed as it is served, so its tag says which version of that (HTML_SERVED) and is checked here.
+  const object = await env.SHARES.get(r2Key.file(id, path), html ? {} : { onlyIf: request.headers });
   if (!object) return notFound();
   const headers = fileHeaders(path, sandboxCsp(ownSources(env.SHARE_ORIGIN, id)));
-  headers.set("ETag", object.httpEtag);
-  if (!("body" in object)) return new Response(null, { status: 304, headers });
-  // A shared page's sandbox allows only data: images, so the tab icon goes in as one (unless the page has its own).
-  if (mimeOf(path).startsWith("text/html")) {
-    const html = withFavicon(await object.text());
-    headers.set("Content-Length", String(new TextEncoder().encode(html).length));
-    return new Response(request.method === "HEAD" ? null : html, { headers });
+  const etag = html ? `${object.httpEtag.replace(/"$/, "")}-${HTML_SERVED}"` : object.httpEtag;
+  headers.set("ETag", etag);
+  if (!("body" in object) || (html && request.headers.get("If-None-Match") === etag)) return new Response(null, { status: 304, headers });
+  // A shared page's sandbox allows only data: images, so the tab icon goes in as one (unless the page has its own);
+  // web links open in a new tab.
+  if (html) {
+    const page = withLinks(withFavicon(await object.text()));
+    headers.set("Content-Length", String(new TextEncoder().encode(page).length));
+    return new Response(request.method === "HEAD" ? null : page, { headers });
   }
   headers.set("Content-Length", String(object.size));
   return new Response(request.method === "HEAD" ? null : object.body, { headers });

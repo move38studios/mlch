@@ -19,6 +19,20 @@ const BUTTON = "no-drag h-8 px-2.5 rounded-lg text-[13px] text-white/80 hover:bg
  * Present (full screen) where the browser can do it; a page scrolls, edge to
  * edge on a phone. Esc leaves full screen, then closes.
  */
+/** A click counts for the browser for 5 s; one on this page (opening the viewer) mustn't count for the file. */
+const ACTIVATION_MS = 5000;
+let ownInputAt = 0;
+if (typeof window !== "undefined") {
+  for (const type of ["pointerdown", "keydown"]) window.addEventListener(type, () => (ownInputAt = Date.now()), true);
+}
+
+/** A web link clicked in the file: a new tab, only right after a click in the file itself. */
+function openLink(value: unknown) {
+  if (typeof value !== "string" || !/^https?:\/\//i.test(value)) return;
+  if (!navigator.userActivation?.isActive || Date.now() - ownInputAt < ACTIVATION_MS) return;
+  window.open(value, "_blank", "noopener,noreferrer");
+}
+
 export function ArtifactViewer() {
   const viewerId = useCanvasUi((s) => s.viewerId);
   const setViewer = useCanvasUi((s) => s.setViewer);
@@ -39,7 +53,9 @@ export function ArtifactViewer() {
     setCount(undefined);
     const onMessage = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow) return;
-      const data = event.data as { mlchDeckSlide?: unknown; mlchDeckCount?: unknown } | null;
+      const data = event.data as { mlchDeckSlide?: unknown; mlchDeckCount?: unknown; mlchOpenLink?: unknown } | null;
+      // A web link clicked in it: a new tab (the browser, in the app).
+      if (data?.mlchOpenLink !== undefined) openLink(data.mlchOpenLink);
       const n = data?.mlchDeckSlide;
       if (typeof n === "number" && Number.isInteger(n) && n > 0 && n < 1000) setSlide(n);
       const total = data?.mlchDeckCount;

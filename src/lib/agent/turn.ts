@@ -20,6 +20,13 @@ function line(text: string, max = 300): string {
   return one.length > max ? `${one.slice(0, max - 1)}…` : one;
 }
 
+function commentLine(mulch: Mulch, comment: MulchComment, note = ""): string {
+  const node = mulch.nodes[comment.nodeId];
+  const where = comment.at?.slide ? ` (slide ${comment.at.slide})` : "";
+  const quote = comment.at?.quote ? ` on "${line(comment.at.quote, 200)}"` : "";
+  return `- ${comment.id} on ${itemLine(node)}${where}${quote}${note}\n  "${line(comment.text, 1500)}"`;
+}
+
 function itemLine(node: Pick<MulchNode, "id" | "kind" | "title" | "text">): string {
   return `${node.id} [${node.kind}]${node.title ? ` "${line(node.title, 120)}"` : ""}${node.text ? `: ${line(node.text)}` : ""}`;
 }
@@ -28,7 +35,7 @@ function itemLine(node: Pick<MulchNode, "id" | "kind" | "title" | "text">): stri
 export function lastTurnAt(jobs: Iterable<JobStatus>, excludeId?: string): number | undefined {
   let at: number | undefined;
   for (const job of jobs) {
-    if (job.id === excludeId || job.retry?.kind !== "command" || !job.queuedAt) continue;
+    if (job.id === excludeId || job.retry?.kind !== "command" || job.retry.comment || !job.queuedAt) continue;
     at = Math.max(at ?? 0, job.queuedAt);
   }
   return at;
@@ -83,17 +90,12 @@ export interface Turn {
  * Everything the person did since `since` (their last turn), and every open
  * comment. With no earlier turn: the comments and what they added.
  */
-export async function yourTurn(mulch: Mulch, since: number | undefined): Promise<Turn> {
-  const comments = openComments(mulch);
+export async function yourTurn(mulch: Mulch, since: number | undefined, alone: ReadonlySet<string> = new Set()): Promise<Turn> {
+  // Comments being acted on by themselves are left to their own job.
+  const comments = openComments(mulch).filter((comment) => !alone.has(comment.id));
   const sections: string[] = [];
   if (comments.length) {
-    const lines = comments.slice(0, MAX_ITEMS).map((comment) => {
-      const node = mulch.nodes[comment.nodeId];
-      const where = comment.at?.slide ? ` (slide ${comment.at.slide})` : "";
-      const quote = comment.at?.quote ? ` on "${line(comment.at.quote, 200)}"` : "";
-      const fresh = since === undefined || comment.createdAt > since ? "" : " (from before, still open)";
-      return `- ${comment.id} on ${itemLine(node)}${where}${quote}${fresh}\n  "${line(comment.text, 1500)}"`;
-    });
+    const lines = comments.slice(0, MAX_ITEMS).map((comment) => commentLine(mulch, comment, since === undefined || comment.createdAt > since ? "" : " (from before, still open)"));
     sections.push(`Comments on items (each about the item it is on):\n${lines.join("\n")}`);
   }
   // Notes and other items the person added (before a first instruction: all of theirs).
@@ -131,5 +133,17 @@ export async function yourTurn(mulch: Mulch, since: number | undefined): Promise
       `For each comment, act on it as the instruction allows (on the item it is on), then close it with resolve_comment saying in a few words what you did; ` +
       `leave a comment open only if it needs the person, and say why. If the instruction only names what was handed over ("2 comments, 1 note"), act on the comments and notes as they ask.\n\n${sections.join("\n\n")}\n</your_turn>\n\n`,
     commentIds: comments.map((comment) => comment.id),
+  };
+}
+
+/** One comment the person asked to be acted on now, by itself (the rest of their turn keeps waiting). */
+export function commentNow(mulch: Mulch, commentId: string): Turn {
+  const comment = mulch.comments?.[commentId];
+  if (!comment || comment.resolvedAt || !mulch.nodes[comment.nodeId]) return { block: "", commentIds: [] };
+  return {
+    block:
+      `<comment_now>\nThe person asked for this comment to be acted on now, by itself: act on it (on the item it is on), then close it with resolve_comment saying in a few words what you did; ` +
+      `leave it open only if it needs the person, and say why. Their other comments and notes wait for their next instruction.\n\n${commentLine(mulch, comment)}\n</comment_now>\n\n`,
+    commentIds: [comment.id],
   };
 }

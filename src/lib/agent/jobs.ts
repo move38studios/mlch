@@ -40,7 +40,7 @@ import { cliFailed, prepareCli } from "./server/cli";
 import "@/lib/share/shares";
 import { exaAvailable } from "@/lib/search/exa";
 import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
-import { lastTurnAt, yourTurn } from "./turn";
+import { commentNow, lastTurnAt, yourTurn } from "./turn";
 
 /** Sources longer than this are read in part; the rest is found by search. */
 const LONG_SOURCE = 60_000;
@@ -1247,17 +1247,20 @@ function selectedBlock(mulch: Mulch, about: string[] | undefined): string {
   return `<selected>\nThe person had these items selected when they gave the instruction. It is about them unless it says otherwise; put what you add near them.\n${lines.join("\n")}\n</selected>\n\n`;
 }
 
-export function submitCommand(mulchId: string, instruction: string, options: { inputIds?: string[]; about?: string[]; again?: JobStatus } = {}): JobStatus {
-  const { inputIds, about, again } = options;
+export function submitCommand(mulchId: string, instruction: string, options: { inputIds?: string[]; about?: string[]; comment?: string; again?: JobStatus } = {}): JobStatus {
+  const { inputIds, about, comment, again } = options;
   return enqueue(mulchId, {
     lane: "command",
     label: shorten(instruction, 60),
     inputIds,
-    retry: { kind: "command", input: instruction, ...(about?.length ? { near: about } : {}) },
+    retry: { kind: "command", input: instruction, ...(about?.length ? { near: about } : {}), ...(comment ? { comment } : {}) },
     async run(job, signal) {
       const mulch = await getMulch(mulchId); // a missing mulch fails the job here
+      const jobs = await getJobs(mulchId);
       // The person's turn: their comments, notes, edits and removals since their last instruction.
-      const turn = await yourTurn(mulch, lastTurnAt(await getJobs(mulchId), job.id));
+      // A comment acted on now goes by itself; ones other jobs are acting on now stay with them.
+      const busy = new Set(jobs.filter((other) => other.retry?.comment && other.id !== job.id && ["queued", "running", "paused"].includes(other.state)).map((other) => other.retry!.comment!));
+      const turn = comment ? commentNow(mulch, comment) : await yourTurn(mulch, lastTurnAt(jobs, job.id), busy);
       if (turn.commentIds.length) {
         const now = Date.now();
         await applyToMulch(mulchId, turn.commentIds.filter((id) => !mulch.comments?.[id]?.sentAt).map((id) => ({ op: "updateComment", id, patch: { sentAt: now, jobId: job.id } })), `agent:${job.id}`);
@@ -1270,7 +1273,7 @@ export function submitCommand(mulchId: string, instruction: string, options: { i
         systemPrompt: commandPrompt,
         prompt:
           `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\n${conversationBlock(await callTranscript(mulchId))}` +
-          earlierExchanges(await getJobs(mulchId), job.id) +
+          earlierExchanges(jobs, job.id) +
           `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n${turn.block}${selectedBlock(mulch, about)}<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
         // An instruction can be the first thing on a canvas: it names it then.
         tools: withKeyTools([...COMMAND_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])]),
@@ -1506,7 +1509,7 @@ export async function continueJob(mulchId: string, jobId: string): Promise<JobSt
   if (kind === "make") return submitMake(mulchId, input, { near, title }, job);
   if (kind === "research") return submitResearch(mulchId, input, { near, title }, job);
   if (kind === "callNotes") return submitCallNotes(mulchId, JSON.parse(input) as { startedAt: number; endedAt: number; transcriptId?: string }, job);
-  if (kind === "command") return submitCommand(mulchId, input, { inputIds: old.inputIds, about: near, again: job });
+  if (kind === "command") return submitCommand(mulchId, input, { inputIds: old.inputIds, about: near, comment: old.retry.comment, again: job });
   resuming.delete(job.id);
   return undefined;
 }
@@ -1521,5 +1524,5 @@ export async function retryJob(mulchId: string, jobId: string): Promise<JobStatu
   if (kind === "research") return submitResearch(mulchId, input, { near, title });
   if (kind === "folder") return submitFolder(mulchId, input);
   if (kind === "callNotes") return submitCallNotes(mulchId, JSON.parse(input) as { startedAt: number; endedAt: number; transcriptId?: string });
-  return submitCommand(mulchId, input, { about: near });
+  return submitCommand(mulchId, input, { about: near, comment: old.retry.comment });
 }
