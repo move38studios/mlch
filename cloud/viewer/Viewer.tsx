@@ -136,6 +136,8 @@ function toFlowNodes(mulch: Mulch, fresh: Record<string, number>, previous: Map<
     type: "mulch",
     position: { x: node.x, y: node.y },
     width: node.w ?? NODE_WIDTH[node.kind],
+    // As in the app: a card of a chosen height (a link card's essay too) keeps it, and its text clips.
+    ...(node.fixedH && node.h ? { height: node.h } : {}),
     measured: previous.get(node.id)?.measured,
     draggable: false,
     data: { node, mulchId: shareId, fresh: !!fresh[node.id] && now - fresh[node.id] < FRESH_MS },

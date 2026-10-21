@@ -31,6 +31,8 @@ module.exports = async ({ app, page, base, shot }) => {
     { op: 'addNode', node: node('b', 'Teams buy seats', { x: 320, y: 40, origin: 'agent:x', kind: 'example' }) },
     { op: 'addNode', node: { id: 'd', kind: 'artifact', x: 0, y: 220, title: 'Deck', text: '', docPath: 'artifacts/deck.html', fileName: 'deck.html', origin: 'agent:x', createdAt: Date.now() } },
     { op: 'addEdge', edge: { id: 'e', source: 'a', target: 'b', label: 'example', origin: 'agent:x', createdAt: Date.now() } },
+    // A linked essay goes as a write-up in its card's place, keeping the card's height.
+    { op: 'addNode', node: { id: 'essay', kind: 'writeup', x: 700, y: 0, h: 126, fixedH: true, title: 'An essay', text: 'A long paragraph of the essay. '.repeat(800), origin: 'agent:x', createdAt: Date.now() } },
   ] });
 
   // The canvas, live.
@@ -46,6 +48,11 @@ module.exports = async ({ app, page, base, shot }) => {
   });
   await viewer.waitForSelector('.react-flow__node', { timeout: 30_000 });
   await viewer.waitForTimeout(800);
+  const essay = await viewer.evaluate(() => {
+    const zoom = new DOMMatrix(getComputedStyle(document.querySelector('.react-flow__viewport')).transform).a;
+    return document.querySelector('.react-flow__node[data-id="essay"]').getBoundingClientRect().height / zoom;
+  });
+  assert.ok(Math.abs(essay - 126) < 2, `a long write-up keeps its card's height in the viewer (${essay})`);
   await shot('share-viewer-before').catch(() => {});
   await viewer.screenshot({ path: path.join(process.env.MLCH_SCENARIO_SHOTS || '/tmp', 'share-viewer.png') });
 
@@ -112,7 +119,7 @@ module.exports = async ({ app, page, base, shot }) => {
   assert.equal(opened.status, 200, JSON.stringify(opened));
   const copy = (await api(`/api/mulches/${opened.mulchId}`)).mulch;
   assert.equal(copy.title, 'Pricing call');
-  assert.equal(Object.keys(copy.nodes).length, 5);
+  assert.equal(Object.keys(copy.nodes).length, 6);
   assert.ok(fs.existsSync(path.join(library, opened.mulchId, 'artifacts', 'deck.html')), 'files come along');
 
   // Stop, then delete.

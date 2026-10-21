@@ -283,7 +283,7 @@ function Body({ node, mulchId, transparent = false }: { node: MulchNode; mulchId
         </div>
       )}
       {node.title && <div className="font-semibold mb-1 leading-[1.3]">{node.title}</div>}
-      <div className="mlch-text overflow-hidden" style={node.fixedH ? undefined : { maxHeight: `${style.clamp * 1.45}em` }}>
+      <div className="mlch-text overflow-hidden" style={node.fixedH && node.h ? undefined : { maxHeight: `${style.clamp * 1.45}em` }}>
         {style.markdown ? (
           <div className="mlch-md">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{node.text}</ReactMarkdown>
@@ -378,7 +378,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
     return { width: end(false), both: end(true) };
   }, [nodeId, sizedByShape, apply]);
   const clipRef = useRef<HTMLDivElement>(null);
-  const clipped = useClipped(clipRef, !!node.fixedH && !editing);
+  const clipped = useClipped(clipRef, !!node.fixedH && !!node.h && !editing);
   const long = node.text.length > 400 || node.kind === "ref" || node.kind === "writeup" || node.kind === "doc" || node.kind === "media" || node.kind === "image" || (node.kind === "link" && !!node.assetId);
 
   return (
@@ -413,7 +413,7 @@ function NodeViewImpl({ data, selected }: NodeProps<MulchFlowNode>) {
         <div className={node.fixedH ? "nowheel h-full overflow-y-auto px-4 py-3" : "px-4 py-3"}>
           <Editor node={node} onDone={() => setEditing(undefined)} />
         </div>
-      ) : node.fixedH ? (
+      ) : node.fixedH && node.h ? (
         // A height the person chose: the text clips, fading out at the bottom (only when there is more).
         <div ref={clipRef} className={`h-full overflow-hidden ${clipped ? "mlch-fade-bottom" : ""}`}>
           <Body node={node} mulchId={mulchId} transparent={transparent} />
