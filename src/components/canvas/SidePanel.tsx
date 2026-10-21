@@ -247,7 +247,11 @@ export function SidePanel() {
             <MediaPlayer node={node} mulchId={mulchId} large />
           </div>
         )}
-        {node.title && <h2 className="text-[22px] font-semibold leading-[1.2] tracking-[-0.015em] mb-4">{node.title}</h2>}
+        {node.title && editable ? (
+          <PanelTitle key={node.id} title={node.title} onSave={(title) => apply([{ op: "updateNode", id: node.id, patch: { title: title || null, userTouched: true, updatedAt: Date.now() } }])} />
+        ) : (
+          node.title && <h2 className="text-[22px] font-semibold leading-[1.2] tracking-[-0.015em] mb-4">{node.title}</h2>
+        )}
         {node.gen && (
           <p className="text-[12.5px] text-ink-3 mb-3">
             {node.gen.endpoint}
@@ -279,6 +283,33 @@ export function SidePanel() {
         {mulchId && <LinkedFrom mulchId={mulchId} itemId={node.id} />}
       </div>
     </aside>
+  );
+}
+
+/** A card's headline, edited in place: saved on Enter or when it loses focus. */
+function PanelTitle({ title, onSave }: { title: string; onSave: (title: string) => void }) {
+  const [value, setValue] = useState(title);
+  useEffect(() => setValue(title), [title]);
+  const save = () => {
+    if (value.trim() !== title) onSave(value.trim());
+  };
+  return (
+    <textarea
+      value={value}
+      rows={1}
+      onChange={(e) => setValue(e.target.value.replace(/\n/g, " "))}
+      onBlur={save}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter" || e.key === "Escape") {
+          e.preventDefault();
+          if (e.key === "Escape") setValue(title);
+          (e.target as HTMLTextAreaElement).blur();
+        }
+      }}
+      aria-label="Headline"
+      className="block w-full mb-4 resize-none bg-transparent outline-none text-[22px] font-semibold leading-[1.2] tracking-[-0.015em] field-sizing-content rounded hover:bg-paper-2/60 focus:bg-paper-2/60"
+    />
   );
 }
 

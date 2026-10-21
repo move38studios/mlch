@@ -1,7 +1,7 @@
 "use client";
 
 import { useSharingOn } from "@/components/settings/Sharing";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Handle, NodeResizeControl, Position, ResizeControlVariant, type NodeProps, type Node } from "@xyflow/react";
 
 const SIDES = [["t", Position.Top], ["r", Position.Right], ["b", Position.Bottom], ["l", Position.Left]] as const;
@@ -43,7 +43,10 @@ function hostOf(url: string): string {
 function Editor({ node, onDone }: { node: MulchNode; onDone: () => void }) {
   const apply = useMulch((s) => s.apply);
   const [text, setText] = useState(node.text);
+  // A card with a headline edits it too (cleared: the card has none).
+  const [title, setTitle] = useState(node.title);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -51,28 +54,60 @@ function Editor({ node, onDone }: { node: MulchNode; onDone: () => void }) {
     el.setSelectionRange(el.value.length, el.value.length);
   }, []);
   const commit = () => {
-    if (text !== node.text) {
-      // A note keeps its place when its text is cleared; other cards go.
-      const keep = text.trim() || node.kind === "note";
-      apply(keep ? [{ op: "updateNode", id: node.id, patch: { text: text.trim() ? text : "", userTouched: true, updatedAt: Date.now() } }] : [{ op: "removeNode", id: node.id }]);
+    const newTitle = title === undefined ? undefined : title.trim();
+    const titleChanged = newTitle !== undefined && newTitle !== (node.title ?? "");
+    if (text !== node.text || titleChanged) {
+      // A note keeps its place when its text is cleared; other cards go (unless they keep a headline).
+      const keep = text.trim() || node.kind === "note" || !!newTitle;
+      apply(
+        keep
+          ? [{ op: "updateNode", id: node.id, patch: { text: text.trim() ? text : "", ...(titleChanged ? { title: newTitle || null } : {}), userTouched: true, updatedAt: Date.now() } }]
+          : [{ op: "removeNode", id: node.id }],
+      );
     }
     onDone();
   };
+  const keys = (e: KeyboardEvent<HTMLElement>) => {
+    e.stopPropagation();
+    if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
+      e.preventDefault();
+      commit();
+    }
+  };
   return (
-    <textarea
-      ref={ref}
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
-          e.preventDefault();
-          commit();
-        }
+    <div
+      ref={box}
+      onBlur={(e) => {
+        // Moving between the headline and the text keeps editing.
+        if (!box.current?.contains(e.relatedTarget as globalThis.Node | null)) commit();
       }}
-      className="nodrag nowheel w-full min-h-[3em] resize-none bg-transparent outline-none field-sizing-content"
-    />
+    >
+      {title !== undefined && (
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              ref.current?.focus();
+              return;
+            }
+            keys(e);
+          }}
+          aria-label="Headline"
+          className="nodrag w-full mb-1 bg-transparent outline-none font-semibold leading-[1.3]"
+        />
+      )}
+      <textarea
+        ref={ref}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={keys}
+        aria-label="Text"
+        className="nodrag nowheel w-full min-h-[3em] resize-none bg-transparent outline-none field-sizing-content"
+      />
+    </div>
   );
 }
 
