@@ -12,6 +12,7 @@ import { KeyField } from "./KeyField";
 import { AiAccess, type AuthMode } from "./AiAccess";
 import { TranscriptionChoice } from "./TranscriptionSection";
 import { SharingChoice } from "./Sharing";
+import { Words } from "./Words";
 
 type Lane = "fast" | "slow" | "command";
 interface SettingsData {
@@ -57,6 +58,7 @@ const PROMPTS: Array<{ id: string; label: string; sub?: boolean }> = [
   { id: "base", label: "General" },
   { id: "fast", label: "Capture" },
   { id: "call", label: "Calls" },
+  { id: "live", label: "Calls, live" },
   { id: "slow", label: "Enrich" },
   ...ENRICH.map((item) => ({ id: `enrich:${item.id}`, label: item.label, sub: true })),
   { id: "command", label: "Instructions" },
@@ -421,6 +423,11 @@ export function Settings() {
         {settings && view?.desktop && (
           <Section title="Transcription">
             <TranscriptionChoice value={settings.transcription} onChange={(transcription) => void update({ transcription })} />
+          </Section>
+        )}
+        {view && (
+          <Section title="Words" id="words">
+            <Words />
           </Section>
         )}
         {view && settings && (

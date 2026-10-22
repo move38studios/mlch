@@ -235,3 +235,72 @@ export function fittedGroupBox(mulch: Mulch, groupId: string): { x: number; y: n
   const same = Math.abs(box.x - group.x) <= 1 && Math.abs(box.y - group.y) <= 1 && Math.abs(box.w - group.w) <= 1 && Math.abs(box.h - group.h) <= 1;
   return same ? undefined : box;
 }
+
+/* ── a call's topics ───────────────────────────────────────────── */
+
+/** A topic area holds its cards in this many columns (it grows down, never wider). */
+export const TOPIC_COLUMNS = 3;
+const TOPIC_COLUMN = 320 + GAP;
+const TOPIC_MIN_H = 220;
+export const TOPIC_W = TOPIC_COLUMNS * TOPIC_COLUMN - GAP + GROUP_PADDING * 2;
+
+/**
+ * Where a call's new topic area goes: to the right of the one before it (the
+ * board reads like the call, left to right), else in free space beside `near`.
+ */
+export function topicBox(mulch: Mulch, options: { after?: string; near?: string[] }): Rect {
+  const size = { w: TOPIC_W, h: TOPIC_MIN_H };
+  const taken = occupied(mulch);
+  const free = (x: number, y: number) => !taken.some((rect) => overlaps({ x, y, ...size }, rect, GAP));
+  const before = options.after ? mulch.groups[options.after] : undefined;
+  if (before) {
+    for (let step = 0; step < 40; step++) {
+      const x = before.x + before.w + GROUP_GAP + step * 80;
+      if (free(x, before.y)) return { x: Math.round(x), y: before.y, ...size };
+    }
+  }
+  const anchors = (options.near ?? []).map((id) => mulch.nodes[id]).filter(Boolean).map(rectOf);
+  if (anchors.length) {
+    const right = Math.max(...anchors.map((r) => r.x + r.w));
+    const top = Math.min(...anchors.map((r) => r.y));
+    for (let step = 0; step < 40; step++) {
+      const x = right + GROUP_GAP + step * 80;
+      if (free(x, top)) return { x: Math.round(x), y: Math.round(top), ...size };
+    }
+  }
+  return { ...placeNear(mulch, size, { anchorIds: options.near }), ...size };
+}
+
+/**
+ * A free place for a card inside a topic area: row by row, left to right,
+ * among the cards already there. The area grows to fit (`grownTopic`).
+ */
+export function placeInTopic(mulch: Mulch, groupId: string, size: { w: number; h: number }, taken: Rect[] = []): { x: number; y: number } | undefined {
+  const group = mulch.groups[groupId];
+  if (!group) return undefined;
+  const left = group.x + GROUP_PADDING;
+  const top = group.y + GROUP_PADDING + GROUP_TITLE;
+  // Only cards count here: the area's own box is what is being filled.
+  const cards = [...Object.values(mulch.nodes).map(rectOf), ...taken];
+  for (let y = top; y < top + 20_000; y += 24) {
+    for (let col = 0; col < TOPIC_COLUMNS; col++) {
+      const x = left + col * TOPIC_COLUMN;
+      const rect = { x, y, ...size };
+      if (!cards.some((card) => overlaps(rect, card, GAP / 2))) return { x: Math.round(x), y: Math.round(y) };
+    }
+  }
+  return undefined;
+}
+
+/** A topic area's box around its cards (full width, at least its first height), or undefined when it already fits. */
+export function grownTopic(mulch: Mulch, groupId: string): Rect | undefined {
+  const group = mulch.groups[groupId];
+  if (!group) return undefined;
+  const members = Object.values(mulch.nodes).filter((node) => node.groupId === groupId).map(rectOf);
+  const bounds = boundsOf(members);
+  if (!bounds) return undefined;
+  const bottom = Math.max(group.y + TOPIC_MIN_H, bounds.y + bounds.h + GROUP_PADDING);
+  const right = Math.max(group.x + group.w, bounds.x + bounds.w + GROUP_PADDING);
+  const box = { x: group.x, y: group.y, w: Math.round(right - group.x), h: Math.round(bottom - group.y) };
+  return box.w === group.w && box.h === group.h ? undefined : box;
+}

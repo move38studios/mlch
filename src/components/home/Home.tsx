@@ -9,6 +9,7 @@ import { Scribble, Wordmark } from "@/components/brand/Scribble";
 import Link from "next/link";
 import { useSearch } from "@/components/search/SearchPalette";
 import { HomeList } from "./HomeList";
+import { NewProjectField, PROJECT_WORDS, useProjectList } from "@/components/projects/projects";
 import { formatDateTime } from "@/lib/format";
 import type { MulchSummary } from "@/lib/mulch/types";
 
@@ -54,6 +55,8 @@ export function Home() {
   const [confirming, setConfirming] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
+  const projects = useProjectList();
+  const [naming, setNaming] = useState(false);
   const { results } = useSearch(query, undefined, 40);
   const searchField = useRef<HTMLInputElement>(null);
   const loaded = mulches !== undefined;
@@ -111,13 +114,13 @@ export function Home() {
     };
   }, [load, working]);
 
-  async function create() {
+  async function create(project?: string) {
     setCreating(true);
     try {
       const response = await fetch("/api/mulches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: "{}",
+        body: JSON.stringify(project ? { project } : {}),
       });
       const body = (await response.json()) as {
         mulch?: { id: string };
@@ -166,7 +169,7 @@ export function Home() {
           <Wordmark className="h-14 w-auto" />
           <Scribble which="bottom" className="w-40 text-ink/15 -my-4" />
           <button
-            onClick={create}
+            onClick={() => void create()}
             disabled={creating}
             className="inline-flex items-center gap-1.5 rounded-xl bg-amber text-ink h-12 px-6 text-[16px] font-semibold hover:brightness-95 active:brightness-90 disabled:opacity-50"
           >
@@ -197,7 +200,7 @@ export function Home() {
               />
             </div>
             <button
-              onClick={create}
+              onClick={() => void create()}
               disabled={creating}
               className="inline-flex items-center gap-1.5 rounded-xl bg-amber text-ink h-11 px-4 text-[15px] font-semibold hover:brightness-95 active:brightness-90 disabled:opacity-50"
             >
@@ -205,8 +208,22 @@ export function Home() {
             </button>
           </div>
           {error && <p className="text-sm text-danger mb-4">{error}</p>}
+          {!query.trim() && (
+            <div className="flex justify-end -mt-5 mb-3 h-8">
+              {naming ? (
+                <NewProjectField className="w-56" onDone={() => setNaming(false)} />
+              ) : (
+                <button onClick={() => setNaming(true)} className="inline-flex items-center gap-1 px-2 rounded-lg text-[13px] text-ink-3 hover:text-ink hover:bg-paper-2">
+                  <Plus size={13} strokeWidth={2} /> {PROJECT_WORDS.newProject}
+                </button>
+              )}
+            </div>
+          )}
           <HomeList
             mulches={mulches ?? []}
+            projects={projects ?? []}
+            onChanged={() => void load()}
+            onNewIn={(project) => void create(project)}
             query={query}
             results={results}
             field={searchField}

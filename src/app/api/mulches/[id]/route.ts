@@ -3,6 +3,7 @@ import { archiveMulch, getMulch, setFocusMode, trashMulch } from "@/lib/mulch/st
 import { deleteShare, readShares } from "@/lib/share/shares";
 import { log } from "@/lib/log";
 import { dropMulch } from "@/lib/search";
+import { setProject } from "@/lib/projects/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +21,15 @@ async function deleteShares(id: string): Promise<void> {
   }
 }
 
-/** PATCH {archived, stopShares?}: archive or restore; archiving can turn off its share links. PATCH {focus}: focus mode on or off. */
+/** PATCH {archived, stopShares?}: archive or restore; archiving can turn off its share links. PATCH {focus}: focus mode on or off. PATCH {project}: into a project (its id) or out of one (null). */
 export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
-  const body = (await request.json().catch(() => ({}))) as { archived?: unknown; stopShares?: unknown; focus?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { archived?: unknown; stopShares?: unknown; focus?: unknown; project?: unknown };
   return handle(async () => {
+    if (body.project === null || typeof body.project === "string") {
+      await setProject(id, body.project ?? undefined);
+      return { ok: true };
+    }
     if (typeof body.focus === "boolean") {
       await setFocusMode(id, body.focus);
       return { ok: true };

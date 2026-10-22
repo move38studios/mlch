@@ -54,6 +54,40 @@ describe("mulch tools", () => {
     expect(after.nodes[ctx.added[0]].origin).toBe("agent:j1");
   });
 
+  it("during a call, puts new cards into the current topic area, which grows to fit", async () => {
+    const notes: string[] = [];
+    const call = {
+      current: () => "g-topic",
+      topic: async () => "g-topic",
+      note: async (kind: string, text: string) => void notes.push(`${kind}: ${text}`),
+    };
+    const { store, mulch, ctx, runtime } = await setup(["add_nodes", "call_note", "call_topic"], { call });
+    await store.applyToMulch(mulch.id, [{ op: "addGroup", group: { id: "g-topic", title: "Pricing", x: 2000, y: 0, w: 1100, h: 220, origin: "agent:call", createdAt: 1 } }], "agent:call");
+    const result = await runtime.execute("add_nodes", {
+      nodes: Array.from({ length: 5 }, (_, i) => ({ kind: "search", title: `Source ${i}`, text: "What it says, in a line or two.", near: ["said"] })),
+    });
+    expect(result.ok).toBe(true);
+    const after = await store.getMulch(mulch.id);
+    const cards = ctx.added.map((id) => after.nodes[id]);
+    expect(cards.every((card) => card.groupId === "g-topic" && card.x >= 2000 && card.x < 3100)).toBe(true);
+    const rects = cards.map(rectOf);
+    for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) expect(overlaps(rects[i], rects[j])).toBe(false);
+    const box = after.groups["g-topic"];
+    expect(box.h).toBeGreaterThan(220);
+    for (const rect of rects) expect(rect.y + rect.h).toBeLessThanOrEqual(box.y + box.h);
+    expect((await runtime.execute("call_note", { kind: "todo", text: "Me: send the deck" })).ok).toBe(true);
+    expect(notes).toEqual(["todo: Me: send the deck"]);
+  });
+
+  it("call tools say they are only for calls; remember_word keeps the word", async () => {
+    const { runtime } = await setup(["call_topic", "remember_word"]);
+    expect((await runtime.execute("call_topic", { title: "Pricing" })).ok).toBe(false);
+    const remembered = await runtime.execute("remember_word", { term: "Fco", heard: ["EFCO"] });
+    expect(remembered.ok).toBe(true);
+    const { readWords } = await import("@/lib/words/words");
+    expect((await readWords()).map((w) => [w.term, w.heard])).toEqual([["Fco", ["EFCO"]]]);
+  });
+
   it("add_nodes keeps ideas and questions plain and short", async () => {
     const { store, mulch, ctx, runtime } = await setup(["add_nodes"]);
     const long = Array.from({ length: 70 }, (_, i) => `word${i}`).join(" ");

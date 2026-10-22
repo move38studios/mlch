@@ -160,14 +160,15 @@ export async function listMulches(): Promise<MulchSummary[]> {
   return summaries.filter((s): s is MulchSummary => !!s).sort((a, b) => recent(b) - recent(a));
 }
 
-/** Archived (archived.json), last opened (opened.json), how many share links it has (shares.json, kept by share/shares.ts), focus mode (focus.json). */
-async function sideFacts(dir: string): Promise<{ archivedAt?: number; openedAt?: number; shares?: number; focus?: boolean }> {
+/** Archived (archived.json), last opened (opened.json), how many share links it has (shares.json, kept by share/shares.ts), focus mode (focus.json), its project (project.json, projects/projects.ts). */
+async function sideFacts(dir: string): Promise<{ archivedAt?: number; openedAt?: number; shares?: number; focus?: boolean; project?: string }> {
   const read = async (name: string) => JSON.parse(await fs.readFile(path.join(dir, name), "utf8").catch(() => "null")) as unknown;
-  const [archived, opened, shares, focus] = await Promise.all([read("archived.json"), read("opened.json"), read("shares.json"), read("focus.json")]);
+  const [archived, opened, shares, focus, project] = await Promise.all([read("archived.json"), read("opened.json"), read("shares.json"), read("focus.json"), read("project.json")]);
+  const projectId = (project as { id?: unknown } | null)?.id;
   const at = (archived as { at?: number } | null)?.at;
   const openedAt = (opened as { at?: number } | null)?.at;
   const count = Array.isArray(shares) ? shares.length : 0;
-  return { ...(at ? { archivedAt: at } : {}), ...(openedAt ? { openedAt } : {}), ...(count ? { shares: count } : {}), ...(focus ? { focus: true } : {}) };
+  return { ...(at ? { archivedAt: at } : {}), ...(openedAt ? { openedAt } : {}), ...(count ? { shares: count } : {}), ...(focus ? { focus: true } : {}), ...(typeof projectId === "string" ? { project: projectId } : {}) };
 }
 
 /** Mulches in focus mode, read from their folders once, then kept here. */

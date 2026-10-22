@@ -18,7 +18,7 @@ export type JobLane = "fast" | "slow" | "command" | "ingest" | "long";
 
 /** What a job was asked to do, so it can be started again. */
 export interface JobRetry {
-  kind: "command" | "make" | "research" | "folder" | "callNotes";
+  kind: "command" | "make" | "research" | "folder" | "callNotes" | "callTidy";
   input: string;
   near?: string[];
   title?: string;

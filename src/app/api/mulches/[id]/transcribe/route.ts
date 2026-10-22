@@ -5,6 +5,7 @@ import { newClientId } from "@/lib/mulch/ids";
 import { appendTranscript, openMulch } from "@/lib/mulch/store";
 import { getTranscriber } from "@/lib/voice/transcriber";
 import { micSpeaker } from "@/lib/voice/local";
+import { speechWords } from "@/lib/words/speech";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,8 @@ export async function POST(request: Request, { params }: Params) {
     const recent = entry.transcript.slice(-6).map((s) => s.text).join(" ");
     const started = Date.now();
     const transcriber = await getTranscriber();
-    const text = await transcriber.transcribe(new Blob([audio], { type: "audio/wav" }), { prompt: recent, signal: request.signal });
+    const words = await speechWords(id, recent);
+    const text = words.fix(await transcriber.transcribe(new Blob([audio], { type: "audio/wav" }), { prompt: words.prompt, signal: request.signal }));
     log.info("voice", "chunk transcribed", { mulchId: id, via: transcriber.id, bytes: audio.size, ms: Date.now() - started, chars: text.length });
     if (!text) return { segment: null };
     const speaker = micSpeaker(id);

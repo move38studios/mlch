@@ -21,6 +21,7 @@ import { InputBar } from "./InputBar";
 import { JobStatus } from "./JobStatus";
 import { Elsewhere, ElsewhereCount, useElsewhere } from "./Elsewhere";
 import { CommentPanel } from "./Comments";
+import { ProjectCrumb } from "@/components/projects/ProjectCrumb";
 import { SidePanel } from "./SidePanel";
 import { Conversation, unreadMessages, useConversation, useConversationOpener } from "./Conversation";
 
@@ -327,6 +328,7 @@ export function MulchView({ id }: { id: string }) {
             <Link href="/" className="p-1.5 rounded-lg text-ink-2 hover:bg-paper-2 hover:text-ink" aria-label="Home" title="Home">
               <ArrowLeft size={16} strokeWidth={1.75} />
             </Link>
+            {!preview && <ProjectCrumb mulchId={id} />}
             <Title />
             <ElsewhereCount view={elsewhere} />
           </div>

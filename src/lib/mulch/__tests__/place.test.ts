@@ -76,3 +76,33 @@ describe("arrangeGroups", () => {
     expect(boxes.map((b) => b.nodeIds)).toEqual([["a", "b"]]);
   });
 });
+
+describe("a call's topics", () => {
+  it("run left to right, hold their cards in columns without overlap, and grow down", async () => {
+    const { placeInTopic, grownTopic, topicBox, TOPIC_W } = await import("../place");
+    const mulch = mulchWith(node("t", { x: 0, y: 0, w: 320, h: 260 }));
+    const first = topicBox(mulch, { near: ["t"] });
+    expect(first.x).toBeGreaterThan(320);
+    expect(first.w).toBe(TOPIC_W);
+    mulch.groups.g1 = { id: "g1", title: "Pricing", ...first, origin: "agent:call", createdAt: 1 };
+    const second = topicBox(mulch, { after: "g1" });
+    expect(second.x).toBeGreaterThan(first.x + first.w);
+    expect(second.y).toBe(first.y);
+    for (let i = 0; i < 7; i++) {
+      const size = { w: 280, h: 120 };
+      const p = placeInTopic(mulch, "g1", size)!;
+      expect(p.x).toBeGreaterThanOrEqual(first.x);
+      expect(p.x + size.w).toBeLessThanOrEqual(first.x + first.w);
+      const rect = { ...p, ...size };
+      for (const other of Object.values(mulch.nodes)) expect(overlaps(rect, rectOf(other))).toBe(false);
+      mulch.nodes[`c${i}`] = node(`c${i}`, { ...p, ...size, groupId: "g1", createdAt: 2 + i });
+    }
+    // Three to a row: the seventh starts a third row.
+    const ys = [...new Set(Object.values(mulch.nodes).filter((n) => n.groupId).map((n) => n.y))];
+    expect(ys).toHaveLength(3);
+    const box = grownTopic(mulch, "g1")!;
+    expect(box.x).toBe(first.x);
+    expect(box.w).toBe(first.w);
+    expect(box.h).toBeGreaterThan(first.h);
+  });
+});

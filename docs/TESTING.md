@@ -67,9 +67,12 @@ Onboarding goes one step at a time; Back works everywhere, and downloads show at
 - From the menu bar icon (the small m square): New Call. Or ⌃⌘L from anywhere.
 - macOS asks for the microphone and for System Audio Recording (first time). Allow both.
 - Join a real call (or play a podcast or YouTube talk). The amber Listening bar shows two levels: you and them.
-- Cards arrive about every 30 seconds: ideas, decisions, to-dos, questions, said by whom. Try headphones and speakers.
+- No cards from what is said while the call runs. Decisions and to-dos go into one card next to the transcript. Each subject gets a labelled area, left to right in order. About once a minute, what helps lands in the current area: a book or person mentioned (its page), the answer to a question asked, a term's definition, a source for a claim, a link to your own notes. Try headphones and speakers.
+- Quiet (top bar) during a call: only the transcript and the decisions card, nothing added live.
 - While it listens, type "make a quick deck from what we just discussed". A deck card should appear within a couple of minutes, without stopping the listening.
-- A transcript card appears when the call starts and fills in every 15 seconds (Me / Them, with times). When the call ends its title gets the end time and length, and a notes card (summary, decisions, to-dos, open questions) arrives beside it.
+- A transcript card appears when the call starts and fills in every 15 seconds (Me / Them, with times). When the call ends its title gets the end time and length, and a notes card (summary, decisions, to-dos, open questions) arrives beside it. Then the board is tidied: the call's main points become cards in their areas, open questions together.
+- Projects: on home, New project; drag a mulch onto it, or its row's folder button. In a mulch, the project shows by the title (click to change). A mulch in no project with enough on it may show "Looks like …" with Move.
+- Words: correct a misheard name in an instruction ("it's Fco, not EFCO") or edit it in a card from speech; it shows in Settings, Words, and comes out right in the next call.
 - Close the window: mlch stays in the menu bar (the icon has a dot while listening). Stop Listening from the menu.
 
 ## 6. Sharing

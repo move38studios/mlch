@@ -18,7 +18,7 @@ import type { AgentHarnessStatus, AgentUserSetup, AgentWorkspace, HarnessEvent, 
 import type { JobLane, JobRetry, JobStatus, TranscriptSegment, ViewAction } from "@/lib/mulch/events";
 import { newClientId } from "@/lib/mulch/ids";
 import { checkpoint } from "@/lib/mulch/history";
-import { applyToMulch, emit, focusModes, getJobs, getMulch, isQuiet, keepWhile, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, setJob } from "@/lib/mulch/store";
+import { applyToMulch, emit, focusModes, getJobs, getMulch, isQuiet, keepWhile, listMulches, mulchDir, onAfterApply, onJobChanged, openMulch, peekMulch, setJob } from "@/lib/mulch/store";
 import { desktopRequest } from "@/lib/desktop/server";
 import type { Mulch, MulchNode } from "@/lib/mulch/types";
 import { modelFor, readSettings, type Lane, type Settings } from "@/lib/settings";
@@ -27,10 +27,10 @@ import os from "node:os";
 import path from "node:path";
 import { adoptArtifact } from "@/lib/artifacts/artifacts";
 import { privateDirs } from "./files";
-import { holdSpace, placeNear } from "@/lib/mulch/place";
+import { holdSpace, placeNear, topicBox } from "@/lib/mulch/place";
 import { artifactHeight, NODE_WIDTH } from "@/lib/mulch/sizes";
 import { dropEcho } from "@/lib/voice/echo";
-import { CONNECTORS_NOTE, callPrompt, commandPrompt, earlierExchanges, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
+import { CONNECTORS_NOTE, callPrompt, livePrompt, commandPrompt, earlierExchanges, fastPrompt, folderPrompt, imagePrompt, ingestPrompt, makerPrompt, researchPrompt, slowPrompt } from "./prompts";
 import { onFinished, type GenerationRecord } from "@/lib/media/generations";
 import { recordUsage } from "./usage";
 import { search } from "@/lib/search";
@@ -39,8 +39,9 @@ import { cliFailed, prepareCli } from "./server/cli";
 // Registers live sharing: shared canvases follow every change.
 import "@/lib/share/shares";
 import { exaAvailable } from "@/lib/search/exa";
-import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolName } from "./tools";
+import { createMulchTools, describeMulch, MAX_REVIEW_ROUNDS, type ToolContext, type ToolName } from "./tools";
 import { commentNow, lastTurnAt, yourTurn } from "./turn";
+import { projectBlock, projectOf } from "@/lib/projects/projects";
 
 /** Sources longer than this are read in part; the rest is found by search. */
 const LONG_SOURCE = 60_000;
@@ -120,6 +121,15 @@ interface MulchJobs {
     /** The transcript card, filled in as the call goes. */
     transcriptId?: string;
     cardTimer?: ReturnType<typeof setTimeout>;
+    /** Topic areas (group ids) in order; the last is where new cards go. */
+    topics: string[];
+    /** The decisions and to-dos card, and its lines. */
+    decisionsId?: string;
+    decisions: string[];
+    /** Changes to the topics and the decisions card, one at a time. */
+    chain: Promise<unknown>;
+    /** The live layer: when it last ran, up to which speech it has seen, its next run. */
+    live: { lastAt: number; seenUntil: number; timer?: ReturnType<typeof setTimeout> };
   };
 }
 
@@ -176,6 +186,8 @@ interface TurnSpec {
   reviewRound?: number;
   /** Linked folders it may search: all when the person asked for this job. */
   sources?: "all" | "auto";
+  /** During a call: its topic areas and decisions card (cards added go into the current topic). */
+  call?: ToolContext["call"];
   /**
    * The person's own Claude Code / Codex setup and connectors (Settings → AI). Only for
    * work they asked for: capture and enrichment run on everything said, so they stay quick
@@ -375,6 +387,7 @@ async function runTurnWithSession(spec: TurnSpec): Promise<{ added: string[]; se
     brief: spec.brief,
     reviewRound: spec.reviewRound,
     sources: spec.sources,
+    call: spec.call,
     session: { id: spec.sessionId } as { id?: string },
     added: [] as string[],
   };
@@ -636,7 +649,8 @@ export function setCallMode(mulchId: string, on: boolean): void {
   const entry = jobsFor(mulchId);
   if (on) {
     if (entry.call) return;
-    entry.call = { segments: [], startedAt: Date.now() };
+    const startedAt = Date.now();
+    entry.call = { segments: [], startedAt, topics: [], decisions: [], chain: Promise.resolve(), live: { lastAt: 0, seenUntil: startedAt } };
     void startCallCard(mulchId, entry.call).catch((error) => log.warn("jobs", "call transcript card failed", { mulchId, error }));
     return;
   }
@@ -644,9 +658,10 @@ export function setCallMode(mulchId: string, on: boolean): void {
   if (!call) return;
   clearTimeout(call.timer);
   clearTimeout(call.cardTimer);
+  clearTimeout(call.live.timer);
   const rest = call.segments.splice(0);
   entry.call = undefined;
-  if (rest.length) captureCall(mulchId, rest);
+  if (rest.length) captureCall(mulchId, rest, call);
   void endCall(mulchId, call, Date.now()).catch((error) => log.warn("jobs", "finishing a call failed", { mulchId, error }));
 }
 
@@ -736,6 +751,62 @@ async function endCall(mulchId: string, call: NonNullable<MulchJobs["call"]>, en
     return;
   }
   submitCallNotes(mulchId, { startedAt: call.startedAt, endedAt, transcriptId: call.transcriptId });
+  // Topic areas nothing went into are dropped; the rest are tidied with the call's points.
+  const mulch = await getMulch(mulchId);
+  const empty = call.topics.filter((id) => mulch.groups[id] && !Object.values(mulch.nodes).some((node) => node.groupId === id));
+  if (empty.length) await applyToMulch(mulchId, empty.map((id) => ({ op: "removeGroup" as const, id })), "agent:call");
+  submitCallTidy(mulchId, { startedAt: call.startedAt, endedAt, transcriptId: call.transcriptId, decisionsId: call.decisionsId, topics: call.topics.filter((id) => !empty.includes(id)) });
+}
+
+interface CallFacts {
+  startedAt: number;
+  endedAt: number;
+  transcriptId?: string;
+  decisionsId?: string;
+  topics?: string[];
+}
+
+/**
+ * After a call: its main points as cards in their topics (what was said, in
+ * its words), the open questions people asked together, repeats among the
+ * AI's cards merged, related cards connected across topics.
+ */
+export function submitCallTidy(mulchId: string, call: CallFacts, again?: JobStatus): JobStatus {
+  return enqueue(mulchId, {
+    lane: "command",
+    label: "Tidying the call",
+    retry: { kind: "callTidy", input: JSON.stringify(call) },
+    async run(job, signal) {
+      const segments = await callSegments(mulchId, call.startedAt, call.endedAt);
+      if (!segments.length) return;
+      const transcript = segments.map((s) => `${s.speaker ? `[${s.speaker}] ` : ""}(${clockTime(s.at)}) ${s.text.trim()}`).join("\n");
+      const clipped = transcript.length > 150_000 ? `${transcript.slice(0, 75_000)}\n…\n${transcript.slice(-75_000)}` : transcript;
+      const mulch = await getMulch(mulchId);
+      const topics = (call.topics ?? []).filter((id) => mulch.groups[id]).map((id) => `${id} "${mulch.groups[id].title}"`);
+      await runTurn({
+        mulchId,
+        job,
+        signal,
+        lane: "command",
+        systemPrompt: commandPrompt,
+        prompt:
+          (await contextBlock(mulchId)) +
+          `<mulch>\n${await mulchContext(mulchId, clipped.slice(-4000), 300)}\n</mulch>\n\n` +
+          `<call>\n${callHeading(call.startedAt, call.endedAt)}\n[me] is the person using mlch, [them] the others.\n\n${clipped}\n</call>\n\n` +
+          `<instruction>\nThe call has ended (its transcript is ${call.transcriptId ?? "kept"}${call.decisionsId ? `, its decisions and to-dos are ${call.decisionsId}` : ""}; notes are being written separately). Make the board something to think with afterwards:\n` +
+          `1. The call's main points as cards, in the speakers' words trimmed: \`idea\` (under 30 words; who, where it matters: "Me", a name when it was said, else "they"), and \`question\` only for questions someone actually asked that stayed open. Specific claims, numbers, names and disagreements; not small talk, not what the decisions card or the board already has. Usually 3-8 per subject.\n` +
+          (topics.length ? `   Put each in the topic area it belongs to with \`group\`: ${topics.join(", ")}.\n` : "   Put related points near each other.\n") +
+          "2. Where your own cards from during the call (the AI's, not the person's) repeat each other, keep the best and remove the rest.\n" +
+          "3. Connect cards across topics where the label says something (\"contradicts\", \"answers\", \"leads to\").\n" +
+          "4. arrange everything from the call into labelled groups: the topics (their titles, merging ones the call came back to), and one group \"Open questions\" for the open questions. Leave the transcript, the decisions card and anything from before the call where they are.\n" +
+          "Never reword or remove what the person made. Write in the language of the call. Finish with say.\n</instruction>",
+        tools: ["get_mulch", "add_nodes", "connect", "remove_nodes", "arrange", "say"],
+        origin: `speech:${job.id}`,
+        allowUserEdits: true,
+        brief: "Tidy the call",
+      });
+    },
+  }, again);
 }
 
 /** The notes of a finished call: summary, decisions, to-dos, open questions, next to its transcript. */
@@ -786,30 +857,176 @@ function flushCall(mulchId: string): void {
   if (segments.length) captureCall(mulchId, segments);
 }
 
-function captureCall(mulchId: string, raw: TranscriptSegment[]): void {
+/** The call's topic areas and decisions card, as tools see them. */
+function callTools(mulchId: string, call = jobsFor(mulchId).call): ToolContext["call"] {
+  if (!call) return undefined;
+  const serial = <T,>(work: () => Promise<T>): Promise<T> => {
+    const next = call.chain.then(work, work);
+    call.chain = next.catch(() => {});
+    return next;
+  };
+  return {
+    current: () => call.topics.at(-1),
+    topic: (title) =>
+      serial(async () => {
+        const mulch = await getMulch(mulchId);
+        const before = call.topics.filter((id) => mulch.groups[id]).at(-1);
+        const box = topicBox(mulch, { after: before, near: [call.transcriptId, call.decisionsId].filter((id): id is string => !!id && !!mulch.nodes[id]) });
+        const id = newClientId("g");
+        await applyToMulch(mulchId, [{ op: "addGroup", group: { id, title: title.slice(0, 80), ...box, origin: "agent:call", createdAt: Date.now() } }], "agent:call");
+        call.topics.push(id);
+        return id;
+      }),
+    note: (kind, text) =>
+      serial(async () => {
+        call.decisions.push(`- ${kind === "decision" ? "Decision" : "To do"}: ${text.replace(/\s+/g, " ")}`);
+        const body = call.decisions.join("\n");
+        const mulch = await getMulch(mulchId);
+        const card = call.decisionsId ? mulch.nodes[call.decisionsId] : undefined;
+        if (card) {
+          await applyToMulch(mulchId, [{ op: "updateNode", id: card.id, patch: { text: body, updatedAt: Date.now() } }], "agent:call");
+          return;
+        }
+        const id = newClientId("n");
+        const at = placeNear(mulch, { w: NODE_WIDTH.writeup, h: 200 }, { anchorIds: call.transcriptId && mulch.nodes[call.transcriptId] ? [call.transcriptId] : [], seed: id });
+        await applyToMulch(mulchId, [{ op: "addNode", node: { id, kind: "writeup", x: at.x, y: at.y, title: DECISIONS_TITLE, text: body, origin: "agent:call", createdAt: Date.now() } }], "agent:call");
+        call.decisionsId = id;
+      }),
+  };
+}
+
+/** Placeholder wording (George). */
+const DECISIONS_TITLE = "Decisions and to-dos";
+
+/** What the call has so far, for the record's prompt: its topics and decisions. */
+async function callSoFar(mulchId: string, call = jobsFor(mulchId).call): Promise<string> {
+  if (!call) return "";
+  const mulch = await getMulch(mulchId);
+  const topics = call.topics.map((id) => mulch.groups[id]?.title).filter(Boolean);
+  return (
+    (topics.length ? `<topics>\n${topics.map((t, i) => `${i + 1}. ${t}${i === topics.length - 1 ? " (current)" : ""}`).join("\n")}\n</topics>\n\n` : "<topics>\nNone yet.\n</topics>\n\n") +
+    (call.decisions.length ? `<decisions_and_todos>\n${call.decisions.join("\n")}\n</decisions_and_todos>\n\n` : "")
+  );
+}
+
+/** The project and words for a prompt (empty when neither). */
+function contextBlock(mulchId: string): Promise<string> {
+  return projectBlock(mulchId, async (id) => (await peekMulch(id))?.title).catch(() => "");
+}
+
+/**
+ * The record of a call, every batch: decisions and to-dos, topics, and
+ * instructions from [me]. No cards from speech: what was said is kept in the
+ * transcript and turned into cards when the call ends.
+ */
+function captureCall(mulchId: string, raw: TranscriptSegment[], call = jobsFor(mulchId).call): void {
   const segments = dropEcho(raw);
   const text = inputBlock(segments);
   if (!text) return;
   enqueue(mulchId, {
     lane: "fast",
-    label: "Capturing",
+    label: "Listening",
     inputIds: segments.map((segment) => segment.id),
     async run(job, signal) {
       const mulch = await getMulch(mulchId);
-      const added = await runTurn({
+      const live = !isQuiet(mulchId);
+      await runTurn({
         mulchId,
         job,
         signal,
         lane: "fast",
         systemPrompt: callPrompt,
-        prompt: `<mulch>\n${await mulchContext(mulchId, text, 140)}\n</mulch>\n\n<call_so_far>\n${await callTranscript(mulchId, { minutes: 6, before: segments[0]?.at })}\n</call_so_far>\n\n<new_conversation>\n${text}\n</new_conversation>`,
-        tools: [...CAPTURE_TOOLS, ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
+        prompt:
+          (await contextBlock(mulchId)) +
+          (await callSoFar(mulchId, call)) +
+          `<call_so_far>\n${await callTranscript(mulchId, { minutes: 6, before: segments[0]?.at })}\n</call_so_far>\n\n<new_conversation>\n${text}\n</new_conversation>`,
+        tools: ["call_note", "hand_off", "focus", "view", ...(live ? (["call_topic"] as const) : []), ...(mulch.title === "Untitled" ? (["set_title"] as const) : [])],
         origin: `speech:${job.id}`,
+        // The last batch is captured after the call stops: it still belongs to that call.
+        call: callTools(mulchId, call),
         onHandOff: (instruction) => submitCommand(mulchId, instruction, { inputIds: segments.map((segment) => segment.id) }),
       });
-      if (added.length) requestEnrichment(mulchId, added);
     },
   });
+}
+
+/** The live layer runs at most this often during a call, and looks back this far. */
+const LIVE_EVERY_MS = Number(process.env.MLCH_LIVE_EVERY_MS) || 60_000;
+/** The first run waits for the record's first batch, which names the first topic. */
+const LIVE_FIRST_MS = Number(process.env.MLCH_LIVE_FIRST_MS) || CALL_BATCH_MS + 15_000;
+const LIVE_WINDOW_MS = 150_000;
+
+/** New speech in a call: the live layer runs soon (at most once a minute), unless the mulch is Quiet. */
+function armLive(mulchId: string): void {
+  const call = jobsFor(mulchId).call;
+  if (!call || call.live.timer || isQuiet(mulchId)) return;
+  const wait = Math.max(LIVE_FIRST_MS, call.live.lastAt + LIVE_EVERY_MS - Date.now());
+  call.live.timer = setTimeout(() => {
+    call.live.timer = undefined;
+    if (jobsFor(mulchId).call !== call) return;
+    submitLive(mulchId);
+  }, wait);
+}
+
+/**
+ * The live layer: what would help the conversation right now (a book's page,
+ * an answer, a definition, a source, a link to the person's own material),
+ * from the last minute or two, into the current topic. Nothing is fine.
+ */
+function submitLive(mulchId: string): void {
+  const entry = jobsFor(mulchId);
+  // One at a time: a queued one will see the newest speech when it starts.
+  if (entry.queues.slow.some((queued) => queued.job.label === "Live") || entry.running.slow.some((running) => running.job.label === "Live")) return;
+  queue(mulchId, {
+    lane: "slow",
+    label: "Live",
+    async run(job, signal) {
+      const call = jobsFor(mulchId).call;
+      if (!call || isQuiet(mulchId)) return;
+      const now = Date.now();
+      call.live.lastAt = now;
+      // Without the Mac's sound (no permission) speech has no speaker.
+      const spoken = (await openMulch(mulchId)).transcript.filter((segment) => segment.source === "speech" && segment.at >= call.startedAt);
+      // Only what is new and still recent: a moment that has passed is left.
+      const since = Math.max(call.live.seenUntil, now - LIVE_WINDOW_MS);
+      const fresh = dropEcho(spoken.filter((segment) => segment.at > since));
+      if (!fresh.length) return;
+      call.live.seenUntil = Math.max(...fresh.map((segment) => segment.at));
+      const line = (s: TranscriptSegment) => `${s.speaker ? `[${s.speaker}] ` : ""}${s.text.trim()}`;
+      const before = spoken.filter((segment) => segment.at <= since && segment.at > since - 6 * 60_000).map(line).join("\n");
+      const settings = await readSettings();
+      const web = settings.enrich.includes("search");
+      const mine = settings.enrich.includes("mulches");
+      const said = fresh.map(line).join("\n");
+      const mulch = await getMulch(mulchId);
+      const topics = call.topics.filter((id) => mulch.groups[id]);
+      const added = await runTurn({
+        mulchId,
+        job,
+        signal,
+        lane: "slow",
+        systemPrompt: livePrompt,
+        prompt:
+          (await contextBlock(mulchId)) +
+          `<board>\n${await mulchContext(mulchId, said, 80)}\n</board>\n\n` +
+          (topics.length
+            ? `<topics>\nThe call's topic areas, in order (the last is the current one). Put each card in the area of the moment it is about, with \`group\`:\n${topics.map((id) => `${id} "${mulch.groups[id].title}"`).join("\n")}\n</topics>\n\n`
+            : "") +
+          (before ? `<before>\n${before}\n</before>\n\n` : "") +
+          `<new>\n${said}\n</new>` +
+          (mine ? await relatedElsewhere(mulchId, said.slice(0, 1000)) : ""),
+        tools: [
+          "add_nodes", "connect",
+          ...(mine ? (["search_all_mulches", "read_source", "link_to"] as ToolName[]) : []),
+          ...(web && exaAvailable() ? (["exa_search"] as ToolName[]) : []),
+        ],
+        webAccess: web,
+        call: callTools(mulchId),
+      });
+      if (added.length) log.info("jobs", "Live cards", { mulchId, jobId: job.id, count: added.length });
+    },
+  });
+  pump(mulchId, "slow");
 }
 
 /**
@@ -851,6 +1068,7 @@ export function submitInput(mulchId: string, segment: TranscriptSegment): void {
     entry.call.segments.push(segment);
     entry.call.timer ??= setTimeout(() => flushCall(mulchId), CALL_BATCH_MS);
     touchCallCard(mulchId);
+    armLive(mulchId);
     return;
   }
   // While a spoken instruction waits, more speech goes with it.
@@ -958,6 +1176,7 @@ export function requestEnrichment(mulchId: string, ids: string[]): void {
         lane: "slow",
         systemPrompt: (s) => slowPrompt(s, web),
         prompt:
+          (await contextBlock(mulchId)) +
           `<mulch>\n${await mulchContext(mulchId, about, 160)}\n</mulch>\n\n<new_items>\n${items.map((n) => `${n.id} ${saidByPerson(n) ? "(said)" : "(source)"}: ${n.title ? `${n.title} — ` : ""}${n.text}`).join("\n")}\n</new_items>` +
           (inCall(mulchId) ? "\n\nThis is a live call: at most 2 items; prefer facts that settle a claim made, or a question [me] could ask next." : "") +
           (settings.enrich.includes("mulches") ? await relatedElsewhere(mulchId, about) : ""),
@@ -983,6 +1202,7 @@ const COMMAND_TOOLS: ToolName[] = [
   "write_artifact", "preview_artifact", "make_pptx", "make", "view_image", "caption_image", "list_files", "find_files", "read_file",
   "media_search", "media_schema", "media_generate", "media_wait", "media_view",
   "search_mulch", "search_all_mulches", "read_source", "focus", "view", "bring_in", "link_to", "save_note", "research", "read_page", "cold_read", "screenshot_page", "resolve_comment",
+  "remember_word",
 ];
 
 const RESEARCH_TOOLS: ToolName[] = [
@@ -1065,12 +1285,24 @@ async function relatedElsewhere(mulchId: string, about: string, options: { limit
     const others = (await listMulches()).filter((m) => m.id !== mulchId);
     const titles = new Map(others.map((m) => [m.id, m.title]));
     const names = new Map(sources.map((s) => [s.id, s.name]));
-    const hits = await search(about, { mulchIds: others.map((m) => m.id), sources: sources.map((s) => s.id), limit: options.limit ?? 6 });
+    const limit = options.limit ?? 6;
+    // The same project's mulches first.
+    const project = await projectOf(mulchId).catch(() => undefined);
+    const siblings = new Set(project ? others.filter((m) => m.project === project.id).map((m) => m.id) : []);
+    const near = siblings.size ? await search(about, { mulchIds: [...siblings], limit: Math.ceil(limit / 2) }) : [];
+    const wide = await search(about, { mulchIds: others.map((m) => m.id), sources: sources.map((s) => s.id), limit });
+    const seen = new Set<string>();
+    const hits = [...near, ...wide].filter((hit) => {
+      const key = `${hit.mulchId}:${hit.sourceId ?? ""}:${hit.nodeId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, limit + near.length);
     if (!hits.length) return "";
     const lines = hits.map((hit) =>
       hit.sourceId
         ? `folder ${hit.sourceId} "${names.get(hit.sourceId) ?? ""}" · file ${hit.path}: ${hit.snippet}`
-        : `mulch ${hit.mulchId} "${titles.get(hit.mulchId) ?? ""}" · item ${hit.nodeId} [${hit.kind}]${hit.title ? ` "${hit.title}"` : ""}: ${hit.snippet}`,
+        : `mulch ${hit.mulchId} "${titles.get(hit.mulchId) ?? ""}"${siblings.has(hit.mulchId) ? " (same project)" : ""} · item ${hit.nodeId} [${hit.kind}]${hit.title ? ` "${hit.title}"` : ""}: ${hit.snippet}`,
     );
     return `\n\n<elsewhere>\nFrom the person's other mulches and linked folders, found by search (may or may not be related):\n${lines.join("\n")}\n</elsewhere>`;
   } catch (error) {
@@ -1272,6 +1504,7 @@ export function submitCommand(mulchId: string, instruction: string, options: { i
         lane: "command",
         systemPrompt: commandPrompt,
         prompt:
+          (await contextBlock(mulchId)) +
           `<mulch>\n${await mulchContext(mulchId, instruction, 400)}\n</mulch>\n\n${conversationBlock(await callTranscript(mulchId))}` +
           earlierExchanges(jobs, job.id) +
           `Readable files: ${os.homedir()} (read-only; credentials and app data excluded)\n\n${turn.block}${selectedBlock(mulch, about)}<instruction>\n${instruction}\n</instruction>${await relatedElsewhere(mulchId, instruction, { sources: "all" })}`,
@@ -1287,6 +1520,8 @@ export function submitCommand(mulchId: string, instruction: string, options: { i
         // Instructions may read the person's files ("look at my dev/briefbuster folder"), read-only.
         readRoot: os.homedir(),
         ownSetup: true,
+        // During a call, what it adds goes into the current topic (unless it is about selected cards).
+        ...(about?.length ? {} : { call: callTools(mulchId) }),
       });
     },
   }, again);
@@ -1509,6 +1744,7 @@ export async function continueJob(mulchId: string, jobId: string): Promise<JobSt
   if (kind === "make") return submitMake(mulchId, input, { near, title }, job);
   if (kind === "research") return submitResearch(mulchId, input, { near, title }, job);
   if (kind === "callNotes") return submitCallNotes(mulchId, JSON.parse(input) as { startedAt: number; endedAt: number; transcriptId?: string }, job);
+  if (kind === "callTidy") return submitCallTidy(mulchId, JSON.parse(input) as CallFacts, job);
   if (kind === "command") return submitCommand(mulchId, input, { inputIds: old.inputIds, about: near, comment: old.retry.comment, again: job });
   resuming.delete(job.id);
   return undefined;
@@ -1524,5 +1760,6 @@ export async function retryJob(mulchId: string, jobId: string): Promise<JobStatu
   if (kind === "research") return submitResearch(mulchId, input, { near, title });
   if (kind === "folder") return submitFolder(mulchId, input);
   if (kind === "callNotes") return submitCallNotes(mulchId, JSON.parse(input) as { startedAt: number; endedAt: number; transcriptId?: string });
+  if (kind === "callTidy") return submitCallTidy(mulchId, JSON.parse(input) as CallFacts);
   return submitCommand(mulchId, input, { about: near, comment: old.retry.comment });
 }

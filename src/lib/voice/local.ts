@@ -23,6 +23,7 @@ import { log } from "@/lib/log";
 import { newClientId } from "@/lib/mulch/ids";
 import { appendTranscript, openMulch } from "@/lib/mulch/store";
 import type { TranscriptSegment } from "@/lib/mulch/events";
+import { speechWords } from "@/lib/words/speech";
 import { getTranscriber } from "./transcriber";
 
 export type ModelState = "unavailable" | "missing" | "downloading" | "present";
@@ -274,7 +275,8 @@ async function transcribeChunk(session: SystemSession, file: string, at: number)
     const recent = entry.transcript.slice(-6).map((segment) => segment.text).join(" ");
     const started = Date.now();
     const transcriber = await getTranscriber();
-    const text = await transcriber.transcribe(new Blob([new Uint8Array(await fs.readFile(file))], { type: "audio/wav" }), { prompt: recent });
+    const words = await speechWords(session.mulchId, recent);
+    const text = words.fix(await transcriber.transcribe(new Blob([new Uint8Array(await fs.readFile(file))], { type: "audio/wav" }), { prompt: words.prompt }));
     log.info("voice", "system audio chunk transcribed", { mulchId: session.mulchId, ms: Date.now() - started, chars: text.length });
     session.chunks += 1;
     if (!text) return;

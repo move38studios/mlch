@@ -192,6 +192,8 @@ export interface MulchSummary {
   openedAt?: number;
   /** Share links made from it that still work. */
   shares?: number;
+  /** The project it is in (projects.json; it may since have been deleted). */
+  project?: string;
 }
 
 /** A field set to null is cleared. */

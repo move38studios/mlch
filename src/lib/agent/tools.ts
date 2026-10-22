@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { newClientId } from "@/lib/mulch/ids";
-import { arrangeGroups, boundsOf, placeNear } from "@/lib/mulch/place";
+import { arrangeGroups, boundsOf, grownTopic, placeInTopic, placeNear } from "@/lib/mulch/place";
 import { artifactHeight, estimateHeight, NODE_WIDTH, rectOf, type Rect } from "@/lib/mulch/sizes";
 import { applyToMulch, atomicWriteFile, emit, getMulch, listMulches, mulchDir } from "@/lib/mulch/store";
 import { NODE_KINDS, type Mulch, type MulchNode, type MulchOp, type NodeKind, type NodeRef } from "@/lib/mulch/types";
@@ -38,6 +38,8 @@ import { artifactKindOf, type ArtifactKind } from "@/lib/artifacts/kind";
 import { deckProblems, pageProblems, type DeckMeasure, type PageMeasure } from "@/lib/artifacts/checks";
 import { hiddenEntry, imageForModel, resolveReadable } from "./files";
 import { log } from "@/lib/log";
+import { addWord } from "@/lib/words/words";
+import { projectOf } from "@/lib/projects/projects";
 import { CLEAR, coldRead, coldReadNote, readableText } from "./coldRead";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime } from "./types";
 
@@ -54,6 +56,9 @@ export type ToolName =
   | "add_file"
   | "hand_off"
   | "set_title"
+  | "call_topic"
+  | "call_note"
+  | "remember_word"
   | "list_files"
   | "find_files"
   | "read_file"
@@ -116,6 +121,24 @@ export interface ToolContext {
   origin?: string;
   /** Linked folders this job may search: all (the person asked), or only those set to be used without asking (default). */
   sources?: "all" | "auto";
+  /** During a call (jobs.ts): its topic areas and its decisions card. */
+  call?: {
+    /** Starts a topic area; returns its group id. */
+    topic(title: string): Promise<string>;
+    /** Adds a line to the call's decisions and to-dos. */
+    note(kind: "decision" | "todo", text: string): Promise<void>;
+    /** The topic area new cards go into, if any. */
+    current(): string | undefined;
+  };
+}
+
+/** Topic areas that new members outgrew, grown to fit them. */
+function grownTopics(mulch: Mulch, added: MulchNode[]): MulchOp[] {
+  const groups = [...new Set(added.map((node) => node.groupId).filter((id): id is string => !!id))];
+  return groups.flatMap((id): MulchOp[] => {
+    const box = grownTopic(mulch, id);
+    return box ? [{ op: "updateGroup", id, patch: box }] : [];
+  });
 }
 
 /* ── describing the canvas to the model ────────────────────────── */
@@ -332,6 +355,34 @@ const DEFINITIONS: Record<ToolName, AgentToolDefinition> = {
       "Pass the instruction on, in the user's words; it runs as a separate job with more tools.",
     inputShape: { instruction: z.string().max(2000) },
     readOnly: true,
+  },
+  call_topic: {
+    name: "call_topic",
+    title: "New topic",
+    description:
+      "The conversation has moved to a new topic: start an area for it, titled in 2-6 plain words (sentence case). What is added next goes there. " +
+      "Call it at the start of the call and whenever the subject really changes, not for each new point or a short aside.",
+    inputShape: { title: z.string().min(1).max(80) },
+    readOnly: false,
+  },
+  call_note: {
+    name: "call_note",
+    title: "Note a decision",
+    description:
+      "Something was decided, or someone said they will do something: add it to the call's list of decisions and to-dos, " +
+      "in the speakers' words trimmed (under 25 words), saying who where it matters (\"Me: …\", a name when it was said, else \"They: …\"). Never for ideas, claims or questions.",
+    inputShape: { kind: z.enum(["decision", "todo"]), text: z.string().min(1).max(400) },
+    readOnly: false,
+  },
+  remember_word: {
+    name: "remember_word",
+    title: "Remember a word",
+    description:
+      "The person corrected how a name or term is written, or said how to spell one (\"it's Fco\", \"they are called DCBL\", \"Misha, not Misa\"): remember it so speech comes out right from now on. " +
+      "`term` as it should be written; `heard`: how it came out wrong, when you can see that. `project`: true when it belongs to this canvas's project rather than to all the person's work (a client's name, a team member). " +
+      "Also fix it where it is wrong on this canvas if the instruction allows.",
+    inputShape: { term: z.string().min(1).max(80), heard: z.array(z.string().max(80)).max(10).optional(), project: z.boolean().optional() },
+    readOnly: false,
   },
   set_title: {
     name: "set_title",
@@ -840,8 +891,11 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
         const view: Mulch = { ...mulch, nodes: { ...mulch.nodes, ...Object.fromEntries(created.map((n) => [n.id, n])) } };
         const w = NODE_WIDTH[item.kind];
         const h = estimateHeight(item.kind, item.text, item.title);
-        const group = item.group && mulch.groups[item.group] ? item.group : undefined;
-        const position = placeNear(view, { w, h }, { anchorIds: anchors, seed: id, taken: pending });
+        // During a call, new cards go into the current topic area.
+        const topic = !item.group ? ctx.call?.current() : undefined;
+        const group = item.group && mulch.groups[item.group] ? item.group : topic && mulch.groups[topic] ? topic : undefined;
+        // In a group (a topic area, or one named): inside it, which grows to fit.
+        const position = (group ? placeInTopic(view, group, { w, h }, pending) : undefined) ?? placeNear(view, { w, h }, { anchorIds: anchors, seed: id, taken: pending });
         pending.push({ ...position, w, h });
         const node: MulchNode = {
           id,
@@ -859,6 +913,7 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
         ops.push({ op: "addNode", node });
       }
       mulch = { ...mulch, nodes: { ...mulch.nodes, ...Object.fromEntries(created.map((n) => [n.id, n])) } };
+      ops.push(...grownTopics(mulch, created));
       ops.push(...edgeOps(mulch, input.edges ?? [], resolver(mulch, refs), problems));
       await commit(ops);
       ctx.added.push(...created.map((node) => node.id));
@@ -1050,6 +1105,27 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       return ok("Queued as a command.", "Handed off");
     },
 
+    async call_topic(args) {
+      if (!ctx.call) return fail("Only during a call.");
+      const id = await ctx.call.topic((args as { title: string }).title.trim());
+      return ok(`Topic area ${id} started; new cards go there.`, "New topic");
+    },
+
+    async call_note(args) {
+      if (!ctx.call) return fail("Only during a call.");
+      const { kind, text } = args as { kind: "decision" | "todo"; text: string };
+      await ctx.call.note(kind, text.trim());
+      return ok(kind === "decision" ? "Noted the decision." : "Noted the to-do.", kind === "decision" ? "Noted a decision" : "Noted a to-do");
+    },
+
+    async remember_word(args) {
+      const { term, heard, project } = args as { term: string; heard?: string[]; project?: boolean };
+      const inProject = project ? await projectOf(ctx.mulchId) : undefined;
+      const word = await addWord({ term, heard, project: inProject?.id, from: "correction" });
+      if (!word) return fail("Give the word as it should be written (under 80 characters).");
+      return ok(`Remembered "${word.term}"${word.heard?.length ? ` (heard as ${word.heard.join(", ")})` : ""}${inProject ? ` for "${inProject.name}"` : ""}.`, "Remembered a word");
+    },
+
     async set_title(args) {
       const mulch = await getMulch(ctx.mulchId);
       // Only names an unnamed mulch; the person's own title stays.
@@ -1197,9 +1273,14 @@ export function createMulchTools(ctx: ToolContext): AgentToolRuntime {
       const target = await resolveRef(ref);
       if (!target.exists) return fail("Nothing there: use ids and paths exactly as search_all_mulches gave them.");
       const id = newClientId("n");
-      const position = placeNear(mulch, { w: NODE_WIDTH.ref, h: estimateHeight("ref", (target.text ?? "").slice(0, 160), target.title) }, { anchorIds: [near], seed: id });
+      const size = { w: NODE_WIDTH.ref, h: estimateHeight("ref", (target.text ?? "").slice(0, 160), target.title) };
+      const topic = ctx.call?.current();
+      const inTopic = topic && mulch.groups[topic] ? placeInTopic(mulch, topic, size) : undefined;
+      const position = inTopic ?? placeNear(mulch, size, { anchorIds: [near], seed: id });
+      const card: MulchNode = { id, kind: "ref", x: position.x, y: position.y, ...(target.title ? { title: target.title.slice(0, 200) } : {}), text: "", ref, ...(inTopic ? { groupId: topic } : {}), origin, createdAt: Date.now() };
       const ops: MulchOp[] = [
-        { op: "addNode", node: { id, kind: "ref", x: position.x, y: position.y, ...(target.title ? { title: target.title.slice(0, 200) } : {}), text: "", ref, origin, createdAt: Date.now() } },
+        { op: "addNode", node: card },
+        ...grownTopics({ ...mulch, nodes: { ...mulch.nodes, [id]: card } }, [card]),
         { op: "addEdge", edge: { id: newClientId("e"), source: near, target: id, label: why.trim().slice(0, 60), origin, createdAt: Date.now() } },
       ];
       await commit(ops);
